@@ -9,7 +9,7 @@ export const mockAgentClient: AgentClient = {
     return AI_EXTRACTED_SIGNALS;
   },
 
-  async proposeAllocation(params): Promise<AgentAllocationProposal[]> {
+  async proposeAllocation(_params): Promise<AgentAllocationProposal[]> {
     // The AI's proposed plan after CRM evidence (the one policy partially rejects)
     return [
       {

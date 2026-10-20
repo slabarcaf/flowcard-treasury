@@ -1,4 +1,4 @@
-import type { DashboardState, QueueRow, FeedEvent, CustomerDetail, PolicyCheck, PipelineStep, CollectionRow } from './types.js';
+import type { DashboardState, QueueRow, FeedEvent, PolicyCheck, PipelineStep, CollectionRow } from './types.js';
 import {
   FACILITY_CONFIG,
   CUSTOMERS,
