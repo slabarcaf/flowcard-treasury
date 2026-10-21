@@ -1,7 +1,9 @@
 import { NOVA_APPROVAL_TERMS } from '../seed.js';
+import type { ApprovalTerms } from '../state/types.js';
 
 interface Props {
   visible: boolean;
+  terms?: ApprovalTerms;
   awaitingApproval: boolean;
   onApprove: () => void;
 }
@@ -10,10 +12,10 @@ function fmt(n: number): string {
   return '$' + n.toLocaleString('en-US');
 }
 
-export function ApprovalCard({ visible, awaitingApproval, onApprove }: Props) {
+export function ApprovalCard({ visible, terms, awaitingApproval, onApprove }: Props) {
   if (!visible) return null;
 
-  const t = NOVA_APPROVAL_TERMS;
+  const t = terms ?? NOVA_APPROVAL_TERMS;
 
   return (
     <div className="bg-white border border-amber-300 rounded-lg p-5 animate-panel-in">

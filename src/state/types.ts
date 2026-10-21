@@ -65,6 +65,20 @@ export interface CollectionRow {
 }
 
 // ---------------------------------------------------------------------------
+// Terms a credit officer approves (Human door)
+// ---------------------------------------------------------------------------
+export interface ApprovalTerms {
+  amount: number;
+  currency: string;
+  to: string;
+  covers: string;
+  term: string;
+  fee: string;
+  evidence: string;
+  capitalImpact: string;
+}
+
+// ---------------------------------------------------------------------------
 // Per-customer detail data (shown when a queue row is expanded)
 // ---------------------------------------------------------------------------
 export interface CustomerDetail {
@@ -85,6 +99,8 @@ export interface CustomerDetail {
   showApproval: boolean;      // Nova only
   awaitingApproval: boolean;  // Nova: true until funded
   ineligibleReason?: string;  // Pixel only
+  approvalTerms?: ApprovalTerms;    // Kit 5: terms built per request (GD uses NOVA_APPROVAL_TERMS)
+  collectionRows?: CollectionRow[]; // Kit 5: this request's own repayment
 }
 
 // ---------------------------------------------------------------------------

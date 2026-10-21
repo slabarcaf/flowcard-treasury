@@ -22,14 +22,44 @@ npm run dev        # http://localhost:5173
 | Command           | What it does                                  |
 | ----------------- | --------------------------------------------- |
 | `npm run dev`     | Dev server with hot reload                    |
-| `npm test`        | Policy unit tests (Vitest, 53 tests)          |
+| `npm test`        | Policy + Kit 5 engine tests (Vitest, 61 tests)|
 | `npm run build`   | Type-check + production build into `dist/`    |
 | `npm run lint`    | Lint with oxlint                              |
 | `npm run preview` | Serve the production build locally            |
 
-## The demo, click by click
+## Two versions: Kit 5 and GD original
 
-The whole demo is scripted — no backend, no API keys, nothing leaves the browser.
+A toggle at the top right switches between two versions. The choice is remembered in the browser.
+
+| | **Kit 5** (default) | **GD original** |
+| --- | --- | --- |
+| Reserve floor | 20% → $10,000 floor, $40,000 lendable | 5% → $2,500 floor |
+| Already lent out | $25,000 (deployable $15,000, Less) | $32,500 (deployable $15,000, Less) |
+| Sequencing | Each decline is decided **the moment it arrives**, in arrival order, against the capital left at that moment | All declines land at once; each is decided when you click its row |
+| Scenarios | Four, picked from the **Scenario** dropdown | One |
+| Inputs | Editable in the **Scenario inputs** panel (slider icon) | Fixed in `seed.ts` |
+
+Both versions are scripted: no backend, no API keys, nothing leaves the browser.
+The rules for Kit 5 come from the *Kit 5 Bridge Capital: Source of Truth* doc. This
+version covers the floor and sequencing changes only; the doc's other changes are not built yet.
+
+### Kit 5 scenarios
+
+| Scenario | What it shows |
+| --- | --- |
+| **Original** | GD's four customers on our facility. Bloom is held for the Salesforce note and declined at Tier C, Atlas is auto-funded, Nova goes to a credit officer (deployable $10,000 → $4,000), Pixel is ineligible. Nova repays on day 9 ($27 fee). |
+| **Kit 5 target** | The doc's target demo: Original plus **Juniper Labs**, the same $6,000 request as Nova, arriving later at 9:16. Only $4,000 is left above the floor, so Juniper gets a firm no. |
+| **First come, first served** | Two identical Tier A requests ($8,000 each). The first is funded; the second would breach the floor and is refused. After the first is repaid, the second customer's retried payment is funded. |
+| **Tight capital → human** | Two identical Tier A requests ($3,000 each) with $6,500 deployable. The first auto-funds and drops capital into *Critical*, where Tier A needs a person, so the second goes to a credit officer. |
+
+While a scenario plays, declines arrive about every 1.5 seconds. It stops when it needs you:
+**Re-evaluate** (Salesforce note), **Approve Bridge** (credit officer) or **Simulate Collection**
+(a repayment on a later day).
+
+In the inputs panel, changing a request's time changes who arrives first. In *First come, first
+served*, set Cedar's time to 9:10 and Maple gets funded instead.
+
+### GD original, click by click
 
 1. **Start state.** A $50,000 facility with $32,500 already lent out, $15,000 deployable,
    $2,500 reserve floor. Capital band: *Less*.
@@ -51,23 +81,36 @@ The whole demo is scripted — no backend, no API keys, nothing leaves the brows
 
 ```
 src/
-  App.tsx              Page shell: sidebar, header buttons, layout
+  App.tsx              Version toggle: renders the Kit 5 or the GD dashboard
   main.tsx             React entry point
   index.css            Tailwind import + custom animations
-  seed.ts              ALL demo data: facility size, customers, declines, CRM note, AI text
+  kit5/                Kit 5 version
+    scenarios.ts       The four scenarios + loadScenarios() — where backend data will plug in
+    types.ts           Scenario input shape (backend-ready JSON) and engine state
+    engine.ts          Sequential engine: one pure function per step (arrive, decide, approve, repay)
+    useKit5Dashboard.ts  Wires the engine to React; plays arrivals on a timer
+    Kit5Dashboard.tsx  Page: header (scenario picker, toggle, buttons), capital bar, queue, feed
+    SettingsPanel.tsx  The hidden "Scenario inputs" drawer
+  gd/
+    GdDashboard.tsx    GD's original page
+  seed.ts              GD's demo data (Kit 5 reuses its customers and Salesforce note)
   state/
-    machine.ts         Demo state machine — every step of the story is a pure function here
-    types.ts           Shape of the dashboard state
+    machine.ts         GD's state machine
+    types.ts           Dashboard state shape, shared by both versions
   hooks/
-    useDashboard.ts    Wires the state machine to React (scan, select, approve, collect, reset)
-  components/          One file per UI block (CapitalBar, BridgeQueue, ActivityFeed, …)
+    useDashboard.ts    Wires GD's state machine to React
+  components/          Shared UI blocks (Sidebar, CapitalBar, BridgeQueue, ActivityFeed, …)
   policy/              Underwriting rules as pure, tested functions (tiers, credit line, bands, fees)
   services/            Typed interfaces + mocks for Airwallex, CRM and the AI agent — NOT wired
                        into the UI yet (see docs/EDITING.md)
 tests/policy/          Unit tests for policy/
+tests/kit5/            Plays every Kit 5 scenario end to end and checks the outcomes
 ```
 
-Data flows one way: **`seed.ts` → `state/machine.ts` (uses `policy/`) → `useDashboard` → components.**
+Data flows one way in both versions, and both render the same components:
+
+- Kit 5: **`kit5/scenarios.ts` → `kit5/engine.ts` (uses `policy/`) → `useKit5Dashboard` → components**
+- GD: **`seed.ts` → `state/machine.ts` (uses `policy/`) → `useDashboard` → components**
 
 ## Editing
 
