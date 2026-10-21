@@ -9,6 +9,7 @@ import {
   revealCrm,
   reEvaluateCrm,
   approve as approveRequest,
+  acknowledge,
 } from './engine.js';
 
 /** Pause between arrivals while the sequence plays itself. */
@@ -53,6 +54,7 @@ export function useKit5Dashboard() {
   const crmReveal = useCallback(() => setState((s) => revealCrm(s)), []);
   const crmReEvaluate = useCallback(() => setState((s) => reEvaluateCrm(s)), []);
   const approve = useCallback((requestId: string) => setState((s) => approveRequest(s, requestId)), []);
+  const continueAfterAuto = useCallback(() => setState((s) => acknowledge(s)), []);
 
   return {
     scenarios,
@@ -68,5 +70,6 @@ export function useKit5Dashboard() {
     crmReveal,
     crmReEvaluate,
     approve,
+    continueAfterAuto,
   };
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { SignalRating, Signals } from '../policy/types.js';
 import type { ScenarioInputs } from './types.js';
+import { DEFAULT_TERM_DAYS } from './engine.js';
 
 interface Props {
   inputs: ScenarioInputs;
@@ -138,7 +139,7 @@ export function SettingsPanel({ inputs, defaults, onApply, onClose }: Props) {
                         <span className="text-gray-500"> · shortfall ${Math.max(0, ev.paymentAmount - ev.walletBalance).toLocaleString('en-US')}</span>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                       <NumberField label="Day" value={ev.day} onChange={(v) => update((d) => { d.events[i].day = v; })} />
                       <label className="block">
                         <span className="text-[11px] text-gray-500">Time</span>
@@ -152,6 +153,7 @@ export function SettingsPanel({ inputs, defaults, onApply, onClose }: Props) {
                         <>
                           <NumberField label="Payment" suffix="$" value={ev.paymentAmount} onChange={(v) => update((d) => { const e = d.events[i]; if (e.type === 'decline') e.paymentAmount = v; })} />
                           <NumberField label="Wallet" suffix="$" value={ev.walletBalance} onChange={(v) => update((d) => { const e = d.events[i]; if (e.type === 'decline') e.walletBalance = v; })} />
+                          <NumberField label="Collect within" suffix="days" value={ev.termDays ?? DEFAULT_TERM_DAYS} onChange={(v) => update((d) => { const e = d.events[i]; if (e.type === 'decline') e.termDays = v; })} />
                         </>
                       ) : (
                         <NumberField label="Deposit" suffix="$" value={ev.depositAmount} onChange={(v) => update((d) => { const e = d.events[i]; if (e.type === 'repayment') e.depositAmount = v; })} />

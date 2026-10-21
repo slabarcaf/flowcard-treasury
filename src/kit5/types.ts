@@ -31,6 +31,8 @@ export interface DeclineEvent {
   paymentDescription: string;
   paymentAmount: number;
   walletBalance: number;
+  /** Days after funding by which we collect. Defaults to DEFAULT_TERM_DAYS. */
+  termDays?: number;
 }
 
 /** A customer deposit that repays an outstanding bridge (fee first, then principal). */
@@ -66,13 +68,18 @@ export interface Scenario {
 // Engine state — extends the GD dashboard state so the same components render it
 // ---------------------------------------------------------------------------
 
-/** What the sequence is waiting on before the next request can be decided. */
-export type Pause = { kind: 'crm' | 'human'; requestId: string } | null;
+/**
+ * What the sequence is waiting on before the next request can be decided:
+ * the Salesforce re-evaluation, a credit officer, or the presenter
+ * acknowledging an auto-approval.
+ */
+export type Pause = { kind: 'crm' | 'human' | 'ack'; requestId: string } | null;
 
 export interface OpenBridge {
   customerName: string;
   amount: number;
   day: number;
+  dueDay: number;
 }
 
 export interface Kit5State extends DashboardState {

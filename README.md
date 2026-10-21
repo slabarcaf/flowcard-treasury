@@ -22,7 +22,7 @@ npm run dev        # http://localhost:5173
 | Command           | What it does                                  |
 | ----------------- | --------------------------------------------- |
 | `npm run dev`     | Dev server with hot reload                    |
-| `npm test`        | Policy + Kit 5 engine tests (Vitest, 61 tests)|
+| `npm test`        | Policy + Kit 5 engine tests (Vitest, 63 tests)|
 | `npm run build`   | Type-check + production build into `dist/`    |
 | `npm run lint`    | Lint with oxlint                              |
 | `npm run preview` | Serve the production build locally            |
@@ -53,8 +53,27 @@ version covers the floor and sequencing changes only; the doc's other changes ar
 | **Tight capital → human** | Two identical Tier A requests ($3,000 each) with $6,500 deployable. The first auto-funds and drops capital into *Critical*, where Tier A needs a person, so the second goes to a credit officer. |
 
 While a scenario plays, declines arrive about every 1.5 seconds. It stops when it needs you:
-**Re-evaluate** (Salesforce note), **Approve Bridge** (credit officer) or **Simulate Collection**
-(a repayment on a later day).
+**Re-evaluate** (Salesforce note), **Continue** after an auto-approval (a green callout shows
+what was funded), **Approve Bridge** (credit officer) or **Simulate Collection** (a repayment
+on a later day).
+
+### Statuses and dates
+
+| Status | Meaning |
+| --- | --- |
+| **Declined** | Firm no for this request, with the rule that failed. |
+| **Ineligible** | No credit line at all, e.g. Pixel: 41 days of history against the 90-day minimum. |
+| **Pending approval** | Waiting on a credit officer. |
+| **Funded** | Bridge sent and **still owed**. Shows the funding date and the *collect by* date. |
+| **Repaid** | Fee and principal collected. Shows the repayment date. |
+
+*Collect by* = funding date + 30 days. The customer's default term is "as soon as money
+arrives", so we collect as soon as a deposit lands; 30 days is the latest we wait before the
+bridge is past due. After that the late ladder applies (days 1–2 grace, days 3–15 line
+frozen, day 16+ cards blocked), which is outside the demo. The 30 days is a placeholder until
+the team settles collection timing (Open item 1 in the source-of-truth doc); change it per
+request with **Collect within (days)** in the inputs panel, or `DEFAULT_TERM_DAYS` in
+`src/kit5/engine.ts`.
 
 In the inputs panel, changing a request's time changes who arrives first. In *First come, first
 served*, set Cedar's time to 9:10 and Maple gets funded instead.

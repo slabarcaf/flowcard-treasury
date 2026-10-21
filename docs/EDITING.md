@@ -37,6 +37,8 @@ queue, capital bar or feed shows up in both versions.
 | Scenario names and one-line summaries | `SCENARIOS` in `src/kit5/scenarios.ts` |
 | How a request is decided, feed wording, approval card terms | `src/kit5/engine.ts` (`evaluate` and `decide`) |
 | Speed of arrivals | `ARRIVAL_MS` in `src/kit5/useKit5Dashboard.ts` |
+| Default collect-by window (30 days) | `DEFAULT_TERM_DAYS` in `src/kit5/engine.ts`, or `termDays` on a decline event |
+| Auto-approval callout | `Kit5Dashboard.tsx` (the pause itself is `pause.kind === 'ack'` in `engine.ts`) |
 | Header, scenario picker, status line | `src/kit5/Kit5Dashboard.tsx` |
 | Fields in the inputs drawer | `src/kit5/SettingsPanel.tsx` |
 | Toggle labels or default version | `src/components/VersionToggle.tsx`, `src/App.tsx` |
@@ -57,7 +59,8 @@ drawer edits a copy of that same object, so it keeps working.
 ### How the sequence runs
 `useKit5Dashboard` calls `step()` on a timer. Each step takes the next event in arrival
 order. A decline is decided immediately against the capital left at that moment. The timer
-stops while `state.pause` is set (Salesforce re-evaluation or a credit officer), and before a
+stops while `state.pause` is set (Salesforce re-evaluation, a credit officer, or an
+auto-approval waiting for **Continue**), and before a
 repayment, which the presenter triggers with **Simulate Collection**.
 
 ## GD original version: common changes

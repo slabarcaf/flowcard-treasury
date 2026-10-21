@@ -15,6 +15,8 @@ interface Props {
   onBloomReveal: () => void;
   onBloomReEvaluate: () => void;
   onApprove: (customerId: string) => void;
+  /** Kit 5: show funded and collect-by dates under each status. */
+  showDates?: boolean;
 }
 
 function fmt(n: number): string {
@@ -60,7 +62,11 @@ export function BridgeQueue({
   onBloomReveal,
   onBloomReEvaluate,
   onApprove,
+  showDates = false,
 }: Props) {
+  // Kit 5 adds dates under the status; tighter cells keep the table inside the card.
+  const pad = showDates ? 'px-2.5' : 'px-4';
+
   if (rows.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-10 flex items-center justify-center text-gray-400 text-sm">
@@ -93,14 +99,14 @@ export function BridgeQueue({
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
-            <th className="text-left px-5 py-3 font-medium">Customer</th>
-            <th className="text-left px-4 py-3 font-medium">Payment</th>
-            <th className="text-right px-4 py-3 font-medium">Shortfall</th>
-            <th className="text-center px-4 py-3 font-medium">Detected</th>
-            <th className="text-center px-4 py-3 font-medium">Tier</th>
-            <th className="text-center px-4 py-3 font-medium">Door</th>
-            <th className="text-right px-4 py-3 font-medium">Allocation</th>
-            <th className="text-left px-4 py-3 font-medium">Status</th>
+            <th className={`text-left ${showDates ? 'px-3' : 'px-5'} py-3 font-medium`}>Customer</th>
+            <th className={`text-left ${pad} py-3 font-medium`}>Payment</th>
+            <th className={`text-right ${pad} py-3 font-medium`}>Shortfall</th>
+            <th className={`text-center ${pad} py-3 font-medium`}>Detected</th>
+            <th className={`text-center ${pad} py-3 font-medium`}>Tier</th>
+            <th className={`text-center ${pad} py-3 font-medium`}>Door</th>
+            <th className={`text-right ${pad} py-3 font-medium`}>Allocation</th>
+            <th className={`text-left ${pad} py-3 font-medium`}>Status</th>
           </tr>
         </thead>
         <tbody>
@@ -117,7 +123,7 @@ export function BridgeQueue({
                     !row.eligible && isProcessed ? 'opacity-45' : ''
                   } ${isSelected ? 'bg-orange-50/60' : 'hover:bg-gray-50'}`}
                 >
-                  <td className="px-5 py-3.5">
+                  <td className={`${showDates ? 'px-3' : 'px-5'} py-3.5`}>
                     <div className="text-gray-900 font-medium">{row.customerName}</div>
                     {!row.eligible && isProcessed && (
                       <div className="text-xs text-gray-400 mt-0.5">
@@ -125,16 +131,16 @@ export function BridgeQueue({
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3.5 text-gray-600">{row.paymentDescription}</td>
-                  <td className="px-4 py-3.5 text-right font-mono text-red-600">
+                  <td className={`${pad} py-3.5 text-gray-600`}>{row.paymentDescription}</td>
+                  <td className={`${pad} py-3.5 text-right font-mono text-red-600`}>
                     {fmt(row.shortfall)}
                   </td>
-                  <td className="px-4 py-3.5 text-center text-gray-400 font-mono text-xs">
+                  <td className={`${pad} py-3.5 text-center text-gray-400 font-mono text-xs`}>
                     {row.detectedAt}
                   </td>
                   {/* Tier — show "—" before processed */}
                   <td
-                    className={`px-4 py-3.5 text-center font-semibold ${
+                    className={`${pad} py-3.5 text-center font-semibold ${
                       isProcessed ? (TIER_COLORS[row.tier] ?? 'text-gray-400') : 'text-gray-400'
                     }`}
                   >
@@ -142,23 +148,33 @@ export function BridgeQueue({
                   </td>
                   {/* Door — show "—" before processed */}
                   <td
-                    className={`px-4 py-3.5 text-center text-xs font-medium ${
+                    className={`${pad} py-3.5 text-center text-xs font-medium ${
                       isProcessed ? (DOOR_LABELS[row.door]?.cls ?? 'text-gray-400') : 'text-gray-400'
                     }`}
                   >
                     {isProcessed ? (DOOR_LABELS[row.door]?.text ?? '—') : '—'}
                   </td>
                   {/* Allocation — show "—" before processed */}
-                  <td className="px-4 py-3.5 text-right font-mono text-gray-900">
+                  <td className={`${pad} py-3.5 text-right font-mono text-gray-900`}>
                     {isProcessed ? (row.allocation > 0 ? fmt(row.allocation) : '—') : '—'}
                   </td>
                   {/* Status */}
                   <td
-                    className={`px-4 py-3.5 text-xs font-medium ${
+                    className={`${pad} py-3.5 text-xs font-medium ${
                       STATUS_COLORS[row.status] ?? 'text-gray-400'
                     }`}
                   >
                     {row.status}
+                    {showDates && row.fundedOn && (
+                      <div className="mt-0.5 font-normal text-[11px] leading-4 whitespace-nowrap">
+                        <div className="text-gray-500">Funded <span className="font-mono">{row.fundedOn}</span></div>
+                        {row.repaidOn ? (
+                          <div className="text-emerald-600">Repaid <span className="font-mono">{row.repaidOn}</span></div>
+                        ) : (
+                          <div className="text-gray-500">Collect by <span className="font-mono">{row.dueOn}</span></div>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
                 {isSelected && detail && (
