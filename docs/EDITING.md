@@ -1,5 +1,9 @@
 # Editing the FlowCard Treasury frontend
 
+There are two versions behind the toggle at the top right. **Kit 5** is the default; **GD
+original** is Yidi's build, kept as it was. Most of this guide below the Kit 5 section is about
+GD's files.
+
 A practical guide to changing the demo. Run `npm run dev` first; every save hot-reloads
 in the browser.
 
@@ -7,7 +11,8 @@ in the browser.
 
 | On screen                                   | File                                         |
 | ------------------------------------------- | -------------------------------------------- |
-| Sidebar, logo, nav items, header buttons    | `src/App.tsx`                                |
+| Sidebar, logo, nav items                    | `src/components/Sidebar.tsx`                 |
+| GD header buttons and layout                | `src/gd/GdDashboard.tsx`                     |
 | "Bridge Facility" bar (lent / deployable / floor) | `src/components/CapitalBar.tsx`        |
 | Declines table and expanded customer panel  | `src/components/BridgeQueue.tsx`, `CustomerDetail.tsx` |
 | Underwriting flowchart (pre-check → per-request) | `src/components/UnderwritingPipeline.tsx` |
@@ -21,7 +26,41 @@ The sidebar items other than **Dashboard** are visual only — they don't route 
 `src/components/SummaryCard.tsx` (an end-of-demo outcome list with hard-coded text) exists
 but is not rendered anywhere.
 
-## Common changes
+## Kit 5 version (default)
+
+Everything Kit 5 lives in `src/kit5/`. It reuses GD's components, so a visual change to the
+queue, capital bar or feed shows up in both versions.
+
+| To change… | Edit |
+| --- | --- |
+| Facility numbers, customers, requests, times, repayments | `src/kit5/scenarios.ts` |
+| Scenario names and one-line summaries | `SCENARIOS` in `src/kit5/scenarios.ts` |
+| How a request is decided, feed wording, approval card terms | `src/kit5/engine.ts` (`evaluate` and `decide`) |
+| Speed of arrivals | `ARRIVAL_MS` in `src/kit5/useKit5Dashboard.ts` |
+| Header, scenario picker, status line | `src/kit5/Kit5Dashboard.tsx` |
+| Fields in the inputs drawer | `src/kit5/SettingsPanel.tsx` |
+| Toggle labels or default version | `src/components/VersionToggle.tsx`, `src/App.tsx` |
+
+### Add a scenario
+Add an entry to `SCENARIOS` in `src/kit5/scenarios.ts` with a `customers` list and an `events`
+list. Each `decline` event needs a unique `requestId`. A `repayment` event names the
+`requestId` of the bridge it repays. Events can be listed in any order; the engine sorts
+them by `day`, then `time`. Then add a test in `tests/kit5/engine.test.ts` that plays it and
+checks the outcome.
+
+### Connect the backend
+`loadScenarios()` in `src/kit5/scenarios.ts` is the single place scenario data enters.
+Replace its body with a call to the backend that returns `Scenario[]` in the shape defined in
+`src/kit5/types.ts` (plain JSON: facility, already lent out, customers, events). The inputs
+drawer edits a copy of that same object, so it keeps working.
+
+### How the sequence runs
+`useKit5Dashboard` calls `step()` on a timer. Each step takes the next event in arrival
+order. A decline is decided immediately against the capital left at that moment. The timer
+stops while `state.pause` is set (Salesforce re-evaluation or a credit officer), and before a
+repayment, which the presenter triggers with **Simulate Collection**.
+
+## GD original version: common changes
 
 ### Change wording, numbers, or the demo story
 Almost all of it is in **`src/seed.ts`**:
@@ -37,7 +76,8 @@ the text you see on screen). The date in the header is `demoClock` in `initialSt
 ### Change the look
 Styling is Tailwind utility classes written directly on the elements (`className="…"`), so
 change the classes in the relevant component. Brand colors are hard-coded hex values:
-- sidebar background `#1a1b2e` and primary button `#e04e2f` in `src/App.tsx`
+- sidebar background `#1a1b2e` in `src/components/Sidebar.tsx`; primary button `#e04e2f` in
+  `src/gd/GdDashboard.tsx` and `src/kit5/Kit5Dashboard.tsx`
 - custom animations (slide-in, fade) in `src/index.css`
 
 Tailwind v4 is loaded with `@import "tailwindcss";` — there is no `tailwind.config.js`.
@@ -66,7 +106,7 @@ customers get funded.
 ## How a click becomes a screen update
 
 ```
-button in App.tsx / BridgeQueue.tsx
+button in gd/GdDashboard.tsx / BridgeQueue.tsx
   → action in src/hooks/useDashboard.ts   (scan, selectCustomer, approve, collect, reset)
   → pure function in src/state/machine.ts (takes old state, returns new state)
   → React re-renders components from the new DashboardState (src/state/types.ts)

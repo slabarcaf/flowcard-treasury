@@ -41,6 +41,7 @@ const STATUS_COLORS: Record<string, string> = {
   Approved: 'text-amber-600',
   Evaluating: 'text-sky-600',
   Funded: 'text-emerald-600',
+  Repaid: 'text-emerald-600',
   Declined: 'text-red-600',
   Ineligible: 'text-red-500',
   '—': 'text-gray-400',
