@@ -10,6 +10,8 @@ AI agent reading CRM notes — whether to front the shortfall from its lending f
 > This repository is a copy made to keep iterating on the frontend. The original commit
 > history is preserved, so the first commit is hers.
 
+**Live demo:** https://flowcard-treasury.vercel.app (anyone with the link can open it; the code stays private).
+
 ## Run it
 
 Needs Node 20.19+ or 22.12+.
@@ -26,6 +28,15 @@ npm run dev        # http://localhost:5173
 | `npm run build`   | Type-check + production build into `dist/`    |
 | `npm run lint`    | Lint with oxlint                              |
 | `npm run preview` | Serve the production build locally            |
+
+### Update the live demo
+
+The demo is deployed from this folder with the Vercel CLI (account `slabarcaf`). Pushing to
+GitHub does **not** redeploy it. After merging changes:
+
+```bash
+vercel deploy --prod
+```
 
 ## Two versions: Kit 5 and GD original
 
