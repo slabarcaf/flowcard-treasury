@@ -5,7 +5,7 @@ import { ActivityFeed } from '../components/ActivityFeed.js';
 import { FeedToast } from '../components/FeedToast.js';
 import { Sidebar } from '../components/Sidebar.js';
 import { useKit5Dashboard } from './useKit5Dashboard.js';
-import { nextEvent } from './engine.js';
+import { nextEvent, shortDate } from './engine.js';
 import { SettingsPanel } from './SettingsPanel.js';
 
 /** Kit 5 version: 20% reserve floor, requests decided one at a time as they arrive. */
@@ -22,11 +22,22 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
     .filter((r) => r.eligible)
     .reduce((sum, r) => sum + r.shortfall, 0);
 
+  const autoApproved = state.pause?.kind === 'ack' ? state.queue.find((r) => r.id === state.pause!.requestId) : undefined;
+  const autoDetail = autoApproved ? state.customerDetails[autoApproved.id] : undefined;
+  const outstanding = Object.values(state.bridges);
+
   let statusLine = k.scenario.summary;
-  if (state.pause?.kind === 'human') statusLine = 'Waiting on the credit officer. The next request is decided after this one.';
+  if (autoApproved) statusLine = `${autoApproved.customerName} was auto-approved. Continue when you're ready for the next request.`;
+  else if (state.pause?.kind === 'human') statusLine = 'Waiting on the credit officer. The next request is decided after this one.';
   else if (state.pause?.kind === 'crm') statusLine = 'Agent found new Salesforce information. Re-evaluate to decide this request.';
   else if (awaitingCollection) statusLine = 'All requests for the day are decided. Simulate the next collection to move the clock forward.';
-  else if (finished) statusLine = 'Scenario complete.';
+  else if (finished) {
+    statusLine = outstanding.length === 0
+      ? 'Scenario complete. Every bridge has been repaid.'
+      : `Scenario complete. Still outstanding: ${outstanding
+          .map((b) => `${b.customerName} $${b.amount.toLocaleString('en-US')}, collect by ${shortDate(state.inputs.startDate, b.dueDay)}`)
+          .join('; ')}.`;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 flex">
@@ -109,6 +120,27 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               band={state.band}
             />
 
+            {autoApproved && (
+              <div className="flex items-center justify-between gap-4 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 animate-panel-in" role="status">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-emerald-800">
+                    Auto-approved: {autoApproved.customerName}, ${autoApproved.allocation.toLocaleString('en-US')} funded
+                  </div>
+                  <div className="text-xs text-emerald-700 mt-1">
+                    {autoDetail?.policyChecks[0]?.label.replace(`${autoApproved.customerName}: `, '')}.
+                    {' '}Deployable ${(state.deployableCapital + autoApproved.allocation).toLocaleString('en-US')} → ${state.deployableCapital.toLocaleString('en-US')}.
+                    {' '}Funded {autoApproved.fundedOn}, collect by {autoApproved.dueOn}.
+                  </div>
+                </div>
+                <button
+                  onClick={k.continueAfterAuto}
+                  className="shrink-0 px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
+
             <BridgeQueue
               rows={state.queue}
               totalEligibleShortfall={totalEligibleShortfall}
@@ -122,6 +154,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               onBloomReveal={k.crmReveal}
               onBloomReEvaluate={k.crmReEvaluate}
               onApprove={k.approve}
+              showDates
             />
           </div>
 

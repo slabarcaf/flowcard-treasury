@@ -7,6 +7,7 @@ import {
   revealCrm,
   reEvaluateCrm,
   approve,
+  acknowledge,
 } from '../../src/kit5/engine.js';
 import { SCENARIOS } from '../../src/kit5/scenarios.js';
 import type { Kit5State } from '../../src/kit5/types.js';
@@ -23,6 +24,7 @@ function playAll(s: Kit5State, onEach?: (s: Kit5State) => void): Kit5State {
   for (let guard = 0; guard < 50; guard++) {
     if (s.pause?.kind === 'crm') s = reEvaluateCrm(revealCrm(s));
     else if (s.pause?.kind === 'human') s = approve(s, s.pause.requestId);
+    else if (s.pause?.kind === 'ack') s = acknowledge(s);
     else if (nextEvent(s)) s = step(s);
     else return s;
     onEach?.(s);
@@ -67,11 +69,30 @@ describe('Original scenario', () => {
     expect(s.customerDetails.txn_nova_contractor_001.collectionRows?.[0].amount).toBe(27);
   });
 
+  it('dates every bridge: funded day, collect-by (30 days), repaid day', () => {
+    const s = playAll(initialKit5State(scenario('original')));
+    const atlas = s.queue.find((q) => q.id === 'txn_atlas_supplier_001')!;
+    const nova = s.queue.find((q) => q.id === 'txn_nova_contractor_001')!;
+    expect(atlas).toMatchObject({ fundedOn: 'Oct 19', dueOn: 'Nov 18' });
+    expect(atlas.repaidOn).toBeUndefined();
+    expect(nova).toMatchObject({ fundedOn: 'Oct 19', dueOn: 'Nov 18', repaidOn: 'Oct 28' });
+    expect(s.bridges.txn_atlas_supplier_001.dueDay).toBe(30);
+  });
+
+  it('explains the 90-day history gate for Pixel', () => {
+    const s = playAll(initialKit5State(scenario('original')));
+    expect(s.queue.find((q) => q.id === 'txn_pixel_ads_001')?.ineligibleReason).toBe(
+      'No line yet: 41 days of history, 90 required (eligible in 49 days)',
+    );
+  });
+
   it('sends Nova to a credit officer (Tier B at Less)', () => {
     let s = start(initialKit5State(scenario('original')));
     s = reEvaluateCrm(revealCrm(step(s))); // Bloom
     s = step(s); // Atlas
-    s = step(s); // Nova
+    expect(s.pause).toEqual({ kind: 'ack', requestId: 'txn_atlas_supplier_001' });
+    expect(step(s)).toBe(s); // waits for the presenter
+    s = step(acknowledge(s)); // Nova
     expect(s.pause).toEqual({ kind: 'human', requestId: 'txn_nova_contractor_001' });
     expect(s.customerDetails.txn_nova_contractor_001.approvalTerms?.capitalImpact).toContain('$10,000 → $4,000');
   });
@@ -110,7 +131,7 @@ describe('Tight capital → human', () => {
     s = step(s);
     expect(status(s, 'txn_orchid_contractor_001')).toBe('Funded');
     expect(s.band).toBe('critical');
-    s = step(s);
+    s = step(acknowledge(s));
     expect(s.pause).toEqual({ kind: 'human', requestId: 'txn_willow_contractor_001' });
     s = approve(s, 'txn_willow_contractor_001');
     expect(status(s, 'txn_willow_contractor_001')).toBe('Funded');

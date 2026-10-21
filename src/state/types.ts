@@ -34,6 +34,10 @@ export interface QueueRow {
   rationale: string;
   eligible: boolean;
   ineligibleReason?: string;
+  // Kit 5 only: bridge dates
+  fundedOn?: string;
+  dueOn?: string;
+  repaidOn?: string;
 }
 
 // ---------------------------------------------------------------------------

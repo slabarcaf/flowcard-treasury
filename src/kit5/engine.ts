@@ -28,6 +28,13 @@ import type {
 // capital left at that moment. Pure functions: old state in, new state out.
 // ---------------------------------------------------------------------------
 
+/**
+ * Collect-by window when a request doesn't set its own. The customer's default term
+ * is "as soon as money arrives"; this is the latest we wait before it is past due.
+ * Assumption pending the team's call on collection timing (Source of Truth, Open 1).
+ */
+export const DEFAULT_TERM_DAYS = 30;
+
 function fmt(n: number): string {
   return '$' + n.toLocaleString('en-US');
 }
@@ -45,6 +52,17 @@ export function clockLabel(startDate: string, day: number): string {
   const d = new Date(`${startDate}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + day);
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+/** "Oct 19" — for the date columns. */
+export function shortDate(startDate: string, day: number): string {
+  const d = new Date(`${startDate}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + day);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function dueDayFor(ev: DeclineEvent): number {
+  return ev.day + (ev.termDays ?? DEFAULT_TERM_DAYS);
 }
 
 function clone(s: Kit5State): Kit5State {
@@ -161,7 +179,7 @@ function evaluate(s: Kit5State, c: ScenarioCustomer, signals: Signals, shortfall
       { label: 'Tier', sublabel: 'A / B / C / none', status: 'skip', tooltip: why },
       { label: 'Credit line', sublabel: 'Tier multiplier × inflow', status: 'skip', tooltip: why },
     );
-    const reason = `No line: ${c.historyDays} days of history (${f.minHistoryDays} required)`;
+    const reason = `No line yet: ${c.historyDays} days of history, ${f.minHistoryDays} required (eligible in ${f.minHistoryDays - c.historyDays} days)`;
     return { precheck, perRequest: skip('Skipped — customer is ineligible.'), tier: 'none', creditLine: 0, door: 'closed', eligible: false, ineligibleReason: reason, failures: [reason] };
   }
 
@@ -318,8 +336,9 @@ function decide(s: Kit5State, ev: DeclineEvent, opts: { signals?: Signals; tierF
     row.allocation = shortfall;
 
     if (e.door === 'auto') {
-      fund(s, ev, c.name, shortfall, detail);
       pushFeed(s, ev.time, `${c.name}: auto-approved, ${fmt(shortfall)} bridge funded`, 'info');
+      fund(s, ev, c.name, shortfall, detail);
+      s.pause = { kind: 'ack', requestId: ev.requestId };
     } else {
       const lendableAmt = lendable(s.inputs.facility);
       const after = s.deployableCapital - shortfall;
@@ -332,7 +351,7 @@ function decide(s: Kit5State, ev: DeclineEvent, opts: { signals?: Signals; tierF
         currency: 'USD',
         to: `${c.name} (${c.id})`,
         covers: `Declined card transaction ${ev.requestId}`,
-        term: 'As soon as money arrives (customer default)',
+        term: `As soon as money arrives (customer default); collect by ${shortDate(s.inputs.startDate, dueDayFor(ev))}`,
         fee: `${(s.inputs.facility.feeRatePer30Days * 100).toFixed(1)}% per 30 days on daily outstanding`,
         evidence: `Tier ${e.tier}: door Human at capital level ${bandLabel(s)}`,
         capitalImpact: `Deployable ${fmt(s.deployableCapital)} → ${fmt(after)}, ${bandLabel(s) === bandAfter ? `band stays ${bandAfter}` : `band ${bandLabel(s)} → ${bandAfter}`}, floor intact`,
@@ -352,9 +371,14 @@ function fund(s: Kit5State, ev: DeclineEvent, name: string, amount: number, deta
   detail.status = 'Funded';
   const row = s.queue.find((q) => q.id === ev.requestId);
   if (row) row.status = 'Funded';
+  const dueDay = dueDayFor(ev);
+  if (row) {
+    row.fundedOn = shortDate(s.inputs.startDate, ev.day);
+    row.dueOn = shortDate(s.inputs.startDate, dueDay);
+  }
   setCapital(s, s.lentOut + amount);
-  s.bridges[ev.requestId] = { customerName: name, amount, day: ev.day };
-  pushFeed(s, ev.time, `Transfer bridge-${ev.requestId}: ${fmt(amount)} → ${name} — SETTLED`, 'transfer');
+  s.bridges[ev.requestId] = { customerName: name, amount, day: ev.day, dueDay };
+  pushFeed(s, ev.time, `Transfer bridge-${ev.requestId}: ${fmt(amount)} → ${name} — SETTLED. Collect by ${shortDate(s.inputs.startDate, dueDay)}`, 'transfer');
 }
 
 // ---------------------------------------------------------------------------
@@ -406,8 +430,9 @@ function repay(s: Kit5State, ev: RepaymentEvent) {
     return;
   }
   const days = Math.max(0, ev.day - bridge.day);
+  const daysLate = ev.day - bridge.dueDay;
   const fee = bridgeFee(bridge.amount, days, s.inputs.facility.feeRatePer30Days);
-  pushFeed(s, ev.time, `Deposit ${fmt(ev.depositAmount)} received from ${bridge.customerName}`, 'deposit');
+  pushFeed(s, ev.time, `Deposit ${fmt(ev.depositAmount)} received from ${bridge.customerName}${daysLate > 0 ? ` (${daysLate} days past due)` : ''}`, 'deposit');
   pushFeed(s, ev.time, `Fee charge: $${fee.toFixed(2)} (${days} days @ ${(s.inputs.facility.feeRatePer30Days * 100).toFixed(1)}%/30d)`, 'charge');
   pushFeed(s, ev.time, `Principal repayment: ${fmt(bridge.amount)} — capital back in the pool`, 'payment');
 
@@ -423,7 +448,10 @@ function repay(s: Kit5State, ev: RepaymentEvent) {
     ];
   }
   const row = s.queue.find((q) => q.id === ev.requestId);
-  if (row) row.status = 'Repaid';
+  if (row) {
+    row.status = 'Repaid';
+    row.repaidOn = shortDate(s.inputs.startDate, ev.day);
+  }
   s.selectedCustomerId = ev.requestId;
 }
 
@@ -456,6 +484,12 @@ export function reEvaluateCrm(prev: Kit5State): Kit5State {
   decide(s, ev, { signals: c.crmSignalsAfter, tierFrom });
   s.customerDetails[ev.requestId].bloomAgentPhase = 'done';
   return s;
+}
+
+/** The presenter has seen the auto-approval; move on to the next request. */
+export function acknowledge(prev: Kit5State): Kit5State {
+  if (prev.pause?.kind !== 'ack') return prev;
+  return { ...prev, pause: null };
 }
 
 export function approve(prev: Kit5State, requestId: string): Kit5State {
