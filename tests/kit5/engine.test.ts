@@ -197,17 +197,22 @@ describe('shared demo decision fixtures', () => {
     snapshot: 'fresh', evidence: 'no_signal', creditReview: 'approved', priorDefault: 'no', ...overrides,
   });
 
-  it('applies profile repayment counts through the shared starter multiplier in both engines', () => {
-    const starterInput = { ...base, profile: { ...profile, fullyRepaidOnTimeBridges: 0 }, readiness: readiness() };
-    const promotedInput = { ...base, profile: { ...profile, fullyRepaidOnTimeBridges: 3 }, readiness: readiness() };
-    const dashboardStarter = evaluateDashboardCustomerPolicy(starterInput);
-    const kit5Starter = evaluateKit5CustomerPolicy(starterInput);
-    const dashboardPromoted = evaluateDashboardCustomerPolicy(promotedInput);
-    const kit5Promoted = evaluateKit5CustomerPolicy(promotedInput);
-    expect(dashboardStarter).toEqual(kit5Starter);
-    expect(dashboardPromoted).toEqual(kit5Promoted);
-    expect(dashboardStarter.creditLine).toBe(2_000);
-    expect(dashboardPromoted.creditLine).toBe(6_000);
+  it.each([
+    [0, 2_000], [2, 2_000], [3, 6_000],
+  ])('applies %i on-time repayments through the shared multiplier in both engines', (repayments, expectedLine) => {
+    const input = { ...base, profile: { ...profile, fullyRepaidOnTimeBridges: repayments }, readiness: readiness() };
+    const dashboard = evaluateDashboardCustomerPolicy(input);
+    const kit5 = evaluateKit5CustomerPolicy(input);
+    expect(dashboard).toEqual(kit5);
+    expect(dashboard.creditLine).toBe(expectedLine);
+  });
+
+  it.each([undefined, -1, 1.5])('blocks both engines when profile repayment history is missing or invalid: %s', (repayments) => {
+    const input = { ...base, profile: { ...profile, fullyRepaidOnTimeBridges: repayments }, readiness: readiness() };
+    const dashboard = evaluateDashboardCustomerPolicy(input);
+    const kit5 = evaluateKit5CustomerPolicy(input);
+    expect(dashboard).toEqual(kit5);
+    expect(dashboard).toMatchObject({ status: 'blocked', tier: 'none', creditLine: 0, reasonCodes: ['REPAYMENT_HISTORY_UNKNOWN'] });
   });
 
   it.each([

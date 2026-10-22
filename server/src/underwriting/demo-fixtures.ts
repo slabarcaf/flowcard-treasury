@@ -13,10 +13,15 @@ const DATA: Readonly<Record<string, UnderwritingProfileCandidate["data"]>> = {
 
 /** Publish explicit synthetic profiles for the demo roster without provider calls. */
 export async function publishDemoUnderwritingProfiles(pool: DatabasePool, now = new Date()): Promise<void> {
-  const customers = await listActiveCustomersForSnapshots(pool);
-  for (const customer of customers) {
-    const candidate = buildDemoUnderwritingProfileCandidate(customer.customerId, now);
-    if (candidate) await publishUnderwritingProfile(pool, candidate);
+  let afterCustomerId: string | null = null;
+  while (true) {
+    const customers = await listActiveCustomersForSnapshots(pool, { afterCustomerId, limit: 1_000 });
+    for (const customer of customers) {
+      const candidate = buildDemoUnderwritingProfileCandidate(customer.customerId, now);
+      if (candidate) await publishUnderwritingProfile(pool, candidate);
+    }
+    if (customers.length < 1_000) break;
+    afterCustomerId = customers[customers.length - 1]!.customerId;
   }
 }
 

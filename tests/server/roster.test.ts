@@ -114,6 +114,8 @@ describe("customer enrollment roster", () => {
     const pool = { query } as unknown as DatabasePool;
     await listActiveCustomersForSnapshots(pool);
     expect(query.mock.calls[0][0]).toContain("WHERE is_active");
+    expect(query.mock.calls[0][0]).toContain("LIMIT $2");
+    expect(query.mock.calls[0][1]).toEqual([null, 1_000]);
     await listCustomers(pool);
     expect(query.mock.calls[1][0]).not.toContain("WHERE is_active");
   });

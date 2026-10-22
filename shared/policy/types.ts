@@ -41,7 +41,8 @@ export type PolicyReasonCode =
   | 'CREDIT_REVIEW_BLOCKED'
   | 'CREDIT_REVIEW_UNKNOWN'
   | 'PRIOR_DEFAULT'
-  | 'PRIOR_DEFAULT_UNKNOWN';
+  | 'PRIOR_DEFAULT_UNKNOWN'
+  | 'REPAYMENT_HISTORY_UNKNOWN';
 
 /** Synthetic input readiness used only by the browser demo engines. */
 export interface DemoPolicyReadiness {
@@ -95,7 +96,7 @@ export interface CustomerProfile {
   monthlyInflow: number;
   signals: Signals;
   historyDays: number;
-  /** Explicit fixture/profile count of fully repaid on-time bridges; absent means none. */
+  /** Explicit fixture/profile count; absent or invalid history blocks demo policy. */
   fullyRepaidOnTimeBridges?: number;
   noGo: {
     excludedIndustry: boolean;

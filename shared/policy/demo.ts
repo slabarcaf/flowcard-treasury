@@ -37,6 +37,7 @@ const REASON_TEXT: Readonly<Record<PolicyReasonCode, string>> = {
   CREDIT_REVIEW_UNKNOWN: 'Salesforce credit review status is unknown; new decisions are blocked.',
   PRIOR_DEFAULT: 'A verified prior default blocks a new bridge.',
   PRIOR_DEFAULT_UNKNOWN: 'Prior default status is unknown; new decisions are blocked.',
+  REPAYMENT_HISTORY_UNKNOWN: 'Trusted on-time repayment history is missing or invalid; no credit line is available.',
 };
 
 export function policyReasonText(code: PolicyReasonCode): string {
@@ -111,8 +112,15 @@ export function evaluateDemoPolicy(input: {
     };
   }
 
+  const fullyRepaidOnTimeBridges = input.profile.fullyRepaidOnTimeBridges;
+  if (typeof fullyRepaidOnTimeBridges !== 'number' || !Number.isSafeInteger(fullyRepaidOnTimeBridges) || fullyRepaidOnTimeBridges < 0) {
+    return {
+      status: 'blocked', tier: 'none', creditLine: 0, door: 'closed', allocation: 0,
+      reasonCodes: ['REPAYMENT_HISTORY_UNKNOWN'], reasons: [policyReasonText('REPAYMENT_HISTORY_UNKNOWN')],
+    };
+  }
+
   const tier = assignTier(input.profile.signals);
-  const fullyRepaidOnTimeBridges = input.profile.fullyRepaidOnTimeBridges ?? 0;
   const creditLine = computeCreditLine(tier, input.profile.monthlyInflow, input.facility,
     input.profile.signals, { fullyRepaidOnTimeBridges });
   const bridge = checkBridge({

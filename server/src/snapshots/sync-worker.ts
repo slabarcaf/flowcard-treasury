@@ -62,12 +62,19 @@ export class SnapshotSyncWorker {
 
   async run(): Promise<SnapshotSyncRunResult> {
     const runId = this.createRunId();
-    const customers = await listActiveCustomersForSnapshots(this.options.pool);
     const results: CustomerSyncResult[] = [];
-    for (const customer of customers) {
-      // The SQL query is authoritative; the in-process check also protects fake or alternate repositories.
-      if (!customer.isActive) continue;
-      results.push(await this.syncCustomer(customer, runId));
+    let afterCustomerId: string | null = null;
+    while (true) {
+      const customers = await listActiveCustomersForSnapshots(this.options.pool, {
+        afterCustomerId, limit: INTERNAL_BATCH_SIZE,
+      });
+      for (const customer of customers) {
+        // The SQL query is authoritative; the in-process check also protects fake or alternate repositories.
+        if (!customer.isActive) continue;
+        results.push(await this.syncCustomer(customer, runId));
+      }
+      if (customers.length < INTERNAL_BATCH_SIZE) break;
+      afterCustomerId = customers[customers.length - 1]!.customerId;
     }
     return { runId, customers: results };
   }
