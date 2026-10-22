@@ -10,18 +10,19 @@ export async function handleCustomerSnapshot(
   customerId: string,
   authorization: string | undefined,
   productionReadToken: string | undefined,
+  snapshotMode: "demo" | "production_mcp" | undefined,
 ): Promise<void> {
+  if (snapshotMode === "production_mcp" && !hasValidBearerToken(authorization, productionReadToken)) {
+    response.writeHead(401, {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "www-authenticate": "Bearer",
+    });
+    response.end(JSON.stringify({ error: "snapshot_read_unauthorized" }));
+    return;
+  }
   try {
     const model = await getCustomerSnapshotReadModel(pool, customerId);
-    if (model.snapshot?.sourceMode === "production_mcp" && !hasValidBearerToken(authorization, productionReadToken)) {
-      response.writeHead(401, {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-        "www-authenticate": "Bearer",
-      });
-      response.end(JSON.stringify({ error: "snapshot_read_unauthorized" }));
-      return;
-    }
     response.writeHead(200, {
       "content-type": "application/json",
       "cache-control": "no-store",

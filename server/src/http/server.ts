@@ -33,7 +33,8 @@ export function createRequestHandler(config: ServerConfig, pool?: DatabasePool, 
           response.end(JSON.stringify({ error: "invalid_customer_id" }));
           return;
         }
-        void handleCustomerSnapshot(response, pool, customerId, requestAuthorization(request), config.salesforceSnapshotReadToken);
+        void handleCustomerSnapshot(response, pool, customerId, requestAuthorization(request),
+          config.salesforceSnapshotReadToken, config.salesforceSnapshotMode);
         return;
       }
     }

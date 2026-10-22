@@ -37,6 +37,24 @@ describe("customer snapshot read API", () => {
     expect(body(response)).toMatchObject({ freshness: "missing", ageSeconds: null, snapshot: null, latestAttempt: null });
   });
 
+  it("requires production authorization before querying even when no snapshot exists", async () => {
+    const row = snapshotRow({ snapshot_id: null, version: null, source_mode: null, schema_version: null,
+      mapping_version: null, run_id: null, captured_at: null, published_at: null, canonical_payload: null,
+      attempt_run_id: null, attempt_status: null, attempt_finished_at: null });
+    const { response, query } = await request(row, `/api/customers/${customerId}/snapshot`, undefined,
+      "read-secret", "production_mcp");
+    expect(response.writeHead).toHaveBeenCalledWith(401, expect.any(Object));
+    expect(body(response)).toEqual({ error: "snapshot_read_unauthorized" });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("allows demo snapshot reads without a bearer token", async () => {
+    const { response } = await request(snapshotRow(), `/api/customers/${customerId}/snapshot`, undefined,
+      "read-secret", "demo");
+    expect(response.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+    expect(body(response).active).toBe(true);
+  });
+
   it("marks the prior version stale immediately after the latest exhausted attempt fails", async () => {
     const { response } = await request(snapshotRow({ attempt_run_id: "run-failed", attempt_status: "failed" }),
       `/api/customers/${customerId}/snapshot`);
@@ -62,21 +80,25 @@ describe("customer snapshot read API", () => {
     expect(body(response)).toMatchObject({ active: false, freshness: "deactivated" });
   });
 
-  it("requires a bearer token before returning production MCP snapshot data", async () => {
+  it("requires the production bearer token and accepts only the matching token", async () => {
     const productionPayload = { ...payload, mappingVerified: true };
     const row = snapshotRow({ source_mode: "production_mcp", canonical_payload: productionPayload });
-    const denied = await request(row, `/api/customers/${customerId}/snapshot`, undefined, "read-secret");
+    const denied = await request(row, `/api/customers/${customerId}/snapshot`, undefined, "read-secret", "production_mcp");
     expect(denied.response.writeHead).toHaveBeenCalledWith(401, expect.any(Object));
     expect(body(denied.response)).toEqual({ error: "snapshot_read_unauthorized" });
 
-    const allowed = await request(row, `/api/customers/${customerId}/snapshot`, "Bearer read-secret", "read-secret");
+    const wrong = await request(row, `/api/customers/${customerId}/snapshot`, "Bearer wrong-secret", "read-secret", "production_mcp");
+    expect(wrong.response.writeHead).toHaveBeenCalledWith(401, expect.any(Object));
+    expect(body(wrong.response)).toEqual({ error: "snapshot_read_unauthorized" });
+
+    const allowed = await request(row, `/api/customers/${customerId}/snapshot`, "Bearer read-secret", "read-secret", "production_mcp");
     expect(allowed.response.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
     expect(body(allowed.response).snapshot?.data).toMatchObject({ mappingVerified: true });
   });
 
   it("keeps an unverified production mapping invalid even with a valid read token", async () => {
     const row = snapshotRow({ source_mode: "production_mcp", canonical_payload: { ...payload, mappingVerified: false } });
-    const { response } = await request(row, `/api/customers/${customerId}/snapshot`, "Bearer read-secret", "read-secret");
+    const { response } = await request(row, `/api/customers/${customerId}/snapshot`, "Bearer read-secret", "read-secret", "production_mcp");
     expect(body(response)).toMatchObject({ freshness: "invalid" });
     expect(body(response).validationErrors).toContain("Production Salesforce mapping is not verified");
   });
@@ -87,6 +109,7 @@ async function request(
   url: string,
   authorization?: string,
   productionReadToken?: string,
+  snapshotMode: "demo" | "production_mcp" = "demo",
 ) {
   const query = vi.fn(async <Row>(): Promise<QueryResult<Row>> => ({ rows: [row as Row], rowCount: 1 }));
   const pool = { query } as unknown as DatabasePool;
@@ -97,6 +120,7 @@ async function request(
     airwallexApiKey: "key",
     airwallexWebhookSecret: "secret",
     salesforceSnapshotReadToken: productionReadToken,
+    salesforceSnapshotMode: snapshotMode,
   }, pool);
   const response = { writeHead: vi.fn(), end: vi.fn() };
   handler({ method: "GET", url, headers: { authorization } } as never, response as never);
