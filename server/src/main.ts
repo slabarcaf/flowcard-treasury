@@ -13,6 +13,11 @@ import { runEvidenceReviewCli } from "./ai-evidence/review-cli.js";
 import { DailyEvidenceRunner } from "./ai-evidence/runner.js";
 import { FixtureEvidenceProvider } from "./ai-evidence/fixture-provider.js";
 import { runPolicyApprovalCli } from "./policy/approval-cli.js";
+import {
+  createRemoteAuthorizationApprovalRevalidator,
+  createRemoteAuthorizationResolver,
+  resolveStoredRemoteAuthorizationDecision,
+} from "./policy/remote-authorization.js";
 
 if (process.argv[2] === "policy-approval") {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -22,7 +27,18 @@ if (process.argv[2] === "policy-approval") {
   }
   const approvalPool = await createDatabasePool({ databaseUrl });
   try {
-    await runPolicyApprovalCli(approvalPool, process.argv.slice(3), process.env);
+    const approvalConfig = loadConfig();
+    const approvalGateway = new HttpAirwallexGateway({
+      baseUrl: process.env.AIRWALLEX_BASE_URL?.trim() || "https://api.sandbox.airwallex.com",
+      clientId: approvalConfig.airwallexClientId,
+      apiKey: approvalConfig.airwallexApiKey,
+    });
+    const approvalRevalidator = createRemoteAuthorizationApprovalRevalidator({
+      pool: approvalPool,
+      gateway: approvalGateway,
+      repaymentTerm: approvalConfig.remoteAuthorizationRepaymentTerm,
+    });
+    await runPolicyApprovalCli(approvalPool, process.argv.slice(3), process.env, undefined, approvalRevalidator);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
@@ -83,7 +99,18 @@ if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo") {
 } else if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "production_mcp") {
   console.error("Production Salesforce snapshots are disabled: this server has no trusted host MCP runtime binding");
 }
-const server = createHttpServer(config, pool, webhookWorker);
+const remoteAuthorizationResolver = createRemoteAuthorizationResolver({
+  pool,
+  gateway,
+  repaymentTerm: config.remoteAuthorizationRepaymentTerm,
+});
+const server = createHttpServer(
+  config,
+  pool,
+  webhookWorker,
+  (requestId) => resolveStoredRemoteAuthorizationDecision(pool, requestId),
+  remoteAuthorizationResolver,
+);
 server.listen(config.port, "0.0.0.0", () => {
   console.log(`Bridge ledger server listening on port ${config.port}`);
 });

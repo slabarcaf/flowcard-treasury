@@ -37,6 +37,7 @@ export interface PolicyReservationInput extends Omit<ReserveBridgeInput, "bridge
   requestId: string;
   currentBalance: CurrentBalance;
   humanApproval?: HumanApprovalAuthorization;
+  signal?: AbortSignal;
   /** Must load and evaluate current profile, evidence, exposure, and door using this transaction. */
   revalidate: (context: {
     client: DatabaseClient;
@@ -65,6 +66,7 @@ export async function reservePolicyBridge(
   if (!input.requestId.trim()) throw new Error("requestId is required");
   const client = await pool.connect();
   try {
+    assertActive(input.signal);
     await client.query("BEGIN");
     const facilityResult = await client.query<{ deployable_cents: string | number }>(
       `SELECT deployable_cents FROM facility_projections WHERE currency = 'USD' FOR UPDATE`,
@@ -180,6 +182,7 @@ export async function reservePolicyBridge(
       openBridgeCount: openBridge.rowCount ?? 0,
       approval: input.humanApproval,
     });
+    assertActive(input.signal);
     if (precheck.customerId !== input.customerId || precheck.snapshotId !== snapshot.snapshot.snapshotId ||
         precheck.evidenceRunId !== currentEvidence.extraction_id) {
       throw new Error("Revalidated policy inputs do not match current snapshot and evidence versions");
@@ -198,6 +201,7 @@ export async function reservePolicyBridge(
       evaluatedAt: new Date(),
     });
     if (decision.outcome !== "auto_approved") {
+      assertActive(input.signal);
       await client.query("COMMIT");
       return { decision, reservation: null };
     }
@@ -243,6 +247,7 @@ export async function reservePolicyBridge(
       })],
     );
     await rebuildLedgerProjections(client);
+    assertActive(input.signal);
     await client.query("COMMIT");
     return {
       decision,
@@ -254,6 +259,10 @@ export async function reservePolicyBridge(
   } finally {
     client.release();
   }
+}
+
+function assertActive(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Policy reservation was cancelled");
 }
 
 /** Atomically reserves USD capacity and queues the corresponding transfer. */

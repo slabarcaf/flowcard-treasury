@@ -14,6 +14,10 @@ const rosterMigrationUrl = new URL(
   "../../server/src/db/migrations/002_customer_roster.sql",
   import.meta.url,
 );
+const remoteAuthorizationMigrationUrl = new URL(
+  "../../server/src/db/migrations/008_remote_authorization.sql",
+  import.meta.url,
+);
 
 describe("bridge ledger schema", () => {
   it("defines the required tables and enforces core constraints", async () => {
@@ -85,5 +89,17 @@ describe("bridge ledger schema", () => {
     expect(sql).toContain("demo-seed");
     expect(sql).toContain("Synthetic Bloom demo customer");
     expect(sql).toContain("ON CONFLICT (customer_id) DO NOTHING");
+  });
+
+  it("stores only allowlisted remote authorization facts and audited card bindings", async () => {
+    const sql = await readFile(remoteAuthorizationMigrationUrl, "utf8");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS issuing_card_bindings");
+    expect(sql).toContain("issuing_card_binding_audit_immutable");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS remote_authorization_requests");
+    expect(sql).toContain("nonce text NOT NULL UNIQUE");
+    expect(sql).toContain("card_transaction_event_id text PRIMARY KEY");
+    expect(sql).toContain("merchant_category_code text NOT NULL");
+    expect(sql).not.toContain("raw_body");
+    expect(sql).not.toContain("merchant_name");
   });
 });

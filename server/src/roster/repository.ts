@@ -102,3 +102,74 @@ export async function listActiveCustomersForSnapshots(pool: DatabasePool): Promi
   );
   return result.rows.map(mapRosterRow);
 }
+
+/** Bind a provider card to the roster customer owning its connected account. */
+export async function bindIssuingCard(
+  pool: DatabasePool,
+  input: { customerId: string; cardId: string; accountId: string; actor: string; reason: string },
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const customer = await client.query(
+      `SELECT customer_id FROM customer_roster
+        WHERE customer_id = $1 AND airwallex_connected_account_id = $2 AND is_active FOR UPDATE`,
+      [input.customerId, input.accountId],
+    );
+    if (customer.rowCount !== 1) throw new Error("Card binding does not match an active roster account");
+    const result = await client.query(
+      `INSERT INTO issuing_card_bindings (card_id, customer_id, airwallex_account_id, bound_by, binding_reason)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (card_id) DO UPDATE SET is_active = true, bound_by = EXCLUDED.bound_by,
+         binding_reason = EXCLUDED.binding_reason, bound_at = now()
+       WHERE issuing_card_bindings.customer_id = EXCLUDED.customer_id
+         AND issuing_card_bindings.airwallex_account_id = EXCLUDED.airwallex_account_id
+         AND NOT issuing_card_bindings.is_active
+       RETURNING card_id`,
+      [input.cardId, input.customerId, input.accountId, input.actor, input.reason],
+    );
+    if (result.rowCount !== 1) throw new Error("Card already has a binding; deactivate it before rebinding");
+    await client.query(
+      `INSERT INTO issuing_card_binding_audit (card_id, customer_id, airwallex_account_id, action, actor, reason)
+       VALUES ($1, $2, $3, 'bound', $4, $5)`,
+      [input.cardId, input.customerId, input.accountId, input.actor, input.reason],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deactivateIssuingCardBinding(
+  pool: DatabasePool,
+  input: { cardId: string; actor: string; reason: string },
+): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query<{ card_id: string; customer_id: string; airwallex_account_id: string }>(
+      `UPDATE issuing_card_bindings SET is_active = false
+        WHERE card_id = $1 AND is_active
+        RETURNING card_id, customer_id, airwallex_account_id`, [input.cardId]);
+    const row = result.rows[0];
+    if (!row) {
+      await client.query("COMMIT");
+      return false;
+    }
+    await client.query(
+      `INSERT INTO issuing_card_binding_audit (card_id, customer_id, airwallex_account_id, action, actor, reason)
+       VALUES ($1, $2, $3, 'deactivated', $4, $5)`,
+      [row.card_id, row.customer_id, row.airwallex_account_id, input.actor, input.reason],
+    );
+    await client.query("COMMIT");
+    return true;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}

@@ -31,7 +31,7 @@ export interface CurrentProfileReadModel {
 
 /** Resolve only the profile version referenced by the customer's current pointer. */
 export async function getCurrentUnderwritingProfile(
-  pool: DatabasePool,
+  pool: Pick<DatabasePool, "query">,
   customerId: string,
   now = new Date(),
 ): Promise<CurrentProfileReadModel> {

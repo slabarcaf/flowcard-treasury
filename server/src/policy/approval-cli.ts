@@ -1,7 +1,5 @@
 import type { DatabasePool } from "../db/pool.js";
 
-type ApprovalCommand = "list" | "inspect" | "approve";
-
 export interface PendingPolicyApproval {
   decisionId: string;
   evaluationId: string;
@@ -10,6 +8,10 @@ export interface PendingPolicyApproval {
   outcome: string;
   amountCents: number;
   evaluatedAt: Date;
+  transactionId?: string;
+  transactionAmountCents?: number;
+  currency?: string;
+  merchantCategoryCode?: string;
 }
 
 export interface RevalidatedApproval {
@@ -40,20 +42,36 @@ export async function runPolicyApprovalCli(
     const result = await pool.query(
       `SELECT decision_id AS "decisionId", evaluation_id AS "evaluationId",
               request_id AS "requestId", customer_id AS "customerId", outcome,
-              amount_cents AS "amountCents", evaluated_at AS "evaluatedAt"
-         FROM policy_request_evaluations
-        WHERE outcome = 'human_review' AND actor_id IS NULL
-        ORDER BY evaluated_at, request_id`,
+              amount_cents AS "amountCents", evaluated_at AS "evaluatedAt",
+              request.card_transaction_id AS "transactionId",
+              request.amount_cents AS "transactionAmountCents",
+              request.currency, request.merchant_category_code AS "merchantCategoryCode"
+         FROM policy_request_evaluations AS decision
+         JOIN remote_authorization_requests AS request
+           ON request.card_transaction_event_id = decision.request_id
+        WHERE decision.outcome = 'human_review' AND decision.actor_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM policy_request_evaluations AS approval
+             WHERE approval.request_id = decision.request_id
+               AND approval.actor_id IS NOT NULL AND approval.outcome = 'auto_approved'
+          )
+        ORDER BY decision.evaluated_at, decision.request_id`,
     );
     write(`${JSON.stringify(result.rows, null, 2)}\n`);
     return;
   }
   const decisionId = required(options, "--decision-id");
   const result = await pool.query<PendingPolicyApproval>(
-    `SELECT decision_id AS "decisionId", evaluation_id AS "evaluationId",
-            request_id AS "requestId", customer_id AS "customerId", outcome,
-            amount_cents AS "amountCents", evaluated_at AS "evaluatedAt"
-       FROM policy_request_evaluations WHERE decision_id = $1`,
+    `SELECT decision.decision_id AS "decisionId", decision.evaluation_id AS "evaluationId",
+            decision.request_id AS "requestId", decision.customer_id AS "customerId", decision.outcome,
+            decision.amount_cents AS "amountCents", decision.evaluated_at AS "evaluatedAt",
+            request.card_transaction_id AS "transactionId",
+            request.amount_cents AS "transactionAmountCents",
+            request.currency, request.merchant_category_code AS "merchantCategoryCode"
+       FROM policy_request_evaluations AS decision
+       JOIN remote_authorization_requests AS request
+         ON request.card_transaction_event_id = decision.request_id
+      WHERE decision.decision_id = $1`,
     [decisionId],
   );
   const pending = result.rows[0];

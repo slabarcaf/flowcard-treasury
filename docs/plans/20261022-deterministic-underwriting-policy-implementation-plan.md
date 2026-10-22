@@ -509,19 +509,31 @@ provider operation unless all checks still pass.
 - Modify: `server/src/http/server.ts`
 - Modify: `server/src/main.ts`
 - Modify: `package.json`
+- Create: `server/src/db/migrations/008_remote_authorization.sql`
+- Modify: `server/src/config.ts`
+- Modify: `server/src/roster/repository.ts`
+- Modify: `server/src/roster/cli.ts`
+- Create: `server/src/http/routes/remote-authorization.ts`
 - Create: `tests/server/policy/bridge-decision-route.test.ts`
 - Create: `tests/server/policy/approval-cli.test.ts`
+- Create: `tests/server/policy/remote-authorization-route.test.ts`
 
-- [ ] Add a server endpoint that computes a decision from trusted stored inputs;
+The v2 remote authorization ingress persists only allowlisted transaction IDs,
+account/card/customer binding, amount, currency, transaction kind, category,
+and merchant category code. Card bindings are operator-recorded and audited;
+unmapped cards and spend categories fail closed. This is a Task 8 boundary
+addition because the documented provider request is the trusted request source.
+
+- [x] Add a server endpoint that computes a decision from trusted stored inputs;
   reject client-supplied approval, tier, line, or reason-code fields.
-- [ ] Return the evaluation ID, outcome, amount, line, reason codes, and
+- [x] Return the evaluation ID, outcome, amount, line, reason codes, and
   freshness/version metadata without exposing provider secrets or raw notes.
-- [ ] Add operator-only list, inspect, and approve actions requiring actor and
+- [x] Add operator-only list, inspect, and approve actions requiring actor and
   reason, matching the roster and evidence-review CLI patterns.
-- [ ] Re-evaluate exact terms and current inputs during human approval.
-- [ ] Test invalid requests, unauthorized direct approvals, response
+- [x] Re-evaluate exact terms and current inputs during human approval.
+- [x] Test invalid requests, unauthorized direct approvals, response
   redaction, and successful/failed operator actions.
-- [ ] Run focused API and CLI tests before Task 9.
+- [x] Run focused API and CLI tests before Task 9.
 
 ### Task 9: Keep demo and live consumers aligned
 
