@@ -1,0 +1,45 @@
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: flowcard_treasury
+      POSTGRES_USER: flowcard
+      POSTGRES_PASSWORD: demo-local-only
+    volumes:
+      - ledger-data:/var/lib/postgresql/data
+      - ./server/src/db/migrations/001_bridge_ledger.sql:/docker-entrypoint-initdb.d/001_bridge_ledger.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowcard -d flowcard_treasury"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  ledger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://flowcard:demo-local-only@database:5432/flowcard_treasury
+      PORT: "3000"
+      AIRWALLEX_CLIENT_ID: demo-not-used
+      AIRWALLEX_API_KEY: demo-not-used
+      AIRWALLEX_WEBHOOK_SECRET: demo-webhook-secret
+      AIRWALLEX_BASE_URL: http://127.0.0.1:9
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  ledger-data:

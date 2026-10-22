@@ -54,6 +54,21 @@ describe('Kit 5 facility', () => {
 });
 
 describe('Original scenario', () => {
+  it('moves deployable capital from $15K to $10K after Atlas, then to $4K after Nova', () => {
+    let atlasDeployable: number | undefined;
+    let novaDeployable: number | undefined;
+    const s = playAll(initialKit5State(scenario('original')), (current) => {
+      const atlas = current.queue.find((q) => q.id === 'txn_atlas_supplier_001');
+      const nova = current.queue.find((q) => q.id === 'txn_nova_contractor_001');
+      if (atlas?.status === 'Funded' && atlasDeployable === undefined) atlasDeployable = current.deployableCapital;
+      if (nova?.status === 'Funded' && novaDeployable === undefined) novaDeployable = current.deployableCapital;
+    });
+
+    expect(atlasDeployable).toBe(10_000);
+    expect(novaDeployable).toBe(4_000);
+    expect(s.deployableCapital).toBe(10_000);
+  });
+
   it('runs GD’s cast in arrival order on the 20% floor', () => {
     let deployableBeforeCollection = 0;
     const s = playAll(initialKit5State(scenario('original')), (x) => {

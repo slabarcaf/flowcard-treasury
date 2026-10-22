@@ -118,15 +118,98 @@ button in gd/GdDashboard.tsx / BridgeQueue.tsx
 To add a new interaction: write a function in `machine.ts`, expose it from
 `useDashboard.ts`, and call it from a component.
 
-## Connecting real APIs (not done yet)
+## Airwallex bridge ledger
 
-`src/services/` already defines typed interfaces for **Airwallex** (card spend, balance,
-transfers, charges, deposits), a **CRM** (latest account notes) and the **AI agent**
-(signal extraction, allocation proposal, rationale), with mock implementations under
-`src/services/mock/`. Nothing in the UI calls them today — the state machine reads
-`seed.ts` directly. Wiring them in means making the `machine.ts` steps async and fetching
-through these clients instead of reading seed constants. Any real API key must stay on a
-server, never in this frontend.
+The server in `server/src/` owns the PostgreSQL bridge ledger, provider
+operations, transactional outbox, and webhook inbox. Its browser API currently
+exposes only the read-only `GET /api/ledger` projection. Kit 5 remains a
+deterministic local mock; setting `VITE_BRIDGE_API_URL` to the server origin
+displays the ledger projection beside that scenario. Leaving it unset keeps Kit
+5 on mock data without a server projection.
+
+The browser funding command remains unavailable until the policy module can
+submit a trusted server-side approval. Do not treat a browser decision or the
+Kit 5 UI as authority to fund a bridge. The server does not expose a funding
+route for the browser.
+
+### Run the local server
+
+Use Node 20.19+ or 22.12+ and a PostgreSQL database. The repository contains one
+SQL schema and seed migration; the server does not run migrations automatically.
+Apply it from the repository root:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
+```
+
+The server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,
+`AIRWALLEX_API_KEY`, and `AIRWALLEX_WEBHOOK_SECRET`. `PORT` is optional and
+defaults to `3000`.
+`AIRWALLEX_BASE_URL` is optional and defaults to
+`https://api.sandbox.airwallex.com`. Set the credentials in the server process
+environment, then run:
+
+```bash
+npm run server:start
+```
+
+The command builds the TypeScript server and starts it. It does not apply the
+SQL migration. Keep Airwallex credentials on the server; the browser API client
+makes only a GET request for the ledger projection.
+
+### Run the read-only demo with Docker
+
+From the repository root, run:
+
+```bash
+docker compose -p flowcard-ledger-demo up -d --build
+```
+
+Compose starts PostgreSQL and the ledger API, then applies the SQL seed when
+PostgreSQL creates its empty data volume. The local Compose configuration uses
+placeholder Airwallex values and a localhost-only base URL. It does not make
+provider calls. Open `http://localhost:3000/api/ledger` to inspect the seeded
+projection, or check `http://localhost:3000/health` for service health.
+
+Use `docker compose -p flowcard-ledger-demo ps` to check service state and
+`docker compose -p flowcard-ledger-demo logs -f ledger` to follow API logs.
+Stop the services with `docker compose -p flowcard-ledger-demo down`. The named
+database volume persists after stopping; the SQL seed only runs again if a new
+empty volume is created.
+
+### Webhook prerequisites
+
+Register a reachable HTTPS endpoint ending in `/webhooks/airwallex` in the
+Airwallex account. Configure the matching signing secret as
+`AIRWALLEX_WEBHOOK_SECRET` and subscribe to connected account transfer status
+events, charge status events, settled deposit events, and issuing card
+transaction declines. The receiver verifies signatures against the raw request
+body and stores each provider event ID once.
+Use a sandbox webhook subscription and sandbox credentials for authorized
+sandbox exercises.
+
+### V1 ledger and repayment behavior
+
+The seeded USD facility is $50,000 with a 20% reserve floor, $25,000 in
+synthetic opening exposure, $15,000 deployable, and a zero operating buffer.
+The opening exposure is not an Airwallex transfer. V1 supports one open bridge
+per customer and USD only. The ledger is append-only; derived facility and
+bridge balances are projections. A funding reservation, provider operation,
+and outbox command are persisted together. Stable kebab-case request IDs are
+saved before provider calls and reused for retries.
+
+Pending and suspended transfers hold their reservation. A settled transfer
+becomes principal. A failed transfer releases its reservation only after
+Airwallex confirms the return. Repayment terms are 15 days, 30 days, a fixed
+date, or as soon as money arrives. For dated terms, a bridge becomes eligible at
+its due time and waits for the next settled deposit. Collection does not use
+existing wallet funds. Each attempt is capped at the lesser of the triggering
+settled deposit and the available USD balance.
+
+The fee is assessed once at the collection trigger and remains fixed. Fees are
+charged before principal. A partial deposit can pay part of the fee; principal
+is queued only after the fee charge settles. Outstanding balances decrease only
+after their charges settle.
 
 ## Before you commit
 

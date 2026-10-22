@@ -50,9 +50,107 @@ A toggle at the top right switches between two versions. The choice is remembere
 | Scenarios | Four, picked from the **Scenario** dropdown | One |
 | Inputs | Editable in the **Scenario inputs** panel (slider icon) | Fixed in `seed.ts` |
 
-Both versions are scripted: no backend, no API keys, nothing leaves the browser.
-The rules for Kit 5 come from the *Kit 5 Bridge Capital: Source of Truth* doc. This
-version covers the floor and sequencing changes only; the doc's other changes are not built yet.
+Both versions remain deterministic browser demos. Kit 5 can optionally display
+a read-only bridge ledger projection; its scenario continues to run from local
+mock data. The browser does not hold Airwallex credentials or issue Airwallex
+requests. The rules for Kit 5 come from the *Kit 5 Bridge Capital:
+Source of Truth* doc. This version covers the floor and sequencing changes only;
+the doc's other changes are not built yet.
+
+## Local Airwallex bridge ledger
+
+The same-repository TypeScript server stores the USD bridge ledger in PostgreSQL
+and processes Airwallex operations through an outbox. It exposes a read-only
+`GET /api/ledger` projection and the `POST /webhooks/airwallex` receiver. Kit 5
+may read the projection by setting `VITE_BRIDGE_API_URL`; its scenario
+behavior remains the deterministic local mock. No browser funding command is
+available until the policy module can submit a trusted server-side approval.
+
+### Start the server locally
+
+Use Node 20.19+ or 22.12+ and PostgreSQL. From the repository root, create a
+local database, then apply the schema and demo facility seed:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
+```
+
+Set these server environment variables before starting the service:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | PostgreSQL connection string. |
+| `PORT` | No | HTTP port; defaults to `3000`. |
+| `AIRWALLEX_CLIENT_ID` | Yes | Server-side Airwallex client ID. |
+| `AIRWALLEX_API_KEY` | Yes | Server-side Airwallex API key. |
+| `AIRWALLEX_WEBHOOK_SECRET` | Yes | Secret used to verify webhook signatures. |
+| `AIRWALLEX_BASE_URL` | No | API base URL; defaults to the Airwallex sandbox. |
+
+Keep the credentials on the server. For example, after exporting the variables
+in the local shell, start the API with:
+
+```bash
+npm run server:start
+```
+
+This script builds the server and runs it on `PORT`. It does not apply database
+migrations; apply the SQL migration first. For the browser projection, set
+`VITE_BRIDGE_API_URL` to the server origin when starting Vite, for example
+`http://localhost:3000`. Leave it unset to use the deterministic Kit 5 mock
+without a ledger projection.
+
+### Run the ledger demo with Docker
+
+Docker Compose starts PostgreSQL and the ledger API. PostgreSQL applies the
+schema and synthetic opening exposure when it initializes its data volume.
+The Compose file uses placeholder credentials and a localhost-only Airwallex
+URL; it is configured for the read-only ledger demo, not provider operations.
+
+```bash
+docker compose -p flowcard-ledger-demo up -d --build
+docker compose -p flowcard-ledger-demo ps
+curl http://localhost:3000/health
+curl http://localhost:3000/api/ledger
+```
+
+The ledger API is available at `http://localhost:3000`. Inspect service logs
+with `docker compose -p flowcard-ledger-demo logs -f ledger`. Stop the
+containers with `docker compose -p flowcard-ledger-demo down`. The named
+PostgreSQL volume preserves demo data when containers stop. The migration in
+`server/src/db/migrations/001_bridge_ledger.sql` runs automatically only when
+PostgreSQL initializes an empty volume; apply later schema changes using the
+documented SQL migration process.
+
+### Webhook setup
+
+Before accepting provider events, register a reachable HTTPS URL ending in
+`/webhooks/airwallex` in the Airwallex account and configure its signing secret
+as `AIRWALLEX_WEBHOOK_SECRET`. Subscribe to connected account transfer status
+events, charge status events, settled deposit events, and issuing card
+transaction declines. The receiver verifies the signature over the raw request
+body and stores each provider event ID once.
+Use Airwallex sandbox credentials and a sandbox webhook subscription for any
+authorized sandbox exercise.
+
+### Ledger and collection behavior
+
+The seeded USD facility is $50,000 with a 20% reserve floor, $25,000 of
+synthetic opening exposure, $15,000 deployable, and a zero operating buffer.
+The seed is not an Airwallex transfer. V1 allows one open bridge per customer
+and uses USD only. Reservations and provider commands are recorded together;
+stable kebab-case request IDs are saved before provider calls and reused for
+retries. Pending or suspended transfers retain their reservation; settled
+transfers become principal. A failed transfer releases its reservation only
+after provider confirmation of return.
+
+Repayment supports 15 days, 30 days, a fixed date, and as soon as money
+arrives.
+For dated terms, once due, the bridge waits for the next settled deposit; it
+does not draw existing wallet funds. Each collection attempt is capped at the
+triggering settled deposit. Fees are assessed and fixed at the collection
+trigger, then collected before principal. A partial deposit may pay part of the
+fee; principal is queued only after the fee charge
+settles. Balances decrease only when their charges settle.
 
 ### Kit 5 scenarios
 

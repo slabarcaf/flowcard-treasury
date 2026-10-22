@@ -88,6 +88,31 @@ export interface AgentAllocationProposal {
 // Service interfaces
 // ---------------------------------------------------------------------------
 
+export type BridgeLedgerStatus = 'reserved' | 'pending' | 'suspended' | 'funded' | 'collecting' | 'repaid' | 'failed';
+
+export interface BridgeLedgerProjection {
+  bridgeId: string;
+  customerId: string;
+  status: BridgeLedgerStatus;
+  principalOutstandingCents: number;
+  feeOutstandingCents: number;
+}
+
+export interface FacilityLedgerProjection {
+  currency: 'USD';
+  facilityAmountCents: number;
+  reserveFloorCents: number;
+  openingExposureCents: number;
+  settledPrincipalCents: number;
+  activeReservationsCents: number;
+  deployableCents: number;
+}
+
+export interface LedgerProjectionResponse {
+  facility: FacilityLedgerProjection;
+  bridges: BridgeLedgerProjection[];
+}
+
 export interface AirwallexClient {
   simulateCardSpend(params: {
     accountId: string;
