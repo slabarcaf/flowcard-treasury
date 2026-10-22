@@ -60,7 +60,7 @@ export class DailyEvidenceRunner {
     const priorReview = await getLatestEvidenceReview(this.options.pool, customer.customerId, fingerprint);
     if (priorReview) {
       const prior = await getStoredExtraction(this.options.pool, priorReview.extractionId);
-      if (prior) result = applyReviewToNextExtraction(result, prior.result, priorReview);
+      if (prior) result = applyReviewToNextExtraction(result, prior.result, priorReview, packet);
     }
 
     const qualifications = await (this.options.qualifications?.(at) ?? Promise.resolve({}));

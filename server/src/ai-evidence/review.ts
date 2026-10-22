@@ -1,12 +1,15 @@
 import type { ExtractionResult, ExtractedSignal } from "./types.js";
 import type { EvidenceReview } from "./repository.js";
 import { stableStringify } from "./canonicalize.js";
+import { validateExtractionResult } from "./validate.js";
+import type { EvidencePacket } from "./packet.js";
 
 /** Apply a matching prior review to this run while leaving the stored output untouched. */
 export function applyReviewToNextExtraction(
   current: ExtractionResult,
   reviewedOutput: ExtractionResult,
   review: EvidenceReview,
+  packet: EvidencePacket,
 ): ExtractionResult {
   if (current.customerId !== reviewedOutput.customerId || current.snapshotId === reviewedOutput.snapshotId) {
     throw new Error("review must apply to a later snapshot for the same customer");
@@ -26,7 +29,15 @@ export function applyReviewToNextExtraction(
   }
   if (review.action === "corrected") {
     if (!isExtractedSignal(review.correctedSignal)) throw new Error("review correction is not a signal");
-    return { ...current, status: "success", signals: [review.correctedSignal], unmapped: [] };
+    const candidate = { ...current, status: "success" as const, signals: [review.correctedSignal], unmapped: [] };
+    try {
+      const validated = validateExtractionResult(candidate, packet);
+      if (validated.status !== "success") return { ...current, status: "review_required" };
+      return validated;
+    } catch {
+      // Reviewer corrections are untrusted until bound to the current packet.
+      return { ...current, status: "review_required" };
+    }
   }
   return { ...current, status: "no_signal", signals: [], unmapped: [] };
 }
