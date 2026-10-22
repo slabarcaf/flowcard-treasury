@@ -363,21 +363,25 @@ confirmed. No live Salesforce verification was performed.
 - Create: server/src/snapshots/scheduler.ts
 - Create: tests/server/snapshot-sync-worker.test.ts
 
-- [ ] Schedule one configurable daily run. Do not add event-triggered refresh
+- [x] Schedule one configurable daily run. Do not add event-triggered refresh
   or polling between daily runs.
-- [ ] Read active customers from the internal roster only.
-- [ ] Fetch Account, Contract, Case, and Activity results and exhaust every
+- [x] Read active customers from the internal roster only.
+- [x] Fetch Account, Contract, Case, and Activity results and exhaust every
   source page before validating a candidate.
-- [ ] Process results in internal batches of up to 1,000 records, regardless
+- [x] Process results in internal batches of up to 1,000 records, regardless
   of the MCP's page size.
-- [ ] Treat a successful empty result as complete. Limit call Activities to
+- [x] Treat a successful empty result as complete. Limit call Activities to
   the five most recent records in the prior 90 days.
-- [ ] Use three total attempts with backoff as the initial default. After
-  exhaustion, discard the candidate, keep the prior version stale, and block
-  new bridge decisions only for that customer.
-- [ ] Test more than 1,000 records, page failures, empty queries, retry
+- [x] Use three total attempts with backoff as the initial default. After
+  exhaustion, discard the candidate, preserve the prior pointer, and persist a
+  failed attempt; Task 7 derives stale status and the per-customer decision gate.
+- [x] Test more than 1,000 records, page failures, empty queries, retry
   exhaustion, and customer failure isolation.
-- [ ] Run focused sync-worker tests before Task 7.
+- [x] Run focused sync-worker tests before Task 7.
+
+Implementation note: exhausted runs are persisted in the separate failed-attempt
+store without advancing the current snapshot pointer. Task 7 derives immediate
+staleness and the per-customer decision gate from that latest failed attempt.
 
 #### Task 7 (TASK-007): Add freshness state and the snapshot read API
 
