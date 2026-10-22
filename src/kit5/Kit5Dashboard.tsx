@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { CapitalBar } from '../components/CapitalBar.js';
 import { BridgeQueue } from '../components/BridgeQueue.js';
 import { ActivityFeed } from '../components/ActivityFeed.js';
@@ -7,12 +7,35 @@ import { Sidebar } from '../components/Sidebar.js';
 import { useKit5Dashboard } from './useKit5Dashboard.js';
 import { nextEvent, shortDate } from './engine.js';
 import { SettingsPanel } from './SettingsPanel.js';
+import { CrmResultCallout } from './CrmResultCallout.js';
 
-/** Kit 5 version: 20% reserve floor, requests decided one at a time as they arrive. */
-export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
+const FEED_KEY = 'flowcard.activityCollapsed';
+
+function storedCollapsed(): boolean {
+  try {
+    return localStorage.getItem(FEED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** The demo dashboard: 20% reserve floor, requests decided one at a time as they arrive. */
+export function Kit5Dashboard() {
   const k = useKit5Dashboard();
   const { state } = k;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [feedCollapsed, setFeedCollapsed] = useState(storedCollapsed);
+
+  const toggleFeed = () => {
+    setFeedCollapsed((c) => {
+      try {
+        localStorage.setItem(FEED_KEY, c ? '0' : '1');
+      } catch {
+        // Storage unavailable: the choice just won't be remembered.
+      }
+      return !c;
+    });
+  };
 
   const upcoming = nextEvent(state);
   const awaitingCollection = state.phase !== 'idle' && !state.pause && upcoming?.type === 'repayment';
@@ -24,10 +47,13 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
 
   const autoApproved = state.pause?.kind === 'ack' ? state.queue.find((r) => r.id === state.pause!.requestId) : undefined;
   const autoDetail = autoApproved ? state.customerDetails[autoApproved.id] : undefined;
+  const crmChange = state.pause?.kind === 'crm-result' ? state.pause.change : undefined;
   const outstanding = Object.values(state.bridges);
+  const funded = state.queue.filter((r) => r.fundedOn);
 
   let statusLine = k.scenario.summary;
-  if (autoApproved) statusLine = `${autoApproved.customerName} was auto-approved. Continue when you're ready for the next request.`;
+  if (crmChange) statusLine = `${crmChange.customerName} was re-rated after the Salesforce note. Continue when you're ready for the next request.`;
+  else if (autoApproved) statusLine = `${autoApproved.customerName} was auto-approved. Continue when you're ready for the next request.`;
   else if (state.pause?.kind === 'human') statusLine = 'Waiting on the credit officer. The next request is decided after this one.';
   else if (state.pause?.kind === 'crm') statusLine = 'Agent found new Salesforce information. Re-evaluate to decide this request.';
   else if (awaitingCollection) statusLine = 'All requests for the day are decided. Simulate the next collection to move the clock forward.';
@@ -48,7 +74,12 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-4 min-w-0">
             <h1 className="text-base font-semibold text-gray-900">Dashboard</h1>
-            <span className="text-xs text-gray-400 font-mono whitespace-nowrap">{state.demoClock}</span>
+            <div className="border-l border-gray-200 pl-4 leading-tight whitespace-nowrap">
+              <div className="text-lg font-semibold text-gray-900">{state.demoClock}</div>
+              <div className={`text-[11px] font-medium ${state.day === 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
+                {state.day === 0 ? 'Funding day' : `Collection day · +${state.day} days`}
+              </div>
+            </div>
             <label className="flex items-center gap-2 text-xs text-gray-500">
               Scenario
               <select
@@ -63,7 +94,6 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
             </label>
           </div>
           <div className="flex items-center gap-3">
-            {versionToggle}
             {state.phase === 'idle' && (
               <button
                 onClick={k.scan}
@@ -111,6 +141,22 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                   Edited inputs
                 </span>
               )}
+              {funded.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  <span className="font-semibold text-gray-900">Funded:</span>
+                  {funded.map((r) => (
+                    <span key={r.id} className="text-gray-700">
+                      <span className="font-medium">{r.customerName}</span>{' '}
+                      <span className="font-mono">${r.allocation.toLocaleString('en-US')}</span>{' '}
+                      {r.repaidOn ? (
+                        <span className="text-emerald-600">(repaid {r.repaidOn})</span>
+                      ) : (
+                        <span className="text-gray-500">(collect by {r.dueOn})</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <CapitalBar
@@ -119,6 +165,8 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               floor={state.floor}
               band={state.band}
             />
+
+            {crmChange && <CrmResultCallout change={crmChange} onContinue={k.continueAfterAuto} />}
 
             {autoApproved && (
               <div className="flex items-center justify-between gap-4 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 animate-panel-in" role="status">
@@ -158,7 +206,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
             />
           </div>
 
-          <ActivityFeed events={state.feed} />
+          <ActivityFeed events={state.feed} collapsed={feedCollapsed} onToggle={toggleFeed} />
         </div>
       </div>
 

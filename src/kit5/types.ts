@@ -1,4 +1,4 @@
-import type { CustomerProfile, FacilityConfig, Signals } from '../policy/types.js';
+import type { CustomerProfile, Door, FacilityConfig, SignalRating, Signals, Tier } from '../policy/types.js';
 import type { DashboardState } from '../state/types.js';
 
 // ---------------------------------------------------------------------------
@@ -68,12 +68,33 @@ export interface Scenario {
 // Engine state — extends the GD dashboard state so the same components render it
 // ---------------------------------------------------------------------------
 
+/** What the Salesforce note changed for one customer, shown after re-evaluation. */
+export interface CrmChange {
+  customerName: string;
+  signals: { label: string; from: SignalRating; to: SignalRating }[];
+  tierFrom: Tier;
+  tierTo: Tier;
+  lineFrom: number;
+  lineTo: number;
+  doorFrom: Door;
+  doorTo: Door;
+  /** Capital level the doors were read at. */
+  bandLabel: string;
+  /** What the same request would have got without the note. */
+  outcomeBefore: 'approved automatically' | 'sent to a credit officer' | 'declined';
+  status: string;
+  reasons: string[];
+}
+
 /**
  * What the sequence is waiting on before the next request can be decided:
  * the Salesforce re-evaluation, a credit officer, or the presenter
- * acknowledging an auto-approval.
+ * acknowledging an auto-approval or the result of a CRM re-evaluation.
  */
-export type Pause = { kind: 'crm' | 'human' | 'ack'; requestId: string } | null;
+export type Pause =
+  | { kind: 'crm' | 'human' | 'ack'; requestId: string }
+  | { kind: 'crm-result'; requestId: string; change: CrmChange }
+  | null;
 
 export interface OpenBridge {
   customerName: string;
