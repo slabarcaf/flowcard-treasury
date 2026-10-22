@@ -9,7 +9,25 @@ import { createDemoSnapshotSource, SnapshotSyncWorker } from "./snapshots/sync-w
 import { startDemoSnapshotSync } from "./snapshots/runtime.js";
 import { snapshotDailyRunTime } from "./snapshots/scheduler.js";
 import { parseTextLengthConfig } from "./salesforce/validate.js";
+import { runEvidenceReviewCli } from "./ai-evidence/review-cli.js";
 
+if (process.argv[2] === "evidence-review") {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    process.stderr.write("DATABASE_URL is required\n");
+    process.exit(1);
+  }
+  const reviewPool = await createDatabasePool({ databaseUrl });
+  try {
+    await runEvidenceReviewCli(reviewPool, process.argv.slice(3), process.env);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  } finally {
+    await reviewPool.end();
+  }
+  process.exit();
+}
 const config = loadConfig();
 const pool = await createDatabasePool(config);
 const gateway = new HttpAirwallexGateway({

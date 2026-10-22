@@ -357,14 +357,14 @@ demo frontend. A protected production review UI requires a separate auth scope.
 - Modify: `server/src/main.ts`
 - Create: `tests/server/ai-evidence/review-cli.test.ts`
 
-- [ ] Add operator-only list, inspect, confirm, correct, and clear commands.
-- [ ] Require an explicit reviewer identity and structured disposition for each
+- [x] Add operator-only list, inspect, confirm, correct, and clear commands.
+- [x] Require an explicit reviewer identity and structured disposition for each
   reviewed customer.
-- [ ] Keep unresolved review and unmapped results visible until disposition.
-- [ ] Ensure review actions do not call policy, Airwallex, or Salesforce write
+- [x] Keep unresolved review and unmapped results visible until disposition.
+- [x] Ensure review actions do not call policy, Airwallex, or Salesforce write
   operations.
-- [ ] Test each disposition, permission/config failure, and audit record.
-- [ ] Run focused tests before Task 7.
+- [x] Test each disposition, permission/config failure, and audit record.
+- [x] Run focused tests before Task 7.
 
 ### Task 7: Implement per-type confidence calibration and qualification
 
