@@ -1,0 +1,6 @@
+[
+  { "posted_at": "2026-08-01T00:00:00.000Z", "balance": 1000, "currency": "USD" },
+  { "posted_at": "2026-08-02T00:00:00.000Z", "balance": 5, "currency": "USD" },
+  { "posted_at": "2026-08-02T00:00:00.000Z", "balance": 500, "currency": "USD" },
+  { "posted_at": "2026-10-21T23:59:59.000Z", "balance": 800, "currency": "USD" }
+]

@@ -383,23 +383,23 @@ provider operation unless all checks still pass.
 - Create: `tests/server/underwriting/airwallex-source.test.ts`
 - Create: `tests/server/underwriting/runner.test.ts`
 
-- [ ] Use platform reports for supported whole-book history and filter
+- [x] Use platform reports for supported whole-book history and filter
   resulting records against the explicit roster.
-- [ ] Use per-account REST with `x-on-behalf-of` for connected-account
+- [x] Use per-account REST with `x-on-behalf-of` for connected-account
   standing and fields not provided by reports; do not use Airwallex MCP for
   per-customer reads.
-- [ ] Fetch expiring report URLs immediately after completion and avoid
+- [x] Fetch expiring report URLs immediately after completion and avoid
   logging credentials, report URLs, or unnecessary personal data.
-- [ ] Respect the seven-day balance-history window and provider pagination;
+- [x] Respect the seven-day balance-history window and provider pagination;
   compute the profile from a complete 90-day window only.
-- [ ] Compute monthly settled inflows, payer concentration, low-balance days,
+- [x] Compute monthly settled inflows, payer concentration, low-balance days,
   spend eligibility, account standing, and ledger-based repayment features
   from source-allowlisted records.
-- [ ] Leave inflow reliability incomplete when trusted expected deposit dates
+- [x] Leave inflow reliability incomplete when trusted expected deposit dates
   are unavailable; do not infer them from settlement timestamps or note text.
-- [ ] Add fixture and fake-provider tests for window boundaries, pagination,
+- [x] Add fixture and fake-provider tests for window boundaries, pagination,
   duplicates, report errors, malformed data, and bounded retries.
-- [ ] Run focused feature-source tests before Task 4.
+- [x] Run focused feature-source tests before Task 4.
 
 ### Task 4: Join policy inputs and enforce customer-level gates
 
