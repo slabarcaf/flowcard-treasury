@@ -155,7 +155,7 @@ reconciliation, mapping checks, and the production browser access gate.
 ### Run the local server
 
 Use Node 20.19+ or 22.12+ and a PostgreSQL database. The server does not run
-SQL migrations automatically. Apply all ten migrations in order from the
+SQL migrations automatically. Apply all twelve migrations in order from the
 repository root before using the policy APIs or operator approval CLI:
 
 ```bash
@@ -169,6 +169,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/007_policy_r
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/008_remote_authorization.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_request_ledger_sequence.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/011_remote_authorization_nonce_claims.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/012_remote_authorization_decision_identity.sql
 ```
 
 The server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,

@@ -165,7 +165,7 @@ export async function claimRequest(
   request: AirwallexRemoteAuthorizationV2,
   nonce: string,
   receivedAt: Date,
-): Promise<{ customerId: string | null; responseStatus: "AUTHORIZED" | "DECLINED" | null; statusReason: string | null }> {
+): Promise<{ customerId: string | null; decisionId: string | null; responseStatus: "AUTHORIZED" | "DECLINED" | null; statusReason: string | null }> {
   const nonceFingerprint = createHash("sha256").update(nonce, "utf8").digest("hex");
   const requestFingerprint = fingerprintRemoteAuthorizationRequest(request);
   const binding = await pool.query<{ customer_id: string }>(
@@ -177,33 +177,33 @@ export async function claimRequest(
     [request.accountId, request.cardId],
   );
   const customerId = binding.rows[0]?.customer_id ?? null;
-  if (!customerId) return { customerId: null, responseStatus: null, statusReason: null };
-  const inserted = await pool.query(
+  if (!customerId) return { customerId: null, decisionId: null, responseStatus: null, statusReason: null };
+  const inserted = await pool.query<{ decision_id: string }>(
     `INSERT INTO remote_authorization_requests (
        card_transaction_event_id, nonce_fingerprint, request_fingerprint,
        card_transaction_id, card_transaction_lifecycle_id,
        account_id, card_id, customer_id, amount_cents, currency, transaction_type,
        transaction_category, merchant_category_code, request_received_at
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-     ON CONFLICT DO NOTHING RETURNING card_transaction_event_id`,
+     ON CONFLICT DO NOTHING RETURNING card_transaction_event_id, decision_id`,
     [request.cardTransactionEventId, nonceFingerprint, requestFingerprint,
       request.cardTransactionId, request.cardTransactionLifecycleId,
       request.accountId, request.cardId, customerId, Math.round(request.transactionAmount * 100),
       request.transactionCurrency, request.transactionType, request.transactionCategory,
       request.merchantCategoryCode, receivedAt],
   );
-  if (inserted.rowCount === 1) return { customerId, responseStatus: null, statusReason: null };
+  if (inserted.rowCount === 1) return { customerId, decisionId: inserted.rows[0]!.decision_id, responseStatus: null, statusReason: null };
   const prior = await pool.query<{
     customer_id: string; request_fingerprint: string | null; card_transaction_id: string;
     card_transaction_lifecycle_id: string; account_id: string; card_id: string;
     amount_cents: number | string; currency: string; transaction_type: string;
     transaction_category: string; merchant_category_code: string;
-    response_status: "AUTHORIZED" | "DECLINED" | null; status_reason: string | null;
+    decision_id: string; response_status: "AUTHORIZED" | "DECLINED" | null; status_reason: string | null;
   }>(
     `SELECT customer_id, request_fingerprint, card_transaction_id,
             card_transaction_lifecycle_id, account_id, card_id, amount_cents, currency,
             transaction_type, transaction_category, merchant_category_code,
-            response_status, status_reason
+            decision_id, response_status, status_reason
        FROM remote_authorization_requests WHERE card_transaction_event_id = $1`,
     [request.cardTransactionEventId],
   );
@@ -216,7 +216,7 @@ export async function claimRequest(
       Number(row.amount_cents) !== Math.round(request.transactionAmount * 100) || row.currency !== request.transactionCurrency ||
       row.transaction_type !== request.transactionType || row.transaction_category !== request.transactionCategory ||
       row.merchant_category_code !== request.merchantCategoryCode) {
-    return { customerId: null, responseStatus: "DECLINED", statusReason: "request_replay_mismatch" };
+    return { customerId: null, decisionId: null, responseStatus: "DECLINED", statusReason: "request_replay_mismatch" };
   }
   if (!row.response_status) {
     const declined = await pool.query(
@@ -226,7 +226,7 @@ export async function claimRequest(
       [request.cardTransactionEventId],
     );
     if (declined.rowCount === 1) {
-      return { customerId, responseStatus: "DECLINED", statusReason: "request_in_progress_or_incomplete" };
+      return { customerId, decisionId: row.decision_id, responseStatus: "DECLINED", statusReason: "request_in_progress_or_incomplete" };
     }
   }
   const final = await pool.query<{ response_status: "AUTHORIZED" | "DECLINED" | null; status_reason: string | null }>(
@@ -236,6 +236,7 @@ export async function claimRequest(
   const finalRow = final.rows[0];
   return {
     customerId,
+    decisionId: row.decision_id,
     responseStatus: finalRow?.response_status ?? "DECLINED",
     statusReason: finalRow?.status_reason ?? "request_in_progress_or_incomplete",
   };
@@ -244,18 +245,16 @@ export async function claimRequest(
 export async function completeRequest(
   pool: DatabasePool,
   eventId: string,
-  evaluationId: string | null,
   responseStatus: "AUTHORIZED" | "DECLINED",
   statusReason: string,
 ): Promise<RemoteAuthorizationDecision> {
   const reason = statusReason.slice(0, 100);
   await pool.query(
     `UPDATE remote_authorization_requests
-        SET decision_id = COALESCE(decision_id, $2::uuid),
-            response_status = COALESCE(response_status, $3),
-            status_reason = COALESCE(status_reason, $4)
+        SET response_status = COALESCE(response_status, $2),
+            status_reason = COALESCE(status_reason, $3)
       WHERE card_transaction_event_id = $1`,
-    [eventId, evaluationId, responseStatus, reason],
+    [eventId, responseStatus, reason],
   );
   const stored = await pool.query<{ response_status: "AUTHORIZED" | "DECLINED"; status_reason: string }>(
     `SELECT response_status, status_reason FROM remote_authorization_requests WHERE card_transaction_event_id = $1`, [eventId]);
@@ -265,6 +264,7 @@ export async function completeRequest(
 
 export async function persistDecision(
   pool: DatabasePool,
+  decisionId: string,
   evaluationId: string,
   eventId: string,
   decision: RequestDecision,
@@ -276,7 +276,7 @@ export async function persistDecision(
       "SELECT COALESCE(MAX(id), 0) AS ledger_sequence FROM ledger_events WHERE currency = 'USD'",
     );
     await persistRequestDecision(client, {
-      decisionId: eventId,
+      decisionId,
       evaluationId,
       requestId: eventId,
       decision,

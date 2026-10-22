@@ -89,15 +89,15 @@ export function createRemoteAuthorizationResolver(input: {
     assertActive(signal);
     const claim = await claimRequest(input.pool, request, nonce, input.now?.() ?? new Date());
     if (claim.responseStatus) return { responseStatus: claim.responseStatus, statusReason: claim.statusReason ?? "request_replayed" };
-    if (!claim.customerId) return completeRequest(input.pool, request.cardTransactionEventId, null, "DECLINED", "card_not_enrolled");
-    if (!input.repaymentTerm) return completeRequest(input.pool, request.cardTransactionEventId, null, "DECLINED", "repayment_term_not_configured");
+    if (!claim.customerId || !claim.decisionId) return completeRequest(input.pool, request.cardTransactionEventId, "DECLINED", "card_not_enrolled");
+    if (!input.repaymentTerm) return completeRequest(input.pool, request.cardTransactionEventId, "DECLINED", "repayment_term_not_configured");
 
     const current = await loadRequestFacts(input.pool, claim.customerId, request, input.now?.() ?? new Date());
-    if (!current) return completeRequest(input.pool, request.cardTransactionEventId, null, "DECLINED", "current_policy_inputs_unavailable");
+    if (!current) return completeRequest(input.pool, request.cardTransactionEventId, "DECLINED", "current_policy_inputs_unavailable");
     const requestInput = toBridgeRequest(request, current.customerId);
     const currentBalance = await input.gateway.getBalance(current.accountId, "USD");
     const state = await loadPolicyState(input.pool, current, request);
-    if (!state) return completeRequest(input.pool, request.cardTransactionEventId, request.cardTransactionEventId, "DECLINED", "current_policy_inputs_unavailable");
+    if (!state) return completeRequest(input.pool, request.cardTransactionEventId, "DECLINED", "current_policy_inputs_unavailable");
     const decision = await evaluateBridgeRequest({
       request: requestInput,
       state,
@@ -113,7 +113,7 @@ export function createRemoteAuthorizationResolver(input: {
         customerId: current.customerId,
         amountCents: decision.amountCents,
         repaymentTerm: input.repaymentTerm,
-        decisionId: request.cardTransactionEventId,
+        decisionId: claim.decisionId,
         requestId: request.cardTransactionEventId,
         currentBalance,
         signal,
@@ -139,23 +139,23 @@ export function createRemoteAuthorizationResolver(input: {
             `UPDATE remote_authorization_requests
                 SET decision_id = $2::uuid, response_status = $3, status_reason = $4
               WHERE card_transaction_event_id = $1 AND response_status IS NULL`,
-            [request.cardTransactionEventId, request.cardTransactionEventId, status, reason],
+            [request.cardTransactionEventId, claim.decisionId, status, reason],
           );
           if (completed.rowCount !== 1) throw new Error("Remote authorization request is no longer pending");
           return { decision: currentDecision, precheck: latest.precheck };
         },
       });
       if (!result.reservation) {
-        return completeRequest(input.pool, request.cardTransactionEventId, request.cardTransactionEventId, "DECLINED",
+        return completeRequest(input.pool, request.cardTransactionEventId, "DECLINED",
           result.decision.reasonCodes[0]?.toLowerCase() ?? "policy_declined");
       }
-      return completeRequest(input.pool, request.cardTransactionEventId, request.cardTransactionEventId, "AUTHORIZED", "policy_approved");
+      return completeRequest(input.pool, request.cardTransactionEventId, "AUTHORIZED", "policy_approved");
     }
 
-    await persistDecision(input.pool, current.evaluationId, request.cardTransactionEventId, decision);
+    await persistDecision(input.pool, claim.decisionId, current.evaluationId, request.cardTransactionEventId, decision);
     const reason = decision.outcome === "human_review" ? "human_review_required" :
       decision.reasonCodes[0]?.toLowerCase() ?? "policy_declined";
-    return completeRequest(input.pool, request.cardTransactionEventId, request.cardTransactionEventId, "DECLINED", reason);
+    return completeRequest(input.pool, request.cardTransactionEventId, "DECLINED", reason);
   };
 }
 

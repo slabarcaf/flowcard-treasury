@@ -27,6 +27,7 @@ const migrationFiles = [
   "007_policy_request_evaluations.sql", "008_remote_authorization.sql", "009_policy_request_ledger_sequence.sql",
   "010_remote_authorization_nonce_fingerprint.sql",
   "011_remote_authorization_nonce_claims.sql",
+  "012_remote_authorization_decision_identity.sql",
 ];
 const now = new Date();
 const nowIso = now.toISOString();
@@ -138,7 +139,7 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
 
     const request: AirwallexRemoteAuthorizationV2 = {
       version: 2, accountId: `awx-${customerId}`, cardId,
-      cardTransactionEventId: randomUUID(), cardTransactionId: randomUUID(), cardTransactionLifecycleId: randomUUID(),
+      cardTransactionEventId: "evt_opaque_123", cardTransactionId: randomUUID(), cardTransactionLifecycleId: randomUUID(),
       transactionType: "AUTHORIZATION", transactionCategory: "PURCHASE", transactionAmount: 100,
       transactionCurrency: "USD", merchantCategoryCode: "5411",
     };
@@ -174,12 +175,17 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
       [request.cardTransactionEventId]);
     expect(storedNonce.rows[0]).toMatchObject({ nonce_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/), nonce: null });
 
-    const persisted = await pool.query<{ outcome: string; evaluation_id: string; request_id: string; ledger_sequence: string }>(
-      `SELECT outcome, evaluation_id, request_id, ledger_sequence::text AS ledger_sequence
+    const persisted = await pool.query<{ decision_id: string; outcome: string; evaluation_id: string; request_id: string; ledger_sequence: string }>(
+      `SELECT decision_id, outcome, evaluation_id, request_id, ledger_sequence::text AS ledger_sequence
          FROM policy_request_evaluations WHERE request_id = $1`,
       [request.cardTransactionEventId]);
     expect(persisted.rows).toEqual([expect.objectContaining({ outcome: "auto_approved", evaluation_id: daily.rows[0].evaluation_id,
+      request_id: "evt_opaque_123", decision_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
       ledger_sequence: daily.rows[0].input_versions.ledgerSequence })]);
+    const storedRequest = await pool.query<{ decision_id: string; response_status: string }>(
+      `SELECT decision_id, response_status FROM remote_authorization_requests WHERE card_transaction_event_id = $1`,
+      [request.cardTransactionEventId]);
+    expect(storedRequest.rows).toEqual([{ decision_id: persisted.rows[0]?.decision_id, response_status: "AUTHORIZED" }]);
     const reservation = await pool.query<{ amount_cents: number; customer_id: string }>(
       `SELECT amount_cents::int AS amount_cents, customer_id FROM bridge_cases WHERE customer_id = $1`, [customerId]);
     expect(reservation.rows).toEqual([{ amount_cents: 10000, customer_id: customerId }]);
