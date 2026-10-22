@@ -432,16 +432,16 @@ demo frontend. A protected production review UI requires a separate auth scope.
 - Modify: `src/seed.ts`
 - Create: `tests/ai-evidence/agent-client.test.ts`
 
-- [ ] Replay synthetic extraction fixtures in demo mode; do not call a live
+- [x] Replay synthetic extraction fixtures in demo mode; do not call a live
   model from the browser.
-- [ ] Keep `AgentClient.proposeAllocation` and model allocation behavior out of
+- [x] Keep `AgentClient.proposeAllocation` and model allocation behavior out of
   this plan.
-- [ ] Display signal type, exact quote, source reference, counterparty,
+- [x] Display signal type, exact quote, source reference, counterparty,
   confidence status, alternatives, and review/blocked state.
-- [ ] Include deterministic examples for `no_signal`, `unmapped`, conflicts,
+- [x] Include deterministic examples for `no_signal`, `unmapped`, conflicts,
   multi-signal output, correction, and failure.
-- [ ] Test fixture selection and display data mapping.
-- [ ] Run focused tests and `npm run build` before Task 10.
+- [x] Test fixture selection and display data mapping.
+- [x] Run focused tests and `npm run build` before Task 10.
 
 ### Task 10: Verify acceptance criteria
 
