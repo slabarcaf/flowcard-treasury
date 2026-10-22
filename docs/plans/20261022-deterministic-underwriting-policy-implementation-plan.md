@@ -463,19 +463,19 @@ provider operation unless all checks still pass.
 - Create: `tests/server/policy/request.test.ts`
 - Create: `tests/server/policy/decision-service.test.ts`
 
-- [ ] Validate request amount, USD currency, traceable spend category,
+- [x] Validate request amount, USD currency, traceable spend category,
   customer precheck freshness, and unresolved risk gates.
-- [ ] Reject a second open bridge, an exposure above the current line, a
+- [x] Reject a second open bridge, an exposure above the current line, a
   balance more than two days late, or insufficient deployable facility.
-- [ ] Apply the current capital band and tier door before reservation.
-- [ ] Return `auto_approved`, `human_review`, `declined`, or
+- [x] Apply the current capital band and tier door before reservation.
+- [x] Return `auto_approved`, `human_review`, `declined`, or
   `blocked` with stable codes and a deterministic display rationale.
-- [ ] Make no partial allocations and do not reorder requests or create a
+- [x] Make no partial allocations and do not reorder requests or create a
   future-capital queue.
-- [ ] Use cached profile features at request time; allow only the required
+- [x] Use cached profile features at request time; allow only the required
   current-balance read and fail closed on timeout or invalid response.
-- [ ] Test each gate, door boundary, full-or-zero amount, and request retry.
-- [ ] Run focused request tests before Task 7.
+- [x] Test each gate, door boundary, full-or-zero amount, and request retry.
+- [x] Run focused request tests before Task 7.
 
 ### Task 7: Make policy evaluation and ledger reservation atomic
 
