@@ -6,14 +6,30 @@ import type { WebhookInboxWorker } from "../webhooks/worker.js";
 import { handleAirwallexWebhook } from "./routes/airwallex-webhook.js";
 import { handleCustomerSnapshot, requestAuthorization } from "./routes/customer-snapshot.js";
 import { handleLedgerProjection } from "./routes/ledger-projection.js";
+import { handleBridgeDecision } from "./routes/bridge-decision.js";
+import type { TrustedBridgeDecisionResult } from "./routes/bridge-decision.js";
 
-export function createHttpServer(config: ServerConfig, pool?: DatabasePool, webhookWorker?: WebhookInboxWorker): Server {
-  return createServer(createRequestHandler(config, pool, webhookWorker));
+export function createHttpServer(
+  config: ServerConfig,
+  pool?: DatabasePool,
+  webhookWorker?: WebhookInboxWorker,
+  resolveBridgeDecision?: (requestId: string) => Promise<TrustedBridgeDecisionResult>,
+): Server {
+  return createServer(createRequestHandler(config, pool, webhookWorker, resolveBridgeDecision));
 }
 
 /** Exposed so route wiring can be tested directly without opening a TCP listener. */
-export function createRequestHandler(config: ServerConfig, pool?: DatabasePool, webhookWorker?: WebhookInboxWorker): RequestListener {
+export function createRequestHandler(
+  config: ServerConfig,
+  pool?: DatabasePool,
+  webhookWorker?: WebhookInboxWorker,
+  resolveBridgeDecision?: (requestId: string) => Promise<TrustedBridgeDecisionResult>,
+): RequestListener {
   return (request, response) => {
+    if (request.method === "POST" && request.url === "/api/bridge-decisions" && pool) {
+      void handleBridgeDecision(request, response, resolveBridgeDecision);
+      return;
+    }
     if (request.method === "POST" && request.url === "/webhooks/airwallex" && pool) {
       void handleAirwallexWebhook(request, response, { pool, secret: config.airwallexWebhookSecret, onReceived: () => webhookWorker?.nudge() });
       return;

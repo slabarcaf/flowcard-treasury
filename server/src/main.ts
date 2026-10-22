@@ -12,6 +12,25 @@ import { parseTextLengthConfig } from "./salesforce/validate.js";
 import { runEvidenceReviewCli } from "./ai-evidence/review-cli.js";
 import { DailyEvidenceRunner } from "./ai-evidence/runner.js";
 import { FixtureEvidenceProvider } from "./ai-evidence/fixture-provider.js";
+import { runPolicyApprovalCli } from "./policy/approval-cli.js";
+
+if (process.argv[2] === "policy-approval") {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    process.stderr.write("DATABASE_URL is required\n");
+    process.exit(1);
+  }
+  const approvalPool = await createDatabasePool({ databaseUrl });
+  try {
+    await runPolicyApprovalCli(approvalPool, process.argv.slice(3), process.env);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  } finally {
+    await approvalPool.end();
+  }
+  process.exit();
+}
 
 if (process.argv[2] === "evidence-review") {
   const databaseUrl = process.env.DATABASE_URL?.trim();
