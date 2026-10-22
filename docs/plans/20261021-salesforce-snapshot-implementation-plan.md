@@ -342,16 +342,18 @@ confirmed. No live Salesforce verification was performed.
 - Create: server/src/snapshots/publisher.ts
 - Create: tests/server/snapshot-publisher.test.ts
 
-- [ ] Add per-customer snapshot versions and a current-version pointer.
-- [ ] Store canonical payload, source mode, schema/mapping versions, sync run
+- [x] Add per-customer snapshot versions and a current-version pointer.
+- [x] Store canonical payload, source mode, schema/mapping versions, sync run
   ID, capture timestamps, query completion, and record counts.
-- [ ] Publish a complete candidate and advance the pointer in one database
+- [x] Publish a complete candidate and advance the pointer in one database
   transaction per customer.
-- [ ] Keep prior versions immutable. Store failed attempts separately from the
+- [x] Keep prior versions immutable. Store failed attempts separately from the
   last published version.
-- [ ] Test transaction rollback, pointer stability on failure, and independent
+- [x] Test transaction rollback, pointer stability on failure, and independent
   publishing for two customers.
-- [ ] Run focused database publication tests before Task 6.
+- [x] Run focused database publication tests before Task 6. The repository has
+  no PostgreSQL test harness and Docker socket access was unavailable, so these
+  focused tests use a transactional database fake plus migration assertions.
 
 #### Task 6 (TASK-006): Build the daily per-customer sync worker
 
