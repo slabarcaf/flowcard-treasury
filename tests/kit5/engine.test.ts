@@ -84,6 +84,23 @@ describe('Original scenario', () => {
     expect(s.customerDetails.txn_nova_contractor_001.collectionRows?.[0].amount).toBe(27);
   });
 
+  it('holds Bloom for the CRM note, then refuses the $7,000 shortfall at Tier C', () => {
+    let s = start(initialKit5State(scenario('original')));
+    s = step(s);
+
+    expect(s.pause).toEqual({ kind: 'crm', requestId: 'txn_bloom_payroll_001' });
+    expect(s.customerDetails.txn_bloom_payroll_001.bloomAgentPhase).toBe('found');
+    expect(s.customerDetails.txn_bloom_payroll_001.rationale).toBeTruthy();
+    expect(s.events[0]).toMatchObject({ paymentAmount: 9_000, walletBalance: 2_000 });
+    expect(s.queue.find((row) => row.id === 'txn_bloom_payroll_001')?.shortfall).toBe(7_000);
+
+    s = reEvaluateCrm(revealCrm(s));
+
+    expect(status(s, 'txn_bloom_payroll_001')).toBe('Declined');
+    expect(s.customerDetails.txn_bloom_payroll_001.tierChange).toEqual({ from: 'A', to: 'C' });
+    expect(s.customerDetails.txn_bloom_payroll_001.policyChecks?.some((check) => !check.passed)).toBe(true);
+  });
+
   it('dates every bridge: funded day, collect-by (30 days), repaid day', () => {
     const s = playAll(initialKit5State(scenario('original')));
     const atlas = s.queue.find((q) => q.id === 'txn_atlas_supplier_001')!;
@@ -114,11 +131,20 @@ describe('Original scenario', () => {
 });
 
 describe('Kit 5 target scenario', () => {
+  it('keeps Bloom at a $9,000 payment, $2,000 opening balance, and $7,000 shortfall', () => {
+    const s = initialKit5State(scenario('kit5-target'));
+    const bloom = s.events.find((event) => event.type === 'decline' && event.customerKey === 'bloom');
+
+    expect(bloom).toMatchObject({ paymentAmount: 9_000, walletBalance: 2_000 });
+    if (bloom?.type === 'decline') expect(bloom.paymentAmount - bloom.walletBalance).toBe(7_000);
+  });
+
   it('refuses Juniper at the floor after Nova used the capital', () => {
     const s = playAll(initialKit5State(scenario('kit5-target')));
     expect(status(s, 'txn_nova_contractor_001')).toBe('Repaid');
     expect(status(s, 'txn_juniper_contractor_001')).toBe('Declined');
     expect(s.customerDetails.txn_juniper_contractor_001.rationale).toContain('exceeds the $4,000 left above the floor');
+    expect(s.customerDetails.txn_juniper_contractor_001.policyChecks?.some((check) => !check.passed)).toBe(true);
   });
 });
 

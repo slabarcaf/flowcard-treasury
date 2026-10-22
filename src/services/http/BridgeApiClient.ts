@@ -1,4 +1,14 @@
-import type { LedgerProjectionResponse } from '../types.js';
+import type { Kit5AttemptStatusResponse, Kit5NextCustomerRequest, Kit5NextCustomerResponse, LedgerProjectionResponse } from '../types.js';
+
+export class BridgeApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'BridgeApiError';
+    this.status = status;
+  }
+}
 
 /** Browser-safe, read-only client for the server-owned bridge ledger. */
 export class BridgeApiClient {
@@ -18,5 +28,49 @@ export class BridgeApiClient {
     });
     if (!response.ok) throw new Error(`Bridge ledger request failed (${response.status})`);
     return await response.json() as LedgerProjectionResponse;
+  }
+
+  async nextCustomer(input: Kit5NextCustomerRequest): Promise<Kit5NextCustomerResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/kit5/next-customer`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    });
+    const body = await response.json() as unknown;
+    if (!response.ok && typeof body === 'object' && body !== null && 'status' in body
+      && body.status === 'rejected' && 'reason' in body && typeof body.reason === 'string') {
+      return body as Kit5NextCustomerResponse;
+    }
+    if (!response.ok) {
+      const message = typeof body === 'object' && body !== null && 'error' in body
+        && typeof body.error === 'string'
+        ? body.error
+        : `Kit 5 provider action failed (${response.status})`;
+      throw new Error(message);
+    }
+    return body as Kit5NextCustomerResponse;
+  }
+
+  async createOperatorSession(token: string): Promise<void> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/kit5/session`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) throw new Error(`Kit 5 operator login failed (${response.status})`);
+  }
+
+  async refreshAttempt(input: Kit5NextCustomerRequest): Promise<Kit5AttemptStatusResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/kit5/attempt-status`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    });
+    const body = await response.json() as unknown;
+    if (!response.ok) throw new BridgeApiError(`Kit 5 status refresh failed (${response.status})`, response.status);
+    return body as Kit5AttemptStatusResponse;
   }
 }

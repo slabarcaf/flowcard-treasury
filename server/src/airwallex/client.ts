@@ -1,5 +1,24 @@
 /** Typed boundary for server-side Airwallex calls. Tests inject a fake gateway. */
+import { AIRWALLEX_ISSUING_API_VERSION } from "../config.js";
+
 export type ProviderOperationKind = "transfer" | "charge";
+
+export interface IssuingSimulationRequest {
+  accountId: string;
+  cardId: string;
+  amountCents: number;
+  currency: string;
+  merchant: string;
+  lifecycleId: string;
+}
+
+export interface IssuingSimulationResponse {
+  processResult: "APPROVED" | "DECLINED";
+  failureReason: string | null;
+  cardTransactionEventId: string;
+  cardTransactionId: string;
+  cardTransactionLifecycleId: string;
+}
 
 export type ProviderStatus = "pending" | "suspended" | "settled" | "failed" | "unknown";
 
@@ -18,9 +37,37 @@ export interface ProviderOperationResponse {
   duplicate?: boolean;
 }
 
+export interface GlobalAccountDepositSimulationRequest {
+  accountId: string;
+  globalAccountId: string;
+  amountCents: number;
+  payerBankname?: string;
+  payerCountry?: string;
+  payerName?: string;
+  reference?: string;
+  statementRef?: string;
+}
+
+export type GlobalAccountDepositStatus = "pending" | "rejected" | "settled";
+
+export interface GlobalAccountDepositSimulationResponse {
+  id: string;
+  amountCents: number;
+  currency: string;
+  depositType: "DEBIT" | "CREDIT";
+  feeAmountCents: number;
+  status: GlobalAccountDepositStatus;
+  createTime: string;
+}
+
 export interface ProviderConnectedAccount {
   id: string;
   status: string;
+}
+
+export interface IssuingSimulationGateway {
+  createIssuingSimulation(request: IssuingSimulationRequest): Promise<unknown>;
+  getIssuingLifecycle(lifecycleId: string, accountId: string): Promise<unknown | null>;
 }
 
 export interface AirwallexGateway {
@@ -31,6 +78,7 @@ export interface AirwallexGateway {
   getChargeByRequestId(requestId: string): Promise<ProviderOperationResponse | null>;
   getBalance(accountId: string, currency: "USD"): Promise<{ availableCents: number; currency: "USD" }>;
   getDeposit(depositId: string, accountId: string): Promise<{ id: string; amountCents: number; currency: "USD"; status: ProviderStatus; settledAt: Date | null }>;
+  createGlobalAccountDepositSimulation(request: GlobalAccountDepositSimulationRequest): Promise<GlobalAccountDepositSimulationResponse>;
   retrySandboxCard(request: { requestId: string; accountId: string; cardId: string; amountCents: number; currency: "USD" }): Promise<ProviderOperationResponse>;
 }
 
@@ -45,7 +93,7 @@ export function normalizeProviderStatus(value: unknown): ProviderStatus {
 }
 
 /** Fetch-backed gateway. Constructing it is side-effect free; calls happen only when dispatched. */
-export class HttpAirwallexGateway implements AirwallexGateway {
+export class HttpAirwallexGateway implements AirwallexGateway, IssuingSimulationGateway {
   private accessToken: string | undefined;
   private tokenExpiresAt = 0;
 
@@ -103,8 +151,46 @@ export class HttpAirwallexGateway implements AirwallexGateway {
       settledAt: result.settled_at ? new Date(result.settled_at) : null,
     };
   }
+  async createGlobalAccountDepositSimulation(request: GlobalAccountDepositSimulationRequest): Promise<GlobalAccountDepositSimulationResponse> {
+    validateGlobalAccountDepositSimulationRequest(request);
+    const response = await this.request<unknown>("/api/v1/simulation/deposit/create", {
+      method: "POST",
+      body: JSON.stringify({
+        global_account_id: request.globalAccountId.trim(),
+        amount: request.amountCents / 100,
+        ...(request.payerBankname ? { payer_bankname: request.payerBankname.trim() } : {}),
+        ...(request.payerCountry ? { payer_country: request.payerCountry.trim().toUpperCase() } : {}),
+        ...(request.payerName ? { payer_name: request.payerName.trim() } : {}),
+        ...(request.reference ? { reference: request.reference.trim() } : {}),
+        ...(request.statementRef ? { statement_ref: request.statementRef.trim() } : {}),
+        status: "SETTLED",
+      }),
+    }, { "x-on-behalf-of": request.accountId.trim() });
+    return normalizeGlobalAccountDepositSimulationResponse(response);
+  }
   retrySandboxCard(request: { requestId: string; accountId: string; cardId: string; amountCents: number; currency: "USD" }) {
     return this.postOperation("/api/v1/simulation/issuing/create", { ...request, payload: { card_id: request.cardId } }, { "x-on-behalf-of": request.accountId });
+  }
+
+  createIssuingSimulation(request: IssuingSimulationRequest): Promise<unknown> {
+    return this.request("/api/v1/simulation/issuing/create", {
+      method: "POST",
+      body: JSON.stringify({
+        card_id: request.cardId,
+        amount: request.amountCents / 100,
+        currency: request.currency,
+        merchant_name: request.merchant,
+        card_transaction_lifecycle_id: request.lifecycleId,
+      }),
+    }, { "x-on-behalf-of": request.accountId, "x-api-version": AIRWALLEX_ISSUING_API_VERSION });
+  }
+
+  getIssuingLifecycle(lifecycleId: string, accountId: string): Promise<unknown | null> {
+    return this.get(`/api/v1/issuing/lifecycles/${encodeURIComponent(lifecycleId)}`, { "x-on-behalf-of": accountId })
+      .catch((error: unknown) => {
+        if (error instanceof ProviderHttpError && error.status === 404) return null;
+        throw error;
+      });
   }
 
   private async postOperation(path: string, request: ProviderOperationRequest, headers: Record<string, string> = {}): Promise<ProviderOperationResponse> {
@@ -151,6 +237,63 @@ export class HttpAirwallexGateway implements AirwallexGateway {
     this.tokenExpiresAt = data.expires_at ? Date.parse(data.expires_at) : Date.now() + (data.expires_in ?? 1800) * 1000;
     return data.token;
   }
+}
+
+function validateGlobalAccountDepositSimulationRequest(request: GlobalAccountDepositSimulationRequest): void {
+  for (const [value, label] of [
+    [request.accountId, "connected account ID"],
+    [request.globalAccountId, "global account ID"],
+  ] as const) {
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error(`Global Account deposit simulation ${label} is required`);
+    }
+  }
+  if (!Number.isSafeInteger(request.amountCents) || request.amountCents <= 0) {
+    throw new Error("Global Account deposit simulation amount must be a positive safe integer in cents");
+  }
+  if (request.payerCountry && !/^[A-Za-z]{2}$/.test(request.payerCountry.trim())) {
+    throw new Error("Global Account deposit simulation payer country must be a two-letter code");
+  }
+  for (const [value, label] of [
+    [request.payerBankname, "payer bank name"],
+    [request.payerName, "payer name"],
+    [request.reference, "reference"],
+    [request.statementRef, "statement reference"],
+  ] as const) {
+    if (value !== undefined && (typeof value !== "string" || !value.trim())) {
+      throw new Error(`Global Account deposit simulation ${label} cannot be empty`);
+    }
+  }
+}
+
+function normalizeGlobalAccountDepositSimulationResponse(value: unknown): GlobalAccountDepositSimulationResponse {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Airwallex Global Account deposit simulation returned a malformed response");
+  }
+  const response = value as Record<string, unknown>;
+  const id = typeof response.id === "string" ? response.id.trim() : "";
+  const currency = typeof response.currency === "string" ? response.currency.trim().toUpperCase() : "";
+  const depositType = typeof response.deposit_type === "string" ? response.deposit_type.trim().toUpperCase() : "";
+  const status = typeof response.status === "string" ? response.status.trim().toLowerCase() : "";
+  const createTime = typeof response.create_time === "string" ? response.create_time.trim() : "";
+  if (!id || !/^[A-Z]{3}$/.test(currency) || (depositType !== "DEBIT" && depositType !== "CREDIT") ||
+      (status !== "pending" && status !== "rejected" && status !== "settled") || !createTime) {
+    throw new Error("Airwallex Global Account deposit simulation returned incomplete or invalid transaction details");
+  }
+  const amountCents = providerAmountToCents(response.amount, "amount");
+  const feeAmountCents = providerAmountToCents(response.fee_amount, "fee amount", true);
+  return { id, amountCents, currency, depositType, feeAmountCents, status, createTime };
+}
+
+function providerAmountToCents(value: unknown, label: string, allowZero = false): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || (!allowZero && value === 0)) {
+    throw new Error(`Airwallex Global Account deposit simulation returned an invalid ${label}`);
+  }
+  const cents = Math.round(value * 100);
+  if (!Number.isSafeInteger(cents) || Math.abs(value * 100 - cents) > 1e-6) {
+    throw new Error(`Airwallex Global Account deposit simulation returned an invalid ${label}`);
+  }
+  return cents;
 }
 
 interface ConnectedAccountPage {

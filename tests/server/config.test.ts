@@ -30,6 +30,16 @@ describe("server configuration", () => {
     expect(loadConfig({ ...validEnv, SALESFORCE_SNAPSHOT_READ_TOKEN: "  read-secret  " }).salesforceSnapshotReadToken)
       .toBe("read-secret");
   });
+
+  it("loads server-only Kit 5 operator authentication configuration", () => {
+    const config = loadConfig({
+      ...validEnv,
+      KIT5_OPERATOR_TOKEN: "runtime-operator-token",
+      KIT5_ALLOWED_ORIGINS: "https://demo.example,https://local.example",
+    });
+    expect(config.kit5OperatorToken).toBe("runtime-operator-token");
+    expect(config.kit5AllowedOrigins).toEqual(["https://demo.example", "https://local.example"]);
+  });
 });
 
 describe("health route", () => {

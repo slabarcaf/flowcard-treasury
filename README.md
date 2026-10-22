@@ -67,7 +67,10 @@ The same-repository TypeScript server stores the USD bridge ledger in PostgreSQL
 and processes Airwallex operations through an outbox. It exposes a read-only
 `GET /api/ledger` projection and the `POST /webhooks/airwallex` receiver. Kit 5
 may read the projection by setting `VITE_BRIDGE_API_URL`; its scenario
-behavior remains the deterministic local mock. No browser funding command is
+behavior remains the deterministic local mock. The Kit 5 sandbox-live route is
+fail-closed until real customer mappings and policy/ledger composition are
+verified. Local implementation tests use fixture aliases and a mocked Airwallex
+gateway; they do not make provider calls. No browser funding command is
 available until the policy module can submit a trusted server-side approval.
 
 ### Start the server locally
@@ -79,6 +82,8 @@ local database, then apply the schema and demo facility seed:
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_kit5_card_attempts.sql
 ```
 
 Set these server environment variables before starting the service:
@@ -91,24 +96,43 @@ Set these server environment variables before starting the service:
 | `AIRWALLEX_API_KEY` | Yes | Server-side Airwallex API key. |
 | `AIRWALLEX_WEBHOOK_SECRET` | Yes | Secret used to verify webhook signatures. |
 | `AIRWALLEX_BASE_URL` | No | API base URL; defaults to the Airwallex sandbox. |
+| `KIT5_OPERATOR_TOKEN` | For Kit 5 actions | Server-only operator credential, at least 32 characters. |
+| `KIT5_ALLOWED_ORIGINS` | For Kit 5 actions | Comma-separated exact browser origins allowed to authenticate. |
 
-Keep the credentials on the server. For example, after exporting the variables
-in the local shell, start the API with:
+Keep the credentials on the server. `PORT` defaults to `3000`. The existing
+ngrok tunnel forwards to port `8000`, so use this port for the webhook-capable
+local server:
 
 ```bash
-npm run server:start
+PORT=8000 npm run server:start
 ```
 
+Point the local Kit 5 frontend at that server:
+
+```bash
+VITE_BRIDGE_API_URL=http://localhost:8000 npm run dev
+```
+
+Set `KIT5_OPERATOR_TOKEN` and `KIT5_ALLOWED_ORIGINS` in the server process.
+Include the exact frontend origin in the allowlist. Enter the operator token
+in the dashboard at runtime. The server issues a short-lived `HttpOnly`,
+`Secure`, `SameSite=None` session cookie. The token is never embedded in the
+frontend bundle or stored by the browser client. Missing authentication
+configuration disables Kit 5 transaction actions. The Airwallex webhook route
+continues to use raw-body signature verification and does not require a browser
+session.
+
 This script builds the server and runs it on `PORT`. It does not apply database
-migrations; apply the SQL migration first. For the browser projection, set
-`VITE_BRIDGE_API_URL` to the server origin when starting Vite, for example
-`http://localhost:3000`. Leave it unset to use the deterministic Kit 5 mock
-without a ledger projection.
+migrations; apply all five SQL migrations first. Leave
+`VITE_BRIDGE_API_URL` unset to use the deterministic Kit 5 mock without a
+ledger projection.
 
 ### Run the ledger demo with Docker
 
-Docker Compose starts PostgreSQL and the ledger API. PostgreSQL applies all
-three schema migrations and synthetic opening exposure when it initializes its data volume.
+Docker Compose starts PostgreSQL and the ledger API. PostgreSQL applies
+migrations 001 through 003 and synthetic opening exposure when it initializes
+its data volume. Apply migrations 004 and 005 manually using the instructions
+above for the current application schema.
 The Compose file uses placeholder credentials and a localhost-only Airwallex
 URL; it is configured for the read-only ledger demo, not provider operations.
 
@@ -122,20 +146,53 @@ curl http://localhost:3000/api/ledger
 The ledger API is available at `http://localhost:3000`. Inspect service logs
 with `docker compose -p flowcard-ledger-demo logs -f ledger`. Stop the
 containers with `docker compose -p flowcard-ledger-demo down`. The named
-PostgreSQL volume preserves demo data when containers stop. All three
-migrations run automatically only when PostgreSQL initializes an empty volume;
-apply later schema changes using the documented SQL migration process.
+PostgreSQL volume preserves demo data when containers stop. Migrations 001
+through 003 run automatically only when PostgreSQL initializes an empty
+volume. Compose does not apply migrations 004 and 005.
 
 ### Webhook setup
 
-Before accepting provider events, register a reachable HTTPS URL ending in
-`/webhooks/airwallex` in the Airwallex account and configure its signing secret
-as `AIRWALLEX_WEBHOOK_SECRET`. Subscribe to connected account transfer status
-events, charge status events, settled deposit events, and issuing card
-transaction declines. The receiver verifies the signature over the raw request
-body and stores each provider event ID once.
-Use Airwallex sandbox credentials and a sandbox webhook subscription for any
-authorized sandbox exercise.
+Before accepting provider events, verify the existing public HTTPS ngrok URL
+ending in `/webhooks/airwallex` forwards to
+`http://localhost:8000/webhooks/airwallex`. Subscribe to connected account
+transfer events (`connected_account_transfer.new`, `.pending`, `.settled`,
+`.suspended`, `.failed`), charge events (`charge.new`, `.pending`, `.settled`,
+`.suspended`, `.failed`), deposit events (`deposit.pending`, `.settled`,
+`.rejected`, `.reversed`), and issuing events
+(`issuing.transaction.succeeded`, `.failed`). The receiver verifies HMAC-SHA256
+over the raw body using `x-timestamp` and the notification URL's secret,
+deduplicates by event ID, and promptly acknowledges verified requests with HTTP
+200. Airwallex may deliver events out of order. Keep secrets server-side and use
+a sandbox subscription.
+
+The final submission uses sandbox-live mode. Each **Next customer** action
+creates one issuing simulation for the mapped card, using the scenario amount
+resolved by the server. The video can use deterministic fixture mode. Bloom's
+$9,000 attempt is below the $9,999.99 simulation limit, and the mapped card
+must also allow that amount. The current route remains fail-closed while these
+implementation prerequisites are open:
+
+- Connect the active Kit 5 policy adapter as the approval and amount source.
+- Compose policy approval with durable bridge reservation, transfer settlement,
+  and the separate card retry.
+- The typed server-side Nova Global Account deposit-simulation operation and
+  mocked tests exist. Compose it with webhook settlement and fee-first then
+  principal collection before treating Nova's path as production-ready.
+
+After those prerequisites are implemented, external sandbox acceptance checks
+are real customer mappings, verified scoped API permissions and product
+enablement, Bloom's natural provider `INSUFFICIENT_FUNDS` result, configured
+webhook delivery with signature validation and HTTP 200 acknowledgement, and
+provider record retrieval and reconciliation. See the
+[Kit 5 demo flow and sandbox gates](/docs/airwallex-kit5-demo-flow-draft.md).
+
+The sandbox demo uses direct server-side REST calls, not the Airwallex AgentOS
+production connector. The seven Airwallex environment variable names are
+`AIRWALLEX_API_KEY`, `AIRWALLEX_CLIENT_ID`, `AIRWALLEX_ORG_ID`,
+`AIRWALLEX_ACCOUNT_ID`, `AIRWALLEX_WEBHOOK_EVENTS_FROM`,
+`AIRWALLEX_WEBHOOK_ID`, and `AIRWALLEX_WEBHOOK_SECRET`. The ignored root `.env`
+exists only in the main checkout. Never copy it into a worktree, deployment,
+browser variable, fixture, source control, or log.
 
 ### Ledger and collection behavior
 
@@ -238,8 +295,8 @@ gates.
 
 | Scenario | What it shows |
 | --- | --- |
-| **Original** | GD's four customers on our facility. Bloom is held for the Salesforce note and declined at Tier C, Atlas is auto-funded, Nova goes to a credit officer (deployable $10,000 → $4,000), Pixel is ineligible. Nova repays on day 9 ($27 fee). |
-| **Kit 5 target** | The doc's target demo: Original plus **Juniper Labs**, the same $6,000 request as Nova, arriving later at 9:16. Only $4,000 is left above the floor, so Juniper gets a firm no. |
+| **Original** | GD's four customers on our facility. Bloom's $9,000 supplier attempt, $2,000 opening USD balance, and $7,000 shortfall are declined at Tier C. Atlas is auto-funded, Nova goes to a credit officer, Pixel is ineligible, and Nova repays on day 9 ($27 fee). |
+| **Kit 5 target** | Original plus **Juniper Labs**, whose $6,000 request arrives at 9:16. Bloom keeps the same $9,000 attempt, $2,000 opening USD balance, and $7,000 shortfall. Only $4,000 remains above the floor, so Juniper gets a firm no. |
 | **First come, first served** | Two identical Tier A requests ($8,000 each). The first is funded; the second would breach the floor and is refused. After the first is repaid, the second customer's retried payment is funded. |
 | **Tight capital → human** | Two identical Tier A requests ($3,000 each) with $6,500 deployable. The first auto-funds and drops capital into *Critical*, where Tier A needs a person, so the second goes to a credit officer. |
 

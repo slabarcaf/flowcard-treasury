@@ -161,6 +161,27 @@ export interface LedgerProjectionResponse {
   bridges: BridgeLedgerProjection[];
 }
 
+export interface Kit5ProviderTransaction {
+  processResult: 'APPROVED' | 'DECLINED';
+  failureReason: string | null;
+  cardTransactionEventId: string;
+  cardTransactionId: string;
+  cardTransactionLifecycleId: string;
+}
+
+export type Kit5NextCustomerResponse =
+  | { status: 'completed'; attemptId: string; attemptedAmount: { amountCents: number; currency: string } | null; result: Kit5ProviderTransaction }
+  | { status: 'in_progress' | 'ambiguous' | 'failed'; attemptId: string; lifecycleId: string | null; attemptedAmount: { amountCents: number; currency: string } | null }
+  | { status: 'rejected'; reason: string };
+
+export type Kit5AttemptStatusResponse = Exclude<Kit5NextCustomerResponse, { status: 'rejected' }>;
+
+export interface Kit5NextCustomerRequest {
+  scenarioId: string;
+  customerId: string;
+  actionId: string;
+}
+
 export interface AirwallexClient {
   simulateCardSpend(params: {
     accountId: string;

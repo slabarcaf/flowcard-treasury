@@ -64,7 +64,17 @@ if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo") {
 } else if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "production_mcp") {
   console.error("Production Salesforce snapshots are disabled: this server has no trusted host MCP runtime binding");
 }
-const server = createHttpServer(config, pool, webhookWorker);
+const server = createHttpServer(config, pool, webhookWorker, {
+  pool,
+  gateway,
+  // Provider-issued customer/card mappings remain a sandbox acceptance gate.
+  // Keep the endpoint mounted, but fail closed until those mappings are configured.
+  resolveScenario: () => null,
+  operatorAuth: {
+    operatorToken: config.kit5OperatorToken,
+    allowedOrigins: config.kit5AllowedOrigins,
+  },
+});
 server.listen(config.port, "0.0.0.0", () => {
   console.log(`Bridge ledger server listening on port ${config.port}`);
 });

@@ -4,11 +4,18 @@ export interface ServerConfig {
   airwallexClientId: string;
   airwallexApiKey: string;
   airwallexWebhookSecret: string;
+  /** Optional, server-only operator credential for Kit 5 sandbox actions. */
+  kit5OperatorToken?: string;
+  /** Exact browser origins allowed to establish a Kit 5 operator session. */
+  kit5AllowedOrigins?: readonly string[];
   /** Optional read boundary for production Salesforce snapshot responses. */
   salesforceSnapshotReadToken?: string;
   /** Snapshot source selected for this server process, when configured. */
   salesforceSnapshotMode?: "demo" | "production_mcp";
 }
+
+/** API version required by the sandbox issuing-simulation endpoint. */
+export const AIRWALLEX_ISSUING_API_VERSION = "2026-08-21";
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const required = (name: string): string => {
@@ -26,6 +33,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     airwallexClientId: required("AIRWALLEX_CLIENT_ID"),
     airwallexApiKey: required("AIRWALLEX_API_KEY"),
     airwallexWebhookSecret: required("AIRWALLEX_WEBHOOK_SECRET"),
+    ...(env.KIT5_OPERATOR_TOKEN?.trim() ? { kit5OperatorToken: env.KIT5_OPERATOR_TOKEN.trim() } : {}),
+    ...(env.KIT5_ALLOWED_ORIGINS?.trim()
+      ? { kit5AllowedOrigins: env.KIT5_ALLOWED_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean) }
+      : {}),
     ...(env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo" || env.SALESFORCE_SNAPSHOT_MODE?.trim() === "production_mcp"
       ? { salesforceSnapshotMode: env.SALESFORCE_SNAPSHOT_MODE.trim() as "demo" | "production_mcp" }
       : {}),

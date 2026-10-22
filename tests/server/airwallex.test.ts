@@ -73,6 +73,113 @@ describe("Airwallex gateway", () => {
     expect(headers[5].get("x-on-behalf-of")).toBe("acct_1");
   });
 
+  it("creates a settled Global Account deposit simulation on behalf of a connected account", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const gateway = new HttpAirwallexGateway({
+      baseUrl: "https://airwallex.invalid",
+      clientId: "id",
+      apiKey: "key",
+      fetcher: async (input, init = {}) => {
+        const url = String(input);
+        calls.push({ url, init });
+        if (url.endsWith("/authentication/login")) return new Response(JSON.stringify({ token: "access" }));
+        return new Response(JSON.stringify({
+          id: "dep_fixture_1",
+          amount: 8000,
+          currency: "USD",
+          deposit_type: "CREDIT",
+          fee_amount: 2.5,
+          status: "SETTLED",
+          create_time: "2026-10-22T12:30:00Z",
+        }), { status: 201 });
+      },
+    });
+
+    await expect(gateway.createGlobalAccountDepositSimulation({
+      accountId: "acct_nova_fixture",
+      globalAccountId: "ga_nova_usd_fixture",
+      amountCents: 800_000,
+      payerBankname: " Fixture Bank ",
+      payerCountry: "us",
+      payerName: "Fixture Payer",
+      reference: "Nova Day +9 fixture",
+      statementRef: "nova-day-9-fixture-001",
+    })).resolves.toEqual({
+      id: "dep_fixture_1",
+      amountCents: 800_000,
+      currency: "USD",
+      depositType: "CREDIT",
+      feeAmountCents: 250,
+      status: "settled",
+      createTime: "2026-10-22T12:30:00Z",
+    });
+
+    expect(calls.map(({ url }) => url)).toEqual([
+      "https://airwallex.invalid/api/v1/authentication/login",
+      "https://airwallex.invalid/api/v1/simulation/deposit/create",
+    ]);
+    expect(new Headers(calls[1]?.init.headers).get("authorization")).toBe("Bearer access");
+    expect(new Headers(calls[1]?.init.headers).get("x-on-behalf-of")).toBe("acct_nova_fixture");
+    expect(JSON.parse(String(calls[1]?.init.body))).toEqual({
+      global_account_id: "ga_nova_usd_fixture",
+      amount: 8000,
+      payer_bankname: "Fixture Bank",
+      payer_country: "US",
+      payer_name: "Fixture Payer",
+      reference: "Nova Day +9 fixture",
+      statement_ref: "nova-day-9-fixture-001",
+      status: "SETTLED",
+    });
+  });
+
+  it("rejects invalid deposit simulation inputs before making a provider request", async () => {
+    let calls = 0;
+    const gateway = new HttpAirwallexGateway({
+      baseUrl: "https://airwallex.invalid",
+      clientId: "id",
+      apiKey: "key",
+      fetcher: async () => {
+        calls++;
+        return new Response(JSON.stringify({ token: "access" }));
+      },
+    });
+    await expect(gateway.createGlobalAccountDepositSimulation({
+      accountId: "acct_fixture",
+      globalAccountId: "ga_fixture",
+      amountCents: 0,
+    })).rejects.toThrow("positive safe integer");
+    await expect(gateway.createGlobalAccountDepositSimulation({
+      accountId: "acct_fixture",
+      globalAccountId: "ga_fixture",
+      amountCents: 100,
+      payerCountry: "USA",
+    })).rejects.toThrow("two-letter code");
+    expect(calls).toBe(0);
+  });
+
+  it("rejects malformed simulation responses and surfaces provider errors", async () => {
+    const malformed = new HttpAirwallexGateway({
+      baseUrl: "https://airwallex.invalid",
+      clientId: "id",
+      apiKey: "key",
+      fetcher: async (input) => String(input).endsWith("/authentication/login")
+        ? new Response(JSON.stringify({ token: "access" }))
+        : new Response(JSON.stringify({ id: "dep_fixture", amount: 1, status: "SETTLED" }), { status: 201 }),
+    });
+    const input = { accountId: "acct_fixture", globalAccountId: "ga_fixture", amountCents: 100 };
+    await expect(malformed.createGlobalAccountDepositSimulation(input)).rejects.toThrow("incomplete or invalid");
+
+    const failing = new HttpAirwallexGateway({
+      baseUrl: "https://airwallex.invalid",
+      clientId: "id",
+      apiKey: "key",
+      fetcher: async (input) => String(input).endsWith("/authentication/login")
+        ? new Response(JSON.stringify({ token: "access" }))
+        : new Response("{}", { status: 403 }),
+    });
+    await expect(failing.createGlobalAccountDepositSimulation(input)).rejects.toBeInstanceOf(ProviderHttpError);
+  });
+
   it("lists connected accounts through every source page", async () => {
     const requests: URL[] = [];
     const gateway = new HttpAirwallexGateway({

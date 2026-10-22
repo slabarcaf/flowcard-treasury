@@ -128,9 +128,48 @@ displays the ledger projection beside that scenario. Leaving it unset keeps Kit
 5 on mock data without a server projection.
 
 The browser funding command remains unavailable until the policy module can
-submit a trusted server-side approval. Do not treat a browser decision or the
-Kit 5 UI as authority to fund a bridge. The server does not expose a funding
-route for the browser.
+submit a trusted server-side approval. The Kit 5 sandbox-live route remains
+fail-closed until real customer mappings and policy/ledger composition are
+verified. Fixture aliases and a mocked Airwallex gateway are for local
+implementation tests only. Do not treat a browser decision or the Kit 5 UI as
+authority to fund a bridge. The server does not expose a funding route for the
+browser.
+
+For the demo, use deterministic fixture mode for the video and reserve
+sandbox-live mode for final submission after implementation and external
+acceptance checks pass. Each sandbox-live **Next customer** action creates one
+issuing simulation for the mapped customer's card; the server resolves the
+scenario amount and the provider response supplies the result and IDs. Bloom's
+supplier attempt is $9,000 with a $2,000 opening USD balance and a $7,000
+shortfall in both the original and Kit 5 target scenarios. The simulation API
+limit is $9,999.99 per transaction, and the mapped card must also allow the
+attempt.
+
+The current route remains fail-closed until these implementation prerequisites
+are complete:
+
+- Connect the active Kit 5 policy adapter as the source of approval and amount.
+- Compose it with durable bridge reservation, transfer settlement, and the
+  separate card retry.
+- The typed server-side Nova Global Account deposit-simulation operation and
+  mocked tests exist. Compose it with webhook settlement and fee-first then
+  principal collection before treating Nova's path as production-ready.
+
+After implementation, external sandbox acceptance still requires real customer
+and account/card IDs, verified API scopes and product enablement, Bloom's
+natural provider `INSUFFICIENT_FUNDS` result, configured webhook delivery with
+signature validation and HTTP 200 acknowledgement, and provider record
+retrieval and reconciliation. The existing ngrok forwarding to
+`localhost:8000` remains unverified. See the
+[Kit 5 demo flow and sandbox acceptance gates](/docs/airwallex-kit5-demo-flow-draft.md).
+
+The server requires the Airwallex names `AIRWALLEX_CLIENT_ID`,
+`AIRWALLEX_API_KEY`, `AIRWALLEX_ORG_ID`, `AIRWALLEX_ACCOUNT_ID`,
+`AIRWALLEX_WEBHOOK_EVENTS_FROM`, `AIRWALLEX_WEBHOOK_ID`, and
+`AIRWALLEX_WEBHOOK_SECRET`. Keep values in server environment configuration;
+never copy the ignored root `.env` from the main checkout into this worktree,
+browser variables, fixtures, source control, or logs. The demo uses direct
+server-side REST and does not use the Airwallex AgentOS production connector.
 
 ### Salesforce customer snapshots
 
@@ -152,14 +191,16 @@ reconciliation, mapping checks, and the production browser access gate.
 
 ### Run the local server
 
-Use Node 20.19+ or 22.12+ and a PostgreSQL database. The repository contains
-three SQL migrations; the server does not run them automatically. Apply them
-in order from the repository root:
+Use Node 20.19+ or 22.12+ and a PostgreSQL database. The server does not run
+SQL migrations automatically. Apply all five in order from the repository
+root:
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_kit5_card_attempts.sql
 ```
 
 The server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,
@@ -167,15 +208,31 @@ The server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,
 defaults to `3000`.
 `AIRWALLEX_BASE_URL` is optional and defaults to
 `https://api.sandbox.airwallex.com`. Set the credentials in the server process
-environment, then run:
+environment. The server defaults to port `3000`. The existing ngrok tunnel
+forwards to `localhost:8000`, so run the webhook-capable server on port `8000`:
 
 ```bash
-npm run server:start
+PORT=8000 npm run server:start
+```
+
+For sandbox-live Kit 5 actions, configure the server-only `KIT5_OPERATOR_TOKEN`
+and comma-separated `KIT5_ALLOWED_ORIGINS`. Use a high-entropy token of at
+least 32 characters and allow the exact frontend origin. The operator enters
+the token at runtime; the server returns a short-lived `HttpOnly`, `Secure`,
+`SameSite=None` session cookie. The token must not be placed in a `VITE_`
+variable or frontend asset. Missing auth configuration denies transaction
+actions. The signed Airwallex webhook endpoint remains available without a
+browser session.
+
+Start the local Kit 5 frontend with the matching API origin:
+
+```bash
+VITE_BRIDGE_API_URL=http://localhost:8000 npm run dev
 ```
 
 The command builds the TypeScript server and starts it. It does not apply the
-SQL migration. Keep Airwallex credentials on the server; the browser API client
-makes only a GET request for the ledger projection.
+SQL migrations. Keep Airwallex and operator credentials on the server; the
+browser receives only a scoped operator session cookie after runtime login.
 
 ### Run the read-only demo with Docker
 
@@ -185,8 +242,9 @@ From the repository root, run:
 docker compose -p flowcard-ledger-demo up -d --build
 ```
 
-Compose starts PostgreSQL and the ledger API, then applies the SQL seed when
-PostgreSQL creates its empty data volume. The local Compose configuration uses
+Compose starts PostgreSQL and the ledger API, then applies migrations 001
+through 003 when PostgreSQL creates its empty data volume. It does not apply
+migrations 004 and 005; apply them manually for the current schema. Compose uses
 placeholder Airwallex values and a localhost-only base URL. It does not make
 provider calls. Open `http://localhost:3000/api/ledger` to inspect the seeded
 projection, or check `http://localhost:3000/health` for service health.
@@ -199,14 +257,18 @@ empty volume is created.
 
 ### Webhook prerequisites
 
-Register a reachable HTTPS endpoint ending in `/webhooks/airwallex` in the
-Airwallex account. Configure the matching signing secret as
-`AIRWALLEX_WEBHOOK_SECRET` and subscribe to connected account transfer status
-events, charge status events, settled deposit events, and issuing card
-transaction declines. The receiver verifies signatures against the raw request
-body and stores each provider event ID once.
-Use a sandbox webhook subscription and sandbox credentials for authorized
-sandbox exercises.
+Reuse the existing reachable HTTPS ngrok endpoint ending in
+`/webhooks/airwallex`; verify it forwards to
+`http://localhost:8000/webhooks/airwallex`. Subscribe to connected account
+transfer events (`connected_account_transfer.new`, `.pending`, `.settled`,
+`.suspended`, `.failed`), charge events (`charge.new`, `.pending`, `.settled`,
+`.suspended`, `.failed`), deposit events (`deposit.pending`, `.settled`,
+`.rejected`, `.reversed`), and issuing events
+(`issuing.transaction.succeeded`, `.failed`). The receiver verifies
+HMAC-SHA256 using `x-timestamp`, the raw body, and the notification URL's
+secret, deduplicates by event ID, and promptly acknowledges verified requests
+with HTTP 200. Airwallex may deliver events out of order. Use a sandbox webhook
+subscription and keep its signing secret server-side.
 
 ### V1 ledger and repayment behavior
 

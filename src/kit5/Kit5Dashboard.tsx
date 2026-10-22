@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { CapitalBar } from '../components/CapitalBar.js';
 import { BridgeQueue } from '../components/BridgeQueue.js';
 import { ActivityFeed } from '../components/ActivityFeed.js';
@@ -13,6 +13,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
   const k = useKit5Dashboard();
   const { state } = k;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [operatorToken, setOperatorToken] = useState('');
 
   const upcoming = nextEvent(state);
   const awaitingCollection = state.phase !== 'idle' && !state.pause && upcoming?.type === 'repayment';
@@ -64,7 +65,30 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
           </div>
           <div className="flex items-center gap-3">
             {versionToggle}
-            {state.phase === 'idle' && (
+            <label className="flex items-center gap-2 text-xs text-gray-500">
+              Mode
+              <select
+                aria-label="Demo mode"
+                value={k.mode}
+                disabled={k.liveBlocked}
+                onChange={(event) => k.selectMode(event.target.value as 'fixture' | 'sandbox-live')}
+                className="text-sm text-gray-900 bg-white border border-gray-300 rounded-md px-2 py-1.5 cursor-pointer"
+              >
+                <option value="fixture">Fixture</option>
+                <option value="sandbox-live">Sandbox live</option>
+              </select>
+            </label>
+            {k.mode === 'sandbox-live' && (
+              <button
+                type="button"
+                onClick={() => void k.submitNextCustomer()}
+                disabled={!k.operatorAuthenticated || k.livePending || k.liveBlocked || !k.nextLiveCustomer || !k.ledgerApiEnabled}
+                className="px-4 py-2 text-sm font-medium bg-[#e04e2f] hover:bg-[#c9442a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors cursor-pointer"
+              >
+                {k.livePending ? 'Submitting…' : k.liveComplete ? 'Sequence complete' : k.liveAction?.status === 'not_persisted' ? 'Retry same customer' : 'Next customer'}
+              </button>
+            )}
+            {k.mode === 'fixture' && state.phase === 'idle' && (
               <button
                 onClick={k.scan}
                 className="px-4 py-2 text-sm font-medium bg-[#e04e2f] hover:bg-[#c9442a] active:bg-[#b33d25] text-white rounded-lg transition-colors cursor-pointer"
@@ -72,7 +96,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 Scan Declines
               </button>
             )}
-            {awaitingCollection && (
+            {k.mode === 'fixture' && awaitingCollection && (
               <button
                 onClick={k.advance}
                 className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg transition-colors cursor-pointer"
@@ -80,7 +104,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 Simulate Collection
               </button>
             )}
-            {state.phase !== 'idle' && (
+            {k.mode === 'fixture' && state.phase !== 'idle' && (
               <button
                 onClick={k.reset}
                 className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-300 hover:border-gray-400 rounded-lg transition-colors cursor-pointer"
@@ -113,6 +137,71 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               )}
             </div>
 
+            {k.mode === 'sandbox-live' && (
+              <section aria-label="Sandbox live provider activity" className="bg-white border border-gray-200 rounded-xl px-5 py-4 space-y-2">
+                <h2 className="text-sm font-semibold text-gray-900">Sandbox live provider activity</h2>
+                {!k.ledgerApiEnabled && <p role="alert" className="text-sm text-amber-700">Set VITE_BRIDGE_API_URL to enable the sandbox-live API.</p>}
+                {!k.operatorAuthenticated && (
+                  <form
+                    className="flex items-end gap-2"
+                    onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                      event.preventDefault();
+                      void k.authenticateOperator(operatorToken)
+                        .then(() => setOperatorToken(''))
+                        .catch(() => {});
+                    }}
+                  >
+                    <label className="flex flex-col gap-1 text-xs text-gray-600">
+                      Operator credential
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={operatorToken}
+                        onChange={(event) => setOperatorToken(event.target.value)}
+                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                    <button type="submit" disabled={!operatorToken || k.livePending} className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50">Authorize</button>
+                  </form>
+                )}
+                {k.nextLiveCustomer && !k.liveBlocked && (
+                  <p className="text-sm text-gray-600">
+                    Next: {k.nextLiveCustomer.customer.name}, ${k.nextLiveCustomer.event.paymentAmount.toLocaleString('en-US')} {k.nextLiveCustomer.event.paymentDescription}
+                  </p>
+                )}
+                {k.livePending && <p role="status" className="text-sm text-sky-700">Waiting for the provider result…</p>}
+                {k.liveError && <p role="alert" className="text-sm text-red-700">{k.liveError}</p>}
+                {k.liveHistory.map((activity) => (
+                  <dl key={activity.attemptId} className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs text-gray-600 border-t border-gray-100 pt-2">
+                    <dt>Customer</dt><dd>{activity.customerName}</dd>
+                    <dt>Transaction status</dt><dd>{activity.result?.processResult ?? activity.status}</dd>
+                    <dt>Scenario amount attempted</dt><dd>{activity.amount === undefined ? 'Unavailable' : `$${activity.amount.toLocaleString('en-US')} USD (provider response does not include amount)`}</dd>
+                    <dt>Failure reason</dt><dd>{activity.result?.failureReason ?? 'None returned'}</dd>
+                    <dt>Provider event ID</dt><dd className="font-mono break-all">{activity.result?.cardTransactionEventId ?? 'Unavailable'}</dd>
+                    <dt>Provider transaction ID</dt><dd className="font-mono break-all">{activity.result?.cardTransactionId ?? 'Unavailable'}</dd>
+                    <dt>Lifecycle ID</dt><dd className="font-mono break-all">{activity.result?.cardTransactionLifecycleId ?? activity.lifecycleId ?? 'Unavailable'}</dd>
+                  </dl>
+                ))}
+                {k.liveAction && k.liveAction.status !== 'completed' && (
+                  <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs text-gray-600">
+                    <dt>Customer</dt><dd>{k.liveAction.customerName}</dd>
+                    <dt>Transaction status</dt><dd>{k.liveAction.result?.processResult ?? k.liveAction.status}</dd>
+                    <dt>Scenario amount attempted</dt><dd>{k.liveAction.amount === undefined ? 'Unavailable' : `$${k.liveAction.amount.toLocaleString('en-US')} USD (provider response does not include amount)`}</dd>
+                    <dt>Failure reason</dt><dd>{k.liveAction.result?.failureReason ?? 'None returned'}</dd>
+                    <dt>Provider event ID</dt><dd className="font-mono break-all">{k.liveAction.result?.cardTransactionEventId ?? 'Unavailable'}</dd>
+                    <dt>Provider transaction ID</dt><dd className="font-mono break-all">{k.liveAction.result?.cardTransactionId ?? 'Unavailable'}</dd>
+                    <dt>Lifecycle ID</dt><dd className="font-mono break-all">{k.liveAction.result?.cardTransactionLifecycleId ?? k.liveAction.lifecycleId ?? 'Unavailable'}</dd>
+                  </dl>
+                )}
+                {k.liveAction && k.liveAction.status !== 'completed' && k.liveAction.attemptId && (
+                  <button type="button" onClick={() => void k.refreshLiveAction()} disabled={k.livePending} className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50">
+                    {k.livePending ? 'Refreshing…' : 'Refresh provider status'}
+                  </button>
+                )}
+                {k.liveComplete && <p role="status" className="text-sm text-gray-500">All customer actions have provider results.</p>}
+              </section>
+            )}
+
             <CapitalBar
               lentOut={state.lentOut}
               deployable={state.deployableCapital}
@@ -120,7 +209,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               band={state.band}
             />
 
-            {autoApproved && (
+            {k.mode === 'fixture' && autoApproved && (
               <div className="flex items-center justify-between gap-4 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 animate-panel-in" role="status">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-emerald-800">
@@ -141,7 +230,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               </div>
             )}
 
-            <BridgeQueue
+            {k.mode === 'fixture' ? <BridgeQueue
               rows={state.queue}
               totalEligibleShortfall={totalEligibleShortfall}
               deployable={state.deployableCapital}
@@ -155,7 +244,11 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               onBloomReEvaluate={k.crmReEvaluate}
               onApprove={k.approve}
               showDates
-            />
+            /> : (
+              <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-500">
+                Fixture decisions are paused in sandbox-live mode. Provider outcomes are shown above.
+              </div>
+            )}
           </div>
 
           <ActivityFeed events={state.feed} />

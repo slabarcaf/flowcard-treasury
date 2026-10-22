@@ -48,7 +48,7 @@ const original: ScenarioInputs = {
   startDate: START_DATE,
   customers: [BLOOM, ATLAS, NOVA, PIXEL],
   events: [
-    { type: 'decline', requestId: 'txn_bloom_payroll_001', customerKey: 'bloom', day: 0, time: '9:02', paymentDescription: '$12,000 payroll', paymentAmount: 12_000, walletBalance: 2_000 },
+    { type: 'decline', requestId: 'txn_bloom_payroll_001', customerKey: 'bloom', day: 0, time: '9:02', paymentDescription: '$9,000 supplier', paymentAmount: 9_000, walletBalance: 2_000 },
     { type: 'decline', requestId: 'txn_atlas_supplier_001', customerKey: 'atlas', day: 0, time: '9:05', paymentDescription: '$6,500 supplier', paymentAmount: 6_500, walletBalance: 1_500 },
     { type: 'decline', requestId: 'txn_nova_contractor_001', customerKey: 'nova', day: 0, time: '9:11', paymentDescription: '$7,000 contractor', paymentAmount: 7_000, walletBalance: 1_000 },
     { type: 'decline', requestId: 'txn_pixel_ads_001', customerKey: 'pixel', day: 0, time: '9:14', paymentDescription: '$2,500 ad spend', paymentAmount: 2_500, walletBalance: 500 },
@@ -74,7 +74,7 @@ const kit5Target: ScenarioInputs = {
     },
   ],
   events: [
-    { type: 'decline', requestId: 'txn_bloom_supplier_001', customerKey: 'bloom', day: 0, time: '9:02', paymentDescription: '$12,000 supplier', paymentAmount: 12_000, walletBalance: 2_000 },
+    { type: 'decline', requestId: 'txn_bloom_supplier_001', customerKey: 'bloom', day: 0, time: '9:02', paymentDescription: '$9,000 supplier', paymentAmount: 9_000, walletBalance: 2_000 },
     { type: 'decline', requestId: 'txn_atlas_supplier_001', customerKey: 'atlas', day: 0, time: '9:05', paymentDescription: '$6,500 supplier', paymentAmount: 6_500, walletBalance: 1_500 },
     { type: 'decline', requestId: 'txn_nova_contractor_001', customerKey: 'nova', day: 0, time: '9:11', paymentDescription: '$7,000 contractor', paymentAmount: 7_000, walletBalance: 1_000 },
     { type: 'decline', requestId: 'txn_pixel_ads_001', customerKey: 'pixel', day: 0, time: '9:13', paymentDescription: '$2,500 ad spend', paymentAmount: 2_500, walletBalance: 500 },

@@ -1,0 +1,118 @@
+import { randomUUID } from "node:crypto";
+import type { IssuingSimulationGateway, IssuingSimulationResponse } from "./client.js";
+import { ProviderHttpError } from "./client.js";
+
+const MAX_SIMULATION_AMOUNT_CENTS = 999_999;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export interface IssuingSimulationInput {
+  accountId: string;
+  cardId: string;
+  amountCents: number;
+  currency: string;
+  merchant: string;
+  scenarioId: string;
+}
+
+export interface IssuingSimulationResult extends IssuingSimulationResponse {
+  scenarioId: string;
+}
+
+export interface IssuingSimulationDependencies {
+  gateway: IssuingSimulationGateway;
+  persistLifecycleId: (scenarioId: string, lifecycleId: string) => Promise<void>;
+  createLifecycleId?: () => string;
+}
+
+/** Validate and execute one server-side simulation, recording its correlation ID first. */
+export async function simulateIssuingTransaction(
+  input: IssuingSimulationInput,
+  dependencies: IssuingSimulationDependencies,
+): Promise<IssuingSimulationResult> {
+  const request = validateInput(input);
+  const lifecycleId = (dependencies.createLifecycleId ?? randomUUID)();
+  if (!UUID_PATTERN.test(lifecycleId)) {
+    throw new Error("Issuing lifecycle ID generator must return a UUID");
+  }
+
+  await dependencies.persistLifecycleId(request.scenarioId, lifecycleId);
+  try {
+    const response = await dependencies.gateway.createIssuingSimulation({ ...request, lifecycleId });
+    return { ...normalizeIssuingResponse(response, lifecycleId), scenarioId: request.scenarioId };
+  } catch (error) {
+    if (!isAmbiguous(error)) throw error;
+
+    const lifecycle = await dependencies.gateway.getIssuingLifecycle(lifecycleId, request.accountId);
+    if (lifecycle !== null) {
+      return { ...normalizeIssuingResponse(lifecycle, lifecycleId), scenarioId: request.scenarioId };
+    }
+    throw new AmbiguousIssuingResponseError(lifecycleId, error);
+  }
+}
+
+export class AmbiguousIssuingResponseError extends Error {
+  constructor(readonly lifecycleId: string, cause: unknown) {
+    super("Airwallex issuing result is unresolved; lifecycle was checked and an operator must reconcile before retry", { cause });
+    this.name = "AmbiguousIssuingResponseError";
+  }
+}
+
+export function normalizeIssuingResponse(value: unknown, expectedLifecycleId: string): IssuingSimulationResponse {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Airwallex issuing simulation returned a malformed response");
+  }
+  const response = value as Record<string, unknown>;
+  const result = typeof response.process_result === "string" ? response.process_result.trim().toUpperCase() : "";
+  if (result !== "APPROVED" && result !== "DECLINED") {
+    throw new Error("Airwallex issuing simulation returned an unexpected process_result");
+  }
+  if (response.failure_reason !== undefined && response.failure_reason !== null && typeof response.failure_reason !== "string") {
+    throw new Error("Airwallex issuing simulation returned a malformed failure_reason");
+  }
+
+  const cardTransactionEventId = requiredProviderId(response.card_transaction_event_id, "card_transaction_event_id");
+  const cardTransactionId = requiredProviderId(response.card_transaction_id, "card_transaction_id");
+  const cardTransactionLifecycleId = requiredProviderId(response.card_transaction_lifecycle_id, "card_transaction_lifecycle_id");
+  if (cardTransactionLifecycleId !== expectedLifecycleId) {
+    throw new Error("Airwallex issuing simulation returned a different lifecycle ID");
+  }
+
+  return {
+    processResult: result,
+    failureReason: typeof response.failure_reason === "string" ? response.failure_reason : null,
+    cardTransactionEventId,
+    cardTransactionId,
+    cardTransactionLifecycleId,
+  };
+}
+
+function validateInput(input: IssuingSimulationInput): Omit<IssuingSimulationInput, "currency"> & { currency: "USD" } {
+  const accountId = requiredInput(input.accountId, "account ID");
+  const cardId = requiredInput(input.cardId, "card ID");
+  const merchant = requiredInput(input.merchant, "merchant");
+  const scenarioId = requiredInput(input.scenarioId, "scenario ID");
+  if (!Number.isSafeInteger(input.amountCents) || input.amountCents < 1 || input.amountCents > MAX_SIMULATION_AMOUNT_CENTS) {
+    throw new Error("Issuing simulation amount must be between 1 cent and 999999 cents");
+  }
+  const currency = requiredInput(input.currency, "currency").toUpperCase();
+  if (currency !== "USD") throw new Error("Issuing simulation currency must be USD");
+  return { accountId, cardId, amountCents: input.amountCents, currency, merchant, scenarioId };
+}
+
+function requiredInput(value: string, label: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Issuing simulation ${label} is required`);
+  return value.trim();
+}
+
+function requiredProviderId(value: unknown, label: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Airwallex issuing simulation response is missing ${label}`);
+  }
+  return value.trim();
+}
+
+function isAmbiguous(error: unknown): boolean {
+  if (error instanceof ProviderHttpError) return error.status >= 500;
+  if (error instanceof TypeError) return true;
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError" || error.name === "SyntaxError");
+}
