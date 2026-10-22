@@ -38,6 +38,7 @@ describe("outbox dispatcher", () => {
     let lookupCount = 0;
     let createCount = 0;
     const gateway = {
+      listConnectedAccounts: async () => [],
       getTransferByRequestId: async (requestId: string) => {
         lookupCount++;
         expect(requestId).toBe(pool.requestId);
@@ -71,6 +72,7 @@ describe("outbox dispatcher", () => {
     let createCount = 0;
     const response: ProviderOperationResponse = { id: "tr_1", requestId: pool.requestId, status: "pending" };
     const gateway: AirwallexGateway = {
+      listConnectedAccounts: async () => [],
       getTransferByRequestId: async (id) => { expect(id).toBe(pool.requestId); return createCount ? response : null; },
       getChargeByRequestId: async () => null,
       createTransfer: async (input) => { createCount++; expect(input.requestId).toBe(pool.requestId); throw new DOMException("network request timed out after provider accepted request", "TimeoutError"); },
@@ -98,6 +100,7 @@ describe("outbox dispatcher", () => {
     const pool = new OutboxPool();
     let createCount = 0;
     const gateway = {
+      listConnectedAccounts: async () => [],
       getTransferByRequestId: async () => ({ id: "tr_failed", requestId: pool.requestId, status: "failed" as const }),
       getChargeByRequestId: async () => null,
       createTransfer: async () => { createCount++; throw new Error("must not resend terminal failure"); },
@@ -117,8 +120,9 @@ describe("outbox dispatcher", () => {
   it.each([429, 503])("requeues HTTP %i with diagnostic context", async (status) => {
     const pool = new OutboxPool();
     const gateway = {
+      listConnectedAccounts: async () => [],
       getTransferByRequestId: async () => { throw new ProviderHttpError(status, `Airwallex request failed (${status})`); },
-    } as AirwallexGateway;
+    } as unknown as AirwallexGateway;
     await dispatchOne(pool, gateway);
     expect(pool.status).toBe("queued");
     expect(pool.lastError).toContain(`ProviderHttpError (HTTP ${status}): Airwallex request failed (${status})`);
@@ -128,8 +132,9 @@ describe("outbox dispatcher", () => {
   it("marks permanent 4xx errors failed without retrying or inventing provider state", async () => {
     const pool = new OutboxPool();
     const gateway = {
+      listConnectedAccounts: async () => [],
       getTransferByRequestId: async () => { throw new ProviderHttpError(422, "Invalid destination"); },
-    } as AirwallexGateway;
+    } as unknown as AirwallexGateway;
     await dispatchOne(pool, gateway);
     expect(pool.status).toBe("failed");
     expect(pool.lastError).toContain("ProviderHttpError (HTTP 422): Invalid destination");

@@ -24,10 +24,14 @@ npm run dev        # http://localhost:5173
 | Command           | What it does                                  |
 | ----------------- | --------------------------------------------- |
 | `npm run dev`     | Dev server with hot reload                    |
-| `npm test`        | Policy + Kit 5 engine tests (Vitest, 63 tests)|
+| `npm test`        | Policy, ledger, and Salesforce snapshot tests (Vitest) |
 | `npm run build`   | Type-check + production build into `dist/`    |
 | `npm run lint`    | Lint with oxlint                              |
 | `npm run preview` | Serve the production build locally            |
+
+The local demo Compose service sets `SALESFORCE_SNAPSHOT_MODE=demo`, which
+publishes synthetic snapshots at startup and refreshes them daily. Production
+Salesforce snapshots remain disabled until a trusted host MCP binding exists.
 
 ### Update the live demo
 
@@ -73,6 +77,8 @@ local database, then apply the schema and demo facility seed:
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
 ```
 
 Set these server environment variables before starting the service:
@@ -101,8 +107,8 @@ without a ledger projection.
 
 ### Run the ledger demo with Docker
 
-Docker Compose starts PostgreSQL and the ledger API. PostgreSQL applies the
-schema and synthetic opening exposure when it initializes its data volume.
+Docker Compose starts PostgreSQL and the ledger API. PostgreSQL applies all
+three schema migrations and synthetic opening exposure when it initializes its data volume.
 The Compose file uses placeholder credentials and a localhost-only Airwallex
 URL; it is configured for the read-only ledger demo, not provider operations.
 
@@ -116,10 +122,9 @@ curl http://localhost:3000/api/ledger
 The ledger API is available at `http://localhost:3000`. Inspect service logs
 with `docker compose -p flowcard-ledger-demo logs -f ledger`. Stop the
 containers with `docker compose -p flowcard-ledger-demo down`. The named
-PostgreSQL volume preserves demo data when containers stop. The migration in
-`server/src/db/migrations/001_bridge_ledger.sql` runs automatically only when
-PostgreSQL initializes an empty volume; apply later schema changes using the
-documented SQL migration process.
+PostgreSQL volume preserves demo data when containers stop. All three
+migrations run automatically only when PostgreSQL initializes an empty volume;
+apply later schema changes using the documented SQL migration process.
 
 ### Webhook setup
 
@@ -151,6 +156,27 @@ triggering settled deposit. Fees are assessed and fixed at the collection
 trigger, then collected before principal. A partial deposit may pay part of the
 fee; principal is queued only after the fee charge
 settles. Balances decrease only when their charges settle.
+
+### Salesforce customer snapshots
+
+The snapshot service keeps a server-owned roster and publishes versioned
+snapshots for explicitly enrolled customers. Demo mode uses synthetic fixtures.
+Production is designed to use the read-only Salesforce MCP only; there is no
+Salesforce REST fallback. Production remains gated until the org field and
+picklist mappings, text limits, and unattended MCP capabilities are confirmed.
+Live MCP access has not been verified.
+
+Operators use the restricted roster CLI to enroll or soft-deactivate customers.
+Deactivation stops future snapshots and new bridge decisions while retaining
+history and allowing open-bridge servicing. A snapshot is fresh for at most 24
+hours. See the [Salesforce snapshot operations guide](/docs/salesforce-snapshot-operations.md)
+for commands, scheduling status, retries, reconciliation, readiness checks, and
+the browser proxy requirement.
+
+The production snapshot endpoint requires a bearer token. The browser client
+does not send that token, and the app has no trusted same-origin server proxy.
+Production browser reads therefore remain fail-closed. Never place the token in
+a `VITE_` variable or expose it to the browser.
 
 ### Kit 5 scenarios
 

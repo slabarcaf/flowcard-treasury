@@ -4,6 +4,10 @@ export interface ServerConfig {
   airwallexClientId: string;
   airwallexApiKey: string;
   airwallexWebhookSecret: string;
+  /** Optional read boundary for production Salesforce snapshot responses. */
+  salesforceSnapshotReadToken?: string;
+  /** Snapshot source selected for this server process, when configured. */
+  salesforceSnapshotMode?: "demo" | "production_mcp";
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -22,5 +26,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     airwallexClientId: required("AIRWALLEX_CLIENT_ID"),
     airwallexApiKey: required("AIRWALLEX_API_KEY"),
     airwallexWebhookSecret: required("AIRWALLEX_WEBHOOK_SECRET"),
+    ...(env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo" || env.SALESFORCE_SNAPSHOT_MODE?.trim() === "production_mcp"
+      ? { salesforceSnapshotMode: env.SALESFORCE_SNAPSHOT_MODE.trim() as "demo" | "production_mcp" }
+      : {}),
+    ...(env.SALESFORCE_SNAPSHOT_READ_TOKEN?.trim()
+      ? { salesforceSnapshotReadToken: env.SALESFORCE_SNAPSHOT_READ_TOKEN.trim() }
+      : {}),
   };
 }

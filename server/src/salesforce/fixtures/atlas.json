@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "mappingVersion": "salesforce-proposed-v1",
+  "mappingVerified": false,
+  "account": {
+    "recordId": "demo-sf-atlas001",
+    "sourceUpdatedAt": "2026-10-20T16:40:00Z",
+    "customerStatus": { "value": "active", "source": { "recordId": "demo-sf-atlas001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "kybStatus": { "value": "verified", "source": { "recordId": "demo-sf-atlas001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "creditReviewStatus": { "value": "approved", "source": { "recordId": "demo-sf-atlas001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "approvedBridgeCap": { "value": 8000, "source": { "recordId": "demo-sf-atlas001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "priorDefaultStatus": { "value": "no", "source": { "recordId": "demo-sf-atlas001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "loyaltyTier": { "value": "premium", "source": { "recordId": "demo-sf-atlas001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } }
+  },
+  "contract": {
+    "recordId": "demo-contract-atlas001",
+    "sourceUpdatedAt": "2026-10-20T16:40:00Z",
+    "status": { "value": "active", "source": { "recordId": "demo-contract-atlas001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "endDate": { "value": "2027-10-20", "source": { "recordId": "demo-contract-atlas001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } }
+  },
+  "cases": [],
+  "callActivities": []
+}

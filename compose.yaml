@@ -8,6 +8,8 @@ services:
     volumes:
       - ledger-data:/var/lib/postgresql/data
       - ./server/src/db/migrations/001_bridge_ledger.sql:/docker-entrypoint-initdb.d/001_bridge_ledger.sql:ro
+      - ./server/src/db/migrations/002_customer_roster.sql:/docker-entrypoint-initdb.d/002_customer_roster.sql:ro
+      - ./server/src/db/migrations/003_salesforce_snapshots.sql:/docker-entrypoint-initdb.d/003_salesforce_snapshots.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U flowcard -d flowcard_treasury"]
       interval: 3s
@@ -25,6 +27,7 @@ services:
       AIRWALLEX_API_KEY: demo-not-used
       AIRWALLEX_WEBHOOK_SECRET: demo-webhook-secret
       AIRWALLEX_BASE_URL: http://127.0.0.1:9
+      SALESFORCE_SNAPSHOT_MODE: demo
     depends_on:
       database:
         condition: service_healthy

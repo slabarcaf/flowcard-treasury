@@ -132,14 +132,34 @@ submit a trusted server-side approval. Do not treat a browser decision or the
 Kit 5 UI as authority to fund a bridge. The server does not expose a funding
 route for the browser.
 
+### Salesforce customer snapshots
+
+Demo mode reads synthetic snapshots from the local fixture adapter. Production
+mode uses the server's read-only Salesforce MCP adapter; it has no REST fallback
+and does not silently fall back to demo data. Production sync remains blocked
+until Salesforce field and picklist mappings, the maximum case and call text
+lengths, and unattended read-only MCP pagination and retry capabilities are
+verified against the connected org. No live MCP verification has been performed.
+
+Roster membership is explicit and managed by the server CLI. Enrollment needs
+the stable internal customer ID, Salesforce Account ID, Airwallex connected
+account ID, operator identity, and reason. Soft deactivation retains the roster
+and snapshot history, excludes the customer from future snapshots and new
+bridge decisions, and leaves open-bridge servicing available. Use the
+[Salesforce snapshot operations guide](/docs/salesforce-snapshot-operations.md)
+for CLI examples, daily scheduling and freshness behavior, retries,
+reconciliation, mapping checks, and the production browser access gate.
+
 ### Run the local server
 
-Use Node 20.19+ or 22.12+ and a PostgreSQL database. The repository contains one
-SQL schema and seed migration; the server does not run migrations automatically.
-Apply it from the repository root:
+Use Node 20.19+ or 22.12+ and a PostgreSQL database. The repository contains
+three SQL migrations; the server does not run them automatically. Apply them
+in order from the repository root:
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
 ```
 
 The server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,

@@ -52,6 +52,7 @@ class ReconciliationPool implements DatabasePool {
 
 function gateway(response: ProviderOperationResponse | null): AirwallexGateway {
   return {
+    listConnectedAccounts: async () => [],
     getTransferByRequestId: async () => response,
     getChargeByRequestId: async () => response,
     createTransfer: async () => { throw new Error("not used"); },

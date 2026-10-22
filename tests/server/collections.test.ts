@@ -33,6 +33,14 @@ describe("bridge collection fees", () => {
     expect(db.attempts).toBe(1);
   });
 
+  it("continues servicing an already-funded bridge after customer deactivation", async () => {
+    const db = collectionPool({ availableCents: 2_000, principalCents: 600_000, feeCents: 0, rosterActive: false });
+    const result = await processSettledDeposit(db.pool, gateway(2_000), deposit);
+
+    expect(result).toMatchObject({ created: true, chargedCents: 2_000 });
+    expect(db.statements.some((sql) => sql.includes("customer_roster"))).toBe(false);
+  });
+
   it("collects Nova's $27 trigger-time fee from an $8K deposit, then queues $6K principal after settlement", async () => {
     const db = collectionPool({ availableCents: 800_000, principalCents: 600_000, feeCents: 0 });
     const attempt = await processSettledDeposit(db.pool, gateway(800_000), deposit);
@@ -179,6 +187,7 @@ describe("bridge collection fees", () => {
 
 function gateway(availableCents: number): AirwallexGateway {
   return {
+    listConnectedAccounts: async () => [],
     createTransfer: async () => { throw new Error("not used"); },
     createCharge: async () => { throw new Error("not used"); },
     getTransferByRequestId: async () => null,
@@ -189,7 +198,7 @@ function gateway(availableCents: number): AirwallexGateway {
   };
 }
 
-function collectionPool(input: { availableCents: number; principalCents: number; feeCents: number; feeAssessed?: boolean; pendingFeeCents?: number; pendingPrincipalCents?: number; repaymentTerm?: "15_days" | "30_days" | "fixed_date" | "asap"; repaymentDueAt?: Date | null }) {
+function collectionPool(input: { availableCents: number; principalCents: number; feeCents: number; feeAssessed?: boolean; pendingFeeCents?: number; pendingPrincipalCents?: number; repaymentTerm?: "15_days" | "30_days" | "fixed_date" | "asap"; repaymentDueAt?: Date | null; rosterActive?: boolean }) {
   const attempts = new Set<string>();
   const statements: string[] = [];
   const operations: Array<{ operationType: string; amountCents: number }> = [];
@@ -198,6 +207,7 @@ function collectionPool(input: { availableCents: number; principalCents: number;
   let attemptCount = 0;
   const respond = async <Row>(sql: string, values: readonly unknown[] = []): Promise<QueryResult<Row>> => {
     statements.push(sql);
+    if (sql.includes("customer_roster")) return rows([{ is_active: input.rosterActive ?? true }] as Row[]);
     if (sql.includes("FROM bridge_cases") && sql.includes("WHERE customer_id")) {
       return rows([{ id: bridgeId, customer_id: "acct_1", amount_cents: input.principalCents, repayment_term: input.repaymentTerm ?? "asap", repayment_due_at: input.repaymentDueAt ?? null, status: "funded" }] as Row[]);
     }

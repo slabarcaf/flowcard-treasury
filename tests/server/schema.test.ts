@@ -10,6 +10,10 @@ const migrationUrl = new URL(
   "../../server/src/db/migrations/001_bridge_ledger.sql",
   import.meta.url,
 );
+const rosterMigrationUrl = new URL(
+  "../../server/src/db/migrations/002_customer_roster.sql",
+  import.meta.url,
+);
 
 describe("bridge ledger schema", () => {
   it("defines the required tables and enforces core constraints", async () => {
@@ -69,5 +73,17 @@ describe("bridge ledger schema", () => {
 
     expect(inserted).toBe(false);
     expect(query.mock.calls[0][0]).toContain("ON CONFLICT (provider_event_id) DO NOTHING");
+  });
+
+  it("defines unique, audited enrollment mappings and synthetic demo roster entries", async () => {
+    const sql = await readFile(rosterMigrationUrl, "utf8");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS customer_roster");
+    expect(sql).toMatch(/salesforce_account_id text NOT NULL UNIQUE/);
+    expect(sql).toMatch(/airwallex_connected_account_id text NOT NULL UNIQUE/);
+    expect(sql).toContain("customer_roster_audit");
+    expect(sql).toContain("customer_roster_audit_immutable");
+    expect(sql).toContain("demo-seed");
+    expect(sql).toContain("Synthetic Bloom demo customer");
+    expect(sql).toContain("ON CONFLICT (customer_id) DO NOTHING");
   });
 });

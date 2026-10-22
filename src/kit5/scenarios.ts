@@ -34,12 +34,13 @@ const ALL_GREEN: Signals = {
 const BLOOM: ScenarioCustomer = {
   ...CUSTOMERS.bloom,
   key: 'bloom',
+  salesforceSnapshotCustomerId: CUSTOMERS.bloom.id,
   rationale: AGENT_RATIONALES.bloom_initial,
   crmSignalsAfter: BLOOM_SIGNALS_AFTER_CRM,
 };
-const ATLAS: ScenarioCustomer = { ...CUSTOMERS.atlas, key: 'atlas', rationale: AGENT_RATIONALES.atlas };
-const NOVA: ScenarioCustomer = { ...CUSTOMERS.nova, key: 'nova', rationale: AGENT_RATIONALES.nova_revised };
-const PIXEL: ScenarioCustomer = { ...CUSTOMERS.pixel, key: 'pixel' };
+const ATLAS: ScenarioCustomer = { ...CUSTOMERS.atlas, key: 'atlas', salesforceSnapshotCustomerId: CUSTOMERS.atlas.id, rationale: AGENT_RATIONALES.atlas };
+const NOVA: ScenarioCustomer = { ...CUSTOMERS.nova, key: 'nova', salesforceSnapshotCustomerId: CUSTOMERS.nova.id, rationale: AGENT_RATIONALES.nova_revised };
+const PIXEL: ScenarioCustomer = { ...CUSTOMERS.pixel, key: 'pixel', salesforceSnapshotCustomerId: CUSTOMERS.pixel.id };
 
 const original: ScenarioInputs = {
   facility: KIT5_FACILITY,
@@ -63,6 +64,7 @@ const kit5Target: ScenarioInputs = {
     {
       id: 'acct_juniper001',
       key: 'juniper',
+      salesforceSnapshotCustomerId: 'acct_juniper001',
       name: 'Juniper Labs',
       monthlyInflow: 30_000,
       signals: { ...CUSTOMERS.nova.signals },
@@ -86,6 +88,7 @@ function twin(key: string, id: string, name: string, monthlyInflow: number): Sce
   return {
     id,
     key,
+    salesforceSnapshotCustomerId: id,
     name,
     monthlyInflow,
     signals: { ...ALL_GREEN },

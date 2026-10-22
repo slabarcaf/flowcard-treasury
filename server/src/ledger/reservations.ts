@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabasePool } from "../db/pool.js";
 import { appendLedgerEvent, type LedgerEventType } from "./events.js";
 import { rebuildLedgerProjections } from "./projector.js";
+import { getCustomerSnapshotReadModel } from "../snapshots/freshness.js";
 
 export type RepaymentTerm = "15_days" | "30_days" | "fixed_date" | "asap";
 
@@ -60,6 +61,20 @@ export async function reserveBridge(
       `SELECT id FROM facility_holds WHERE is_active LIMIT 1`,
     );
     if (hold.rowCount) throw new Error("USD facility is on hold pending provider reconciliation");
+    const customerSnapshot = await getCustomerSnapshotReadModel(client, input.customerId, new Date(), true);
+    if (!customerSnapshot.active) {
+      throw new Error("Customer is not actively enrolled in the bridge program");
+    }
+    if (customerSnapshot.freshness !== "fresh") {
+      throw new Error(`Customer Salesforce snapshot is ${customerSnapshot.freshness}`);
+    }
+    const runtimeSnapshotMode = process.env.SALESFORCE_SNAPSHOT_MODE?.trim();
+    if (runtimeSnapshotMode !== "demo" && runtimeSnapshotMode !== "production_mcp") {
+      throw new Error("Salesforce snapshot mode is not configured; bridge reservations are disabled");
+    }
+    if (customerSnapshot.snapshot?.sourceMode !== runtimeSnapshotMode) {
+      throw new Error(`Customer Salesforce snapshot source does not match runtime mode ${runtimeSnapshotMode}`);
+    }
     const deployableCents = Number(facility.deployable_cents);
     if (!Number.isSafeInteger(deployableCents) || deployableCents < 0) {
       throw new Error("USD facility projection has an invalid deployable balance");

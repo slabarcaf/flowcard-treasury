@@ -1,14 +1,19 @@
 import type { CrmClient } from '../types.js';
-import { BLOOM_CRM_NOTE } from '../../seed.js';
+import { getDemoSalesforceSnapshot } from '../../../server/src/salesforce/fixture-source.js';
 
 /**
  * Mock CRM client that returns seeded Salesforce notes.
  */
 export const mockCrmClient: CrmClient = {
   async getLatestNotes(accountId) {
-    if (accountId === 'acct_bloom001') {
-      return [BLOOM_CRM_NOTE];
-    }
-    return [];
+    const snapshot = getDemoSalesforceSnapshot(accountId);
+    return (snapshot?.callActivities ?? [])
+      .filter((activity) => activity.note.value !== null)
+      .map((activity) => ({
+        author: 'Salesforce call activity',
+        timestamp: activity.activityAt.value ?? activity.sourceUpdatedAt ?? '',
+        text: activity.note.value ?? '',
+        sourceRecordId: activity.recordId,
+      }));
   },
 };
