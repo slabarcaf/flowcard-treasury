@@ -51,7 +51,7 @@ describe("next-run evidence review application", () => {
     }, packet)).toMatchObject({ status: "review_required" });
   });
 
-  it("clears reviewed evidence, confirms results, and routes unchanged repeated errors back to review", () => {
+  it("keeps cleared claims and unrelated evidence blocked until a claim-level review is available", () => {
     const prior = result("snapshot-1");
     const sameEvidenceResult = result("snapshot-2");
     const cleared = applyReviewToNextExtraction(sameEvidenceResult, prior, {
@@ -61,9 +61,15 @@ describe("next-run evidence review application", () => {
 
     const changed = result("snapshot-2");
     changed.signals[0]!.value = { disputed: false };
+    changed.signals.push({ ...structuredClone(signal), type: "positive_note", value: { positive: true } });
+    changed.unmapped.push({ type: "unmapped_claim", value: { detail: "retain me" }, evidence: [{ sourceType: "case", sourceId: "case-1" }] });
     expect(applyReviewToNextExtraction(changed, prior, {
       extractionId: "reviewed-1", reviewerId: "ramil", action: "cleared", clearReason: "Unsupported claim",
-    }, packet)).toMatchObject({ status: "no_signal", signals: [] });
+    }, packet)).toMatchObject({
+      status: "review_required",
+      signals: [{ value: { disputed: false } }, { type: "positive_note", value: { positive: true } }],
+      unmapped: [{ type: "unmapped_claim", value: { detail: "retain me" } }],
+    });
 
     expect(applyReviewToNextExtraction(result("snapshot-2", "review_required"), prior, {
       extractionId: "reviewed-1", reviewerId: "ramil", action: "confirmed",

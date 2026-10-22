@@ -39,7 +39,9 @@ export function applyReviewToNextExtraction(
       return { ...current, status: "review_required" };
     }
   }
-  return { ...current, status: "no_signal", signals: [], unmapped: [] };
+  // Clear reviews currently have no claim selector. Keep every claim and block
+  // the customer until a reviewer can resolve the evidence unambiguously.
+  return { ...current, status: "review_required" };
 }
 
 function sameModelOutput(current: ExtractionResult, reviewed: ExtractionResult): boolean {
