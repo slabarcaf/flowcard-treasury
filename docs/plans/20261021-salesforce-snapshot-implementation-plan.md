@@ -315,20 +315,21 @@ confirmed. No live Salesforce verification was performed.
 - Create: server/src/salesforce/mcp-config.ts
 - Create: tests/server/salesforce-mcp-source.test.ts
 
-- [ ] Implement read-only allowlisted reads for Account, Contract, risk Case,
+- [x] Implement read-only allowlisted reads for Account, Contract, risk Case,
   and call Activity records.
-- [ ] Use the internal roster's Salesforce Account ID for every query. Do not
+- [x] Use the internal roster's Salesforce Account ID for every query. Do not
   query or update Salesforce outside the allowlist.
-- [ ] Normalize MCP pagination and expose whether each query is complete.
-- [ ] Add bounded retries for transient MCP errors; keep the retry limit
+- [x] Normalize MCP pagination and expose whether each query is complete.
+- [x] Add bounded retries for transient MCP errors; keep the retry limit
   configurable.
-- [ ] Reject production mode at startup if required MCP configuration is
+- [x] Reject production mode at startup if required MCP configuration is
   missing. Do not fall back to REST or demo fixtures.
-- [ ] Test permissions errors, incomplete pages, empty results, timeouts,
+- [x] Test permissions errors, incomplete pages, empty results, timeouts,
   retries, and unknown fields with a fake MCP client.
-- [ ] Run focused MCP adapter tests before Task 5.
-- [ ] Manually verify unattended connector access and read-only permissions
-  before enabling production sync.
+- [x] Run focused MCP adapter tests before Task 5.
+- [x] Manually verify unattended connector access and read-only permissions
+  before enabling production sync. **Skipped:** provider calls are forbidden for
+  this work; production remains blocked until this live check is completed.
 
 ### Phase 3: Versioned storage and daily synchronization
 
