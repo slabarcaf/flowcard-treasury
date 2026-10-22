@@ -376,21 +376,21 @@ demo frontend. A protected production review UI requires a separate auth scope.
 - Create: `tests/server/ai-evidence/calibration.test.ts`
 - Create: `tests/server/ai-evidence/qualification.test.ts`
 
-- [ ] Fit a versioned calibration mapping separately for each signal type using
+- [x] Fit a versioned calibration mapping separately for each signal type using
   human-labeled warm-up examples.
-- [ ] Keep calibration-fit examples separate from held-out qualification
+- [x] Keep calibration-fit examples separate from held-out qualification
   examples and production audit outcomes.
-- [ ] Compute per-type precision with the exact one-sided 95% binomial lower
+- [x] Compute per-type precision with the exact one-sided 95% binomial lower
   confidence bound; qualify only when the bound is at least 95%.
-- [ ] Use a rolling 90-day label window and a configured per-type audit quota;
+- [x] Use a rolling 90-day label window and a configured per-type audit quota;
   audit all auto-applied results when a type is below quota.
-- [ ] Require the sample count implied by observed errors; 59 correct out of 59
+- [x] Require the sample count implied by observed errors; 59 correct out of 59
   is the minimum zero-error case.
-- [ ] Start in review-only mode. Promote each type independently; demote a type
+- [x] Start in review-only mode. Promote each type independently; demote a type
   to review-only when the bound fails or the recent sample is insufficient.
-- [ ] Test per-type separation, fit/evaluation separation, confidence bounds,
+- [x] Test per-type separation, fit/evaluation separation, confidence bounds,
   error-dependent sample needs, 90-day expiry, quotas, promotion, and demotion.
-- [ ] Run focused tests before Task 8.
+- [x] Run focused tests before Task 8.
 
 ### Task 8: Integrate the daily runner and customer decision gate
 
