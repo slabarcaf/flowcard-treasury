@@ -11,12 +11,15 @@ import { type ProposedSignalType, type ExtractionResult } from "./types.js";
 import type { TypeQualification } from "./qualification.js";
 import { evaluateCustomerDecisionGate } from "./decision-gate.js";
 import { stableStringify } from "./canonicalize.js";
+import { calibrateScore, type TypeCalibrationMapping } from "./calibration.js";
 
 export interface EvidenceRunnerOptions {
   pool: DatabasePool;
   provider: EvidenceModelProvider;
   packet: EvidencePacketOptions;
   qualifications?: (at: Date) => Promise<Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>>;
+  /** Server-owned calibration mappings. Provider metadata is never authoritative. */
+  calibrations?: (at: Date) => Promise<Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>>;
   now?: () => Date;
 }
 
@@ -61,7 +64,9 @@ export class DailyEvidenceRunner {
     }
 
     const qualifications = await (this.options.qualifications?.(at) ?? Promise.resolve({}));
-    const gate = evaluateCustomerDecisionGate(result, qualifications);
+    const calibrations = await (this.options.calibrations?.(at) ?? Promise.resolve({}));
+    result = applyTrustedCalibration(result, calibrations);
+    const gate = evaluateCustomerDecisionGate(result, qualifications, calibrations);
     const extractionId = await persistExtraction(
       this.options.pool, result, fingerprint, this.options.provider.metadata.configurationVersion,
       gate,
@@ -85,6 +90,31 @@ export class DailyEvidenceRunner {
       failureReason: reason,
     };
   }
+}
+
+function applyTrustedCalibration(
+  result: ExtractionResult,
+  calibrations: Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>,
+): ExtractionResult {
+  if (result.status !== "success") return result;
+  const versions = new Set<string>();
+  const signals = result.signals.map((signal) => {
+    const mapping = calibrations[signal.type];
+    if (!mapping || mapping.signalType !== signal.type) return { ...signal, calibratedScore: null };
+    try {
+      const calibratedScore = calibrateScore(mapping, signal.rawScore);
+      versions.add(mapping.version);
+      return { ...signal, calibratedScore };
+    } catch {
+      // Invalid server calibration configuration fails closed at the decision gate.
+      return { ...signal, calibratedScore: null };
+    }
+  });
+  return {
+    ...result,
+    signals,
+    model: { ...result.model, calibrationVersion: versions.size === 1 ? [...versions][0]! : null },
+  };
 }
 
 function packetFingerprint(packet: { customerId: string; entries: readonly { sourceType: string; fields: Readonly<Record<string, unknown>> }[] }): string {

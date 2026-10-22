@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildPolicyInput } from "../../../server/src/ai-evidence/policy-input.js";
 import type { ExtractionResult } from "../../../server/src/ai-evidence/types.js";
 import type { Signals } from "../../../src/policy/types.js";
+import { fitCalibrationMapping } from "../../../server/src/ai-evidence/calibration.js";
 
 const existing: Signals = { inflowReliability: "yellow", inflowConcentration: "green", cashBuffer: "yellow", trackRecord: "green" };
 const noSignal: ExtractionResult = {
@@ -40,6 +41,8 @@ describe("deterministic policy input boundary", () => {
       errors: 0, precisionLowerBound: 0.95, qualified: true, mode: "auto_apply_with_audit" as const };
     expect(buildPolicyInput(existing, success, { client_payment_dispute: qualification }, {
       client_payment_dispute: { key: "trackRecord", ratingsByValue: { '"confirmed-dispute"': "red" } },
-    })).toMatchObject({ gate: { allowed: true }, signals: { ...existing, trackRecord: "red" } });
+    }, { client_payment_dispute: fitCalibrationMapping("client_payment_dispute", "cal-v1", [
+      { signalType: "client_payment_dispute", rawScore: 0.99, correct: true, labelId: "cal-label-1", labeledAt: "2026-10-22T00:00:00Z" },
+    ]) })).toMatchObject({ gate: { allowed: true }, signals: { ...existing, trackRecord: "red" } });
   });
 });
