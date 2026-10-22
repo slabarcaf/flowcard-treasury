@@ -152,6 +152,27 @@ trigger, then collected before principal. A partial deposit may pay part of the
 fee; principal is queued only after the fee charge
 settles. Balances decrease only when their charges settle.
 
+### Salesforce customer snapshots
+
+The snapshot service keeps a server-owned roster and publishes versioned
+snapshots for explicitly enrolled customers. Demo mode uses synthetic fixtures.
+Production is designed to use the read-only Salesforce MCP only; there is no
+Salesforce REST fallback. Production remains gated until the org field and
+picklist mappings, text limits, and unattended MCP capabilities are confirmed.
+Live MCP access has not been verified.
+
+Operators use the restricted roster CLI to enroll or soft-deactivate customers.
+Deactivation stops future snapshots and new bridge decisions while retaining
+history and allowing open-bridge servicing. A snapshot is fresh for at most 24
+hours. See the [Salesforce snapshot operations guide](/docs/salesforce-snapshot-operations.md)
+for commands, scheduling status, retries, reconciliation, readiness checks, and
+the browser proxy requirement.
+
+The production snapshot endpoint requires a bearer token. The browser client
+does not send that token, and the app has no trusted same-origin server proxy.
+Production browser reads therefore remain fail-closed. Never place the token in
+a `VITE_` variable or expose it to the browser.
+
 ### Kit 5 scenarios
 
 | Scenario | What it shows |

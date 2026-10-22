@@ -502,16 +502,17 @@ production-readiness approval.
 - Modify: docs/EDITING.md
 - Create: docs/salesforce-snapshot-operations.md
 
-- [ ] Document demo fixture mode, production MCP mode, roster enrollment, and
+- [x] Document demo fixture mode, production MCP mode, roster enrollment, and
   soft deactivation.
-- [ ] Document daily schedule, freshness behavior, retry settings, and
+- [x] Document daily schedule, freshness behavior, retry settings, and
   reconciliation output.
-- [ ] Document the required Salesforce field and picklist mapping checks.
-- [ ] Document the production MCP capability gate and explicitly note that
+- [x] Document the required Salesforce field and picklist mapping checks.
+- [x] Document the production MCP capability gate and explicitly note that
   there is no REST fallback.
-- [ ] Run the Markdown source checker on updated documentation.
-- [ ] Move this plan to docs/plans/completed/ after every implementation task
-  and acceptance check is complete.
+- [x] Run the Markdown source checker on updated documentation.
+- [x] Move this plan to `docs/plans/completed/` after every implementation task
+  and acceptance check is complete. The orchestrator will perform the move
+  after review and finalization; the plan remains in its current location now.
 
 ## 8. Acceptance criteria
 
