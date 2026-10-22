@@ -92,6 +92,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/010_remote_a
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/011_remote_authorization_nonce_claims.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/012_remote_authorization_decision_identity.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/013_remote_authorization_dispatch_gate.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/014_ai_evidence_decision_gate.sql
 ```
 
 Set these server environment variables before starting the service:
@@ -246,6 +247,10 @@ running the CLI or evidence runner. See the
 [AI evidence implementation plan](/docs/plans/20261022-ai-evidence-pipeline-implementation-plan.md)
 for the contracts, validation rules, test coverage, and remaining production
 gates.
+
+For existing databases that already applied migration 004, apply migration
+`014_ai_evidence_decision_gate.sql`. Existing extractions default to blocked
+until their server-owned calibration decision is evaluated.
 
 ### Deterministic underwriting policy
 

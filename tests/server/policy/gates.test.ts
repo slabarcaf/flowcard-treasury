@@ -34,7 +34,7 @@ const snapshot = {
 const goodInput = (overrides: Partial<GateInput> = {}): GateInput => ({
   active: true, profile: { customerId: "c1", data: profile }, profileFresh: true,
   snapshot: { customerId: "c1", snapshotId: "s1", data: snapshot }, snapshotFresh: true,
-  evidence: { customerId: "c1", snapshotId: "s1", status: "no_signal" }, mappings, now: new Date("2026-10-22T00:00:00Z"),
+  evidence: { customerId: "c1", snapshotId: "s1", status: "no_signal", decisionAllowed: true }, mappings, now: new Date("2026-10-22T00:00:00Z"),
   ...overrides,
 });
 
@@ -46,7 +46,7 @@ describe("customer policy gates", () => {
   it("blocks inactive, stale, incomplete, mismatched, and unresolved inputs by stable code", () => {
     const result = evaluatePolicyGates(goodInput({
       active: false, profileFresh: false, snapshotFresh: false,
-      evidence: { customerId: "other", snapshotId: "old", status: "failed" },
+      evidence: { customerId: "other", snapshotId: "old", status: "failed", decisionAllowed: true },
     }));
     expect(result.blockers.map(({ code }) => code)).toEqual(expect.arrayContaining([
       "INACTIVE_ENROLLMENT", "PROFILE_STALE", "SNAPSHOT_STALE", "EVIDENCE_CUSTOMER_MISMATCH",
@@ -84,8 +84,9 @@ describe("customer policy gates", () => {
   });
 
   it("blocks unknown review and evidence states without turning no_signal into failure", () => {
-    expect(evaluatePolicyGates(goodInput({ evidence: { customerId: "c1", snapshotId: "s1", status: "no_signal" } })).blockers).toEqual([]);
-    expect(evaluatePolicyGates(goodInput({ evidence: { customerId: "c1", snapshotId: "s1", status: "review_required" } })).blockers).toContainEqual({ code: "EVIDENCE_BLOCKED" });
+    expect(evaluatePolicyGates(goodInput({ evidence: { customerId: "c1", snapshotId: "s1", status: "no_signal", decisionAllowed: true } })).blockers).toEqual([]);
+    expect(evaluatePolicyGates(goodInput({ evidence: { customerId: "c1", snapshotId: "s1", status: "no_signal" } })).blockers).toContainEqual({ code: "EVIDENCE_BLOCKED" });
+    expect(evaluatePolicyGates(goodInput({ evidence: { customerId: "c1", snapshotId: "s1", status: "review_required", decisionAllowed: true } })).blockers).toContainEqual({ code: "EVIDENCE_BLOCKED" });
     const unknown = structuredClone(snapshot);
     unknown.account.creditReviewStatus.value = null;
     expect(evaluatePolicyGates(goodInput({ snapshot: { customerId: "c1", snapshotId: "s1", data: unknown } })).blockers).toContainEqual({ code: "CREDIT_REVIEW_BLOCKED" });

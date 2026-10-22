@@ -2,6 +2,7 @@ import type { FacilityConfig } from "../../../shared/policy/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import type { ExtractionResult, ProposedSignalType } from "../ai-evidence/types.js";
 import type { TypeQualification } from "../ai-evidence/qualification.js";
+import type { TypeCalibrationMapping } from "../ai-evidence/calibration.js";
 import { listActiveCustomersForSnapshots } from "../roster/repository.js";
 import { getCustomerSnapshotReadModel } from "../snapshots/freshness.js";
 import { getCurrentUnderwritingProfile } from "../underwriting/repository.js";
@@ -21,6 +22,7 @@ export async function runDailyPolicyPrechecks(input: {
   facility: FacilityConfig;
   mappings: NoGoMappingReadiness;
   qualifications: Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>;
+  calibrations?: Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>;
   customerIds?: readonly string[];
   now?: Date;
 }): Promise<DailyPrecheckResult[]> {
@@ -47,6 +49,7 @@ async function evaluateCustomerPrecheck(
     facility: FacilityConfig;
     mappings: NoGoMappingReadiness;
     qualifications: Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>;
+    calibrations?: Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>;
   },
   roster: Awaited<ReturnType<typeof listActiveCustomersForSnapshots>>[number],
   now: Date,
@@ -58,8 +61,8 @@ async function evaluateCustomerPrecheck(
     const snapshotRead = await getCustomerSnapshotReadModel(input.pool, roster.customerId, now);
     if (!snapshotRead.snapshot) return { customerId: roster.customerId, status: "waiting", reason: "snapshot_missing" };
 
-    const extraction = await input.pool.query<{ extraction_id: string; configuration_version: string; output: ExtractionResult }>(
-      `SELECT extraction_id, configuration_version, output FROM ai_evidence_extractions
+    const extraction = await input.pool.query<{ extraction_id: string; configuration_version: string; output: ExtractionResult; decision_allowed: boolean | null; decision_block_reason: string | null }>(
+      `SELECT extraction_id, configuration_version, output, decision_allowed, decision_block_reason FROM ai_evidence_extractions
         WHERE customer_id = $1 AND snapshot_id = $2
         ORDER BY created_at DESC, extraction_id DESC LIMIT 1`,
       [roster.customerId, snapshotRead.snapshot.snapshotId],
@@ -70,7 +73,9 @@ async function evaluateCustomerPrecheck(
     const evidence = evidenceRow.output;
     const policyInput = joinPolicyInputs({
       roster, profile: profileRead, snapshot: snapshotRead, evidence,
-      qualifications: input.qualifications, noGoMappings: input.mappings, now,
+      evidenceDecisionAllowed: evidenceRow.decision_allowed === true,
+      qualifications: input.qualifications, calibrations: input.calibrations,
+      noGoMappings: input.mappings, now,
     });
     const repayment = await input.pool.query<{ fully_repaid_on_time: string | number; ledger_sequence: string | number }>(
       `SELECT count(*)::int AS fully_repaid_on_time,

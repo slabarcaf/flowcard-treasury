@@ -31,6 +31,7 @@ const migrationFiles = [
   "011_remote_authorization_nonce_claims.sql",
   "012_remote_authorization_decision_identity.sql",
   "013_remote_authorization_dispatch_gate.sql",
+  "014_ai_evidence_decision_gate.sql",
 ];
 const now = new Date();
 const nowIso = now.toISOString();
@@ -109,7 +110,7 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
       model: { modelId: "synthetic-fixture-v1", promptVersion: "fixture-v1", catalogVersion: "proposed-v1",
         outputSchemaVersion: 1, packetBuilderVersion: "fixture-v1", calibrationVersion: null },
     };
-    extractionId = await persistExtraction(pool, evidence, "a".repeat(64), "fixture-config-v1");
+    extractionId = await persistExtraction(pool, evidence, "a".repeat(64), "fixture-config-v1", { allowed: true });
   }, 30_000);
 
   afterAll(async () => {
@@ -458,7 +459,10 @@ async function seedCustomer(pool: DatabasePool, input: {
     model: { modelId: "synthetic-fixture-v1", promptVersion: "fixture-v1", catalogVersion: "proposed-v1",
       outputSchemaVersion: 1, packetBuilderVersion: "fixture-v1", calibrationVersion: status === "unqualified" ? "cal-v1" : null },
   };
-  await persistExtraction(pool, result, randomUUID().replaceAll("-", "").padEnd(64, "a").slice(0, 64), "fixture-config-v1");
+  const decision = status === "no_signal"
+    ? { allowed: true }
+    : { allowed: false, reason: `Synthetic ${status} fixture is not policy-ready` };
+  await persistExtraction(pool, result, randomUUID().replaceAll("-", "").padEnd(64, "a").slice(0, 64), "fixture-config-v1", decision);
   if (input.profileAgeMs || input.snapshotAgeMs) {
     expected = { status: "evaluated", outcome: "blocked" };
   } else if (status === "unqualified" || status === "review_required") {

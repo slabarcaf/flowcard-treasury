@@ -55,6 +55,8 @@ describe("AI evidence persistence", () => {
   it("defines immutable extraction and reviewer audit history with version and provenance fields", async () => {
     const sql = await readFile(migration, "utf8");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS ai_evidence_extractions");
+    expect(sql).toContain("decision_allowed boolean NOT NULL DEFAULT false");
+    expect(sql).toContain("decision_block_reason text");
     expect(sql).toContain("configuration_version text NOT NULL");
     expect(sql).toContain("evidence_references jsonb NOT NULL");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS ai_evidence_reviews");
@@ -66,24 +68,33 @@ describe("AI evidence persistence", () => {
 
   it("stores the immutable extraction with selected and alternative claims in one transaction", async () => {
     const pool = new EvidencePool();
-    const id = await persistExtraction(pool, extraction(), fingerprint, "model-prompt-catalog-v1");
+    const id = await persistExtraction(pool, extraction(), fingerprint, "model-prompt-catalog-v1", { allowed: false, reason: "Unqualified fixture signal" });
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
     expect(pool.statements.map(({ sql }) => sql)).toEqual([
-      "BEGIN", "INSERT INTO ai_evidence_extractions ( extraction_id, customer_id, snapshot_id, evidence_fingerprint, configuration_version, status, output ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)",
+      "BEGIN", "INSERT INTO ai_evidence_extractions ( extraction_id, customer_id, snapshot_id, evidence_fingerprint, configuration_version, status, decision_allowed, decision_block_reason, output ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)",
       "INSERT INTO ai_evidence_claims (extraction_id, claim_index, signal, evidence_references, is_selected) VALUES ($1, $2, $3::jsonb, $4::jsonb, true)",
       "INSERT INTO ai_evidence_claims (extraction_id, claim_index, signal, evidence_references, is_selected) VALUES ($1, $2, $3::jsonb, $4::jsonb, false)", "COMMIT",
     ]);
-    expect(pool.statements[1]?.values[6]).toContain('"snapshotId"');
+    expect(pool.statements[1]?.values[6]).toBe(false);
+    expect(pool.statements[1]?.values[7]).toBe("Unqualified fixture signal");
+    expect(pool.statements[1]?.values[8]).toContain('"snapshotId"');
     expect(pool.statements[2]?.sql.endsWith("true)")).toBe(true);
     expect(pool.statements[3]?.sql.endsWith("false)")).toBe(true);
+  });
+
+  it("defaults an extraction to decision-blocked when no gate result is supplied", async () => {
+    const pool = new EvidencePool();
+    await persistExtraction(pool, extraction(), fingerprint, "model-prompt-catalog-v1");
+    expect(pool.statements[1]?.values[6]).toBe(false);
+    expect(pool.statements[1]?.values[7]).toBe("Decision gate was not evaluated");
   });
 
   it("rolls back incomplete extraction writes and rejects malformed fingerprints", async () => {
     const pool = new EvidencePool();
     pool.shouldFail = true;
-    await expect(persistExtraction(pool, extraction(), fingerprint, "v1")).rejects.toThrow("injected claim failure");
+    await expect(persistExtraction(pool, extraction(), fingerprint, "v1", { allowed: false, reason: "Fixture failure" })).rejects.toThrow("injected claim failure");
     expect(pool.statements.map(({ sql }) => sql).slice(-1)).toEqual(["ROLLBACK"]);
-    await expect(persistExtraction(pool, extraction(), "not-a-digest", "v1")).rejects.toThrow("SHA-256");
+    await expect(persistExtraction(pool, extraction(), "not-a-digest", "v1", { allowed: false, reason: "Fixture failure" })).rejects.toThrow("SHA-256");
   });
 
   it("records append-only reviewer actions and retrieves the latest matching review", async () => {

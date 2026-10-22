@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { joinPolicyInputs } from "../../../server/src/policy/input.js";
+import { fitCalibrationMapping } from "../../../server/src/ai-evidence/calibration.js";
 import { getDemoSalesforceSnapshot } from "../../../server/src/salesforce/fixture-source.js";
 import type { CustomerRosterEntry } from "../../../server/src/roster/types.js";
 import type { ExtractionResult } from "../../../server/src/ai-evidence/types.js";
@@ -44,7 +45,7 @@ const verifiedMappings: NoGoMappingReadiness = {
 
 describe("policy input join", () => {
   it("joins only canonical policy values and fails closed for unverified demo CRM mappings", () => {
-    const joined = joinPolicyInputs({ roster, profile, snapshot, evidence, qualifications: {}, now: new Date("2026-10-22T12:00:00Z") });
+    const joined = joinPolicyInputs({ roster, profile, snapshot, evidence, evidenceDecisionAllowed: true, qualifications: {}, now: new Date("2026-10-22T12:00:00Z") });
     expect(joined.customerId).toBe(roster.customerId);
     expect(joined.snapshotId).toBe("s1");
     expect(joined.profileId).toBe("p1");
@@ -55,19 +56,19 @@ describe("policy input join", () => {
   });
 
   it("blocks missing or stale source versions and customer-mismatched evidence", () => {
-    const result = joinPolicyInputs({ roster, profile: { ...profile, freshness: "stale" }, snapshot, evidence: { ...evidence, customerId: "other" }, qualifications: {} });
+    const result = joinPolicyInputs({ roster, profile: { ...profile, freshness: "stale" }, snapshot, evidence: { ...evidence, customerId: "other" }, evidenceDecisionAllowed: true, qualifications: {} });
     expect(result.blockers.map(({ code }) => code)).toEqual(expect.arrayContaining(["PROFILE_STALE", "EVIDENCE_CUSTOMER_MISMATCH"]));
   });
 
   it("does not leak evidence text or rationale through the policy signal boundary", () => {
-    const result = joinPolicyInputs({ roster, profile, snapshot, evidence, qualifications: {} });
+    const result = joinPolicyInputs({ roster, profile, snapshot, evidence, evidenceDecisionAllowed: true, qualifications: {} });
     expect(Object.keys(result).sort()).toEqual(["approvedCap", "blockers", "customerId", "humanApprovalRequired", "priorDefault", "profileId", "signals", "snapshotId"].sort());
   });
 
   it("preserves valid no_signal and emits only typed ratings for explicitly mapped evidence", () => {
     const verifiedSnapshot = structuredClone(snapshot);
     verifiedSnapshot.snapshot!.data!.mappingVerified = true;
-    const noSignal = joinPolicyInputs({ roster, profile, snapshot: verifiedSnapshot, evidence, qualifications: {}, noGoMappings: verifiedMappings });
+    const noSignal = joinPolicyInputs({ roster, profile, snapshot: verifiedSnapshot, evidence, evidenceDecisionAllowed: true, qualifications: {}, noGoMappings: verifiedMappings });
     expect(noSignal.blockers).toEqual([]);
     expect(noSignal.signals).toEqual({ inflowReliability: "green", inflowConcentration: "green", cashBuffer: "green", trackRecord: "green" });
 
@@ -81,8 +82,13 @@ describe("policy input join", () => {
     const qualified = { signalType: "client_payment_dispute" as const, calibrationVersion: "cal-v1",
       policyVersion: "one-sided-exact-binomial-95-v1" as const, evaluatedAt: "2026-10-22T00:00:00Z", sampleCount: 59,
       errors: 0, precisionLowerBound: 0.95, qualified: true, mode: "auto_apply_with_audit" as const };
+    const calibration = fitCalibrationMapping("client_payment_dispute", "cal-v1", [
+      { signalType: "client_payment_dispute", rawScore: 0.99, correct: true, labelId: "policy-calibration-1", labeledAt: "2026-10-22T00:00:00Z" },
+    ]);
     const mapped = joinPolicyInputs({ roster, profile, snapshot: verifiedSnapshot, evidence: success,
+      evidenceDecisionAllowed: true,
       qualifications: { client_payment_dispute: qualified }, noGoMappings: verifiedMappings,
+      calibrations: { client_payment_dispute: calibration },
       signalMappings: { client_payment_dispute: { key: "trackRecord", ratingsByValue: { '"confirmed"': "red" } } } });
     expect(mapped.blockers).toEqual([]);
     expect(mapped.signals?.trackRecord).toBe("red");
@@ -96,6 +102,7 @@ describe("policy input join", () => {
     watched.snapshot!.data!.mappingVerified = true;
     watched.snapshot!.data!.account.creditReviewStatus.value = "watch";
     const result = joinPolicyInputs({ roster, profile, snapshot: watched, evidence,
+      evidenceDecisionAllowed: true,
       qualifications: {}, noGoMappings: verifiedMappings });
     expect(result.humanApprovalRequired).toBe(true);
     expect(result.blockers).toContainEqual({ code: "CREDIT_REVIEW_WATCH" });

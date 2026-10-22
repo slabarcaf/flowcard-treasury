@@ -9,6 +9,7 @@ interface FakeState {
   activeHold: boolean;
   customerActive: boolean;
   snapshotFreshness: "fresh" | "missing" | "stale" | "invalid";
+  evidenceDecisionAllowed: boolean;
   bridges: Array<{ id: string; customer_id: string; amount_cents: number; repayment_term?: string; repayment_due_at?: Date | null }>;
   events: Array<Record<string, unknown>>;
   outbox: unknown[];
@@ -21,6 +22,7 @@ class ReservationPool implements DatabasePool {
     activeHold: false,
     customerActive: true,
     snapshotFreshness: "fresh",
+    evidenceDecisionAllowed: true,
     bridges: [],
     events: [{
       id: 1,
@@ -93,6 +95,10 @@ class ReservationPool implements DatabasePool {
             }],
             rowCount: 1,
           } as QueryResult<Row>;
+        }
+        if (text.includes("FROM ai_evidence_extractions")) {
+          return { rows: [{ status: "success", decision_allowed: this.state.evidenceDecisionAllowed,
+            decision_block_reason: "fixture evidence gate blocked" }], rowCount: 1 } as QueryResult<Row>;
         }
         if (text.includes("INSERT INTO bridge_cases")) {
           const [id, customerId, amountCents, repaymentTerm, repaymentDueAt] = values as [string, string, number, string, Date | null];
@@ -287,6 +293,17 @@ describe("USD facility reservations", () => {
     })).rejects.toThrow(`Salesforce snapshot is ${snapshotFreshness}`);
     expect(pool.state.bridges).toHaveLength(0);
     expect(pool.state.events).toHaveLength(1);
+    expect(pool.state.outbox).toHaveLength(0);
+  });
+
+  it("rejects a successful extraction without an allowed decision gate", async () => {
+    const pool = new ReservationPool();
+    pool.state.evidenceDecisionAllowed = false;
+    await expect(reserveBridge(pool, {
+      bridgeId: "00000000-0000-4000-8000-000000000081",
+      customerId: "customer-1", amountCents: 250_000, repaymentTerm: "asap",
+    })).rejects.toThrow("fixture evidence gate blocked");
+    expect(pool.state.bridges).toHaveLength(0);
     expect(pool.state.outbox).toHaveLength(0);
   });
 

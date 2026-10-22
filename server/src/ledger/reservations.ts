@@ -160,8 +160,8 @@ export async function reservePolicyBridge(
     if (snapshot.snapshot.sourceMode !== runtimeSnapshotMode) {
       throw new Error(`Customer Salesforce snapshot source does not match runtime mode ${runtimeSnapshotMode}`);
     }
-    const evidence = await client.query<{ extraction_id: string; status: string }>(
-      `SELECT extraction_id, status FROM ai_evidence_extractions
+    const evidence = await client.query<{ extraction_id: string; status: string; decision_allowed: boolean; decision_block_reason: string | null }>(
+      `SELECT extraction_id, status, decision_allowed, decision_block_reason FROM ai_evidence_extractions
         WHERE customer_id = $1 AND snapshot_id = $2
         ORDER BY created_at DESC, extraction_id DESC LIMIT 1 FOR SHARE`,
       [input.customerId, snapshot.snapshot.snapshotId],
@@ -169,6 +169,9 @@ export async function reservePolicyBridge(
     const currentEvidence = evidence.rows[0];
     if (!currentEvidence || !["success", "no_signal"].includes(currentEvidence.status)) {
       throw new Error("Current AI evidence is missing or unresolved");
+    }
+    if (currentEvidence.decision_allowed !== true) {
+      throw new Error(currentEvidence.decision_block_reason || "Current AI evidence decision gate is unresolved");
     }
     const openBridge = await client.query<{ id: string }>(
       `SELECT id FROM bridge_cases WHERE customer_id = $1
@@ -326,6 +329,18 @@ export async function reserveBridge(
     }
     if (customerSnapshot.snapshot?.sourceMode !== runtimeSnapshotMode) {
       throw new Error(`Customer Salesforce snapshot source does not match runtime mode ${runtimeSnapshotMode}`);
+    }
+    const evidenceGate = await client.query<{ status: string; decision_allowed: boolean; decision_block_reason: string | null }>(
+      `SELECT status, decision_allowed, decision_block_reason
+         FROM ai_evidence_extractions
+        WHERE customer_id = $1 AND snapshot_id = $2
+        ORDER BY created_at DESC, extraction_id DESC
+        LIMIT 1 FOR SHARE`,
+      [input.customerId, customerSnapshot.snapshot!.snapshotId],
+    );
+    const latestEvidence = evidenceGate.rows[0];
+    if (!latestEvidence || !["success", "no_signal"].includes(latestEvidence.status) || latestEvidence.decision_allowed !== true) {
+      throw new Error(latestEvidence?.decision_block_reason || "Customer AI evidence decision gate is unresolved");
     }
     const deployableCents = Number(facility.deployable_cents);
     if (!Number.isSafeInteger(deployableCents) || deployableCents < 0) {

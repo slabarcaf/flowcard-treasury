@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS ai_evidence_extractions (
   evidence_fingerprint text NOT NULL CHECK (evidence_fingerprint ~ '^[a-f0-9]{64}$'),
   configuration_version text NOT NULL CHECK (length(btrim(configuration_version)) > 0),
   status text NOT NULL CHECK (status IN ('success', 'no_signal', 'review_required', 'unmapped', 'failed')),
+  decision_allowed boolean NOT NULL DEFAULT false,
+  decision_block_reason text,
   output jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (customer_id, snapshot_id, configuration_version),

@@ -36,7 +36,7 @@ export interface GateInput {
   profileFresh: boolean;
   snapshot: { data: SalesforceCustomerSnapshot; customerId: string; snapshotId: string } | null;
   snapshotFresh: boolean;
-  evidence: { customerId: string; snapshotId: string; status: "success" | "no_signal" | "review_required" | "unmapped" | "failed" } | null;
+  evidence: { customerId: string; snapshotId: string; status: "success" | "no_signal" | "review_required" | "unmapped" | "failed"; decisionAllowed?: boolean } | null;
   mappings?: NoGoMappingReadiness;
   now?: Date;
 }
@@ -82,6 +82,7 @@ export function evaluatePolicyGates(input: GateInput): GateResult {
   else {
     if (input.evidence.customerId !== input.profile?.customerId) add("EVIDENCE_CUSTOMER_MISMATCH");
     if (input.evidence.snapshotId !== input.snapshot?.snapshotId) add("EVIDENCE_SNAPSHOT_MISMATCH");
+    if (input.evidence.decisionAllowed !== true) add("EVIDENCE_BLOCKED");
     if (input.evidence.status === "review_required" || input.evidence.status === "unmapped" || input.evidence.status === "failed") add("EVIDENCE_BLOCKED");
   }
   if (input.profile) {

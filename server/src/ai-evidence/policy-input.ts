@@ -1,6 +1,7 @@
 import type { ExtractionResult, ProposedSignalType } from "./types.js";
 import type { TypeQualification } from "./qualification.js";
 import { evaluateCustomerDecisionGate } from "./decision-gate.js";
+import type { TypeCalibrationMapping } from "./calibration.js";
 
 /** Structural mirror of the existing Signals contract, kept local to the server tsconfig. */
 export interface Signals {
@@ -26,11 +27,9 @@ export function buildPolicyInput(
   result: ExtractionResult,
   qualificationByType: Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>,
   approvedMappings: ApprovedSignalMappings = SOURCE_APPROVED_SIGNAL_MAPPINGS,
+  calibrationByType: Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>> = {},
 ): PolicyInputResult {
-  if (result.unmapped.length > 0) {
-    return { gate: { allowed: false, reason: "Evidence contains an unmapped signal" }, signals: null };
-  }
-  const gate = evaluateCustomerDecisionGate(result, qualificationByType);
+  const gate = evaluateCustomerDecisionGate(result, qualificationByType, calibrationByType);
   if (!gate.allowed) return { gate, signals: null };
   if (result.status === "no_signal") return { gate, signals: { ...existing } };
   const next: Signals = { ...existing };

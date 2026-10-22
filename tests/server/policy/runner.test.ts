@@ -23,6 +23,7 @@ const mappings: NoGoMappingReadiness = {
 
 class FakePool implements DatabasePool {
   writes: readonly unknown[][] = [];
+  decisionAllowed: boolean | undefined = true;
   async query<Row>(sql: string, values: readonly unknown[] = []): Promise<QueryResult<Row>> {
     if (sql.includes("SELECT customer_id, salesforce_account_id") && sql.includes("FROM customer_roster")) {
       return { rows: ["acct_bloom001", customerId].map((id) => ({
@@ -55,7 +56,8 @@ class FakePool implements DatabasePool {
         canonical_payload: snapshotData, attempt_run_id: "snapshot-run-1", attempt_status: "succeeded", attempt_finished_at: now,
       }] as Row[], rowCount: 1 };
     }
-    if (sql.includes("FROM ai_evidence_extractions")) return { rows: [{ extraction_id: evidenceId, configuration_version: "config-v1", output: evidence }] as Row[], rowCount: 1 };
+    if (sql.includes("FROM ai_evidence_extractions")) return { rows: [{ extraction_id: evidenceId, configuration_version: "config-v1", output: evidence,
+      decision_allowed: this.decisionAllowed, decision_block_reason: this.decisionAllowed ? null : "fixture gate denied" }] as Row[], rowCount: 1 };
     if (sql.includes("FROM bridge_cases bridge")) return { rows: [{ fully_repaid_on_time: 0, ledger_sequence: 1 }] as Row[], rowCount: 1 };
     if (sql.includes("INSERT INTO policy_evaluations")) {
       this.writes = [...this.writes, values];
@@ -89,4 +91,16 @@ describe("daily policy runner", () => {
       evidenceRunId: evidenceId, evidenceCatalogVersion: "proposed-v1",
     });
   });
+
+  it.each([false, undefined])("rejects stored evidence with decision_allowed=%s even when output is no_signal", async (decisionAllowed) => {
+    const pool = new FakePool();
+    pool.decisionAllowed = decisionAllowed;
+    const results = await runDailyPolicyPrechecks({
+      pool, now, mappings, qualifications: {},
+      facility: { facilitySize: 1_000_000, reserveFloorPct: 0.2, maxPerCustomerPct: 0.2, feeRatePer30Days: 0, minHistoryDays: 90 },
+    });
+    expect(results.find(({ customerId: id }) => id === customerId)).toMatchObject({ status: "evaluated", outcome: "blocked" });
+    expect(pool.writes).toHaveLength(1);
+  });
+
 });

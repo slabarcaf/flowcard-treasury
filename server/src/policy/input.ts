@@ -1,6 +1,7 @@
 import { buildPolicyInput, type ApprovedSignalMappings, type Signals } from "../ai-evidence/policy-input.js";
 import type { ExtractionResult, ProposedSignalType } from "../ai-evidence/types.js";
 import type { TypeQualification } from "../ai-evidence/qualification.js";
+import type { TypeCalibrationMapping } from "../ai-evidence/calibration.js";
 import type { SalesforceCustomerSnapshot } from "../salesforce/types.js";
 import type { UnderwritingProfileData } from "../underwriting/types.js";
 import type { CurrentProfileReadModel } from "../underwriting/repository.js";
@@ -25,7 +26,9 @@ export function joinPolicyInputs(input: {
   profile: CurrentProfileReadModel;
   snapshot: CustomerSnapshotReadModel;
   evidence: ExtractionResult | null;
+  evidenceDecisionAllowed?: boolean;
   qualifications: Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>;
+  calibrations?: Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>;
   signalMappings?: ApprovedSignalMappings;
   noGoMappings?: NoGoMappingReadiness;
   now?: Date;
@@ -40,7 +43,7 @@ export function joinPolicyInputs(input: {
     profileFresh: input.profile.freshness === "fresh",
     snapshot: payload && snapshot ? { customerId: input.snapshot.customerId, snapshotId: snapshot.snapshotId, data: payload } : null,
     snapshotFresh: input.snapshot.freshness === "fresh",
-    evidence: input.evidence,
+    evidence: input.evidence ? { ...input.evidence, decisionAllowed: input.evidenceDecisionAllowed === true } : null,
     mappings: input.noGoMappings,
     now: input.now,
   });
@@ -49,7 +52,7 @@ export function joinPolicyInputs(input: {
   const calculationAllowed = gate.blockers.every(({ code }) => code === "CREDIT_REVIEW_WATCH");
   if (calculationAllowed && input.evidence) {
     const policyInput = baseline
-      ? buildPolicyInput(baseline, input.evidence, input.qualifications, input.signalMappings)
+      ? buildPolicyInput(baseline, input.evidence, input.qualifications, input.signalMappings, input.calibrations)
       : null;
     if (policyInput?.gate.allowed) signals = policyInput.signals;
     else gate.blockers.push({ code: "EVIDENCE_BLOCKED" });

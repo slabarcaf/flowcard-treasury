@@ -1,5 +1,6 @@
 import type { ExtractionResult, ProposedSignalType } from "./types.js";
 import type { TypeQualification } from "./qualification.js";
+import { calibrateScore, type TypeCalibrationMapping } from "./calibration.js";
 
 export type CustomerDecisionGate =
   | { allowed: true; reason: null }
@@ -9,6 +10,7 @@ export type CustomerDecisionGate =
 export function evaluateCustomerDecisionGate(
   result: ExtractionResult,
   qualificationByType: Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>,
+  calibrationByType: Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>> = {},
 ): CustomerDecisionGate {
   if (result.status === "review_required") return { allowed: false, reason: "Evidence requires reviewer resolution" };
   if (result.status === "unmapped") return { allowed: false, reason: "Evidence contains an unmapped signal" };
@@ -19,9 +21,15 @@ export function evaluateCustomerDecisionGate(
     if (!qualification?.qualified || qualification.mode !== "auto_apply_with_audit") {
       return { allowed: false, reason: `Signal type ${signal.type} is not qualified` };
     }
-    if (signal.calibratedScore === null || !result.model.calibrationVersion ||
-        qualification.calibrationVersion !== result.model.calibrationVersion) {
+    const calibration = calibrationByType[signal.type];
+    if (!calibration || calibration.signalType !== signal.type ||
+        calibration.version !== qualification.calibrationVersion) {
       return { allowed: false, reason: `Signal type ${signal.type} lacks a matching qualified calibration score` };
+    }
+    try {
+      calibrateScore(calibration, signal.rawScore);
+    } catch {
+      return { allowed: false, reason: `Signal type ${signal.type} has an invalid calibration mapping` };
     }
   }
   return { allowed: true, reason: null };

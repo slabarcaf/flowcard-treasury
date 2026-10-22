@@ -10,12 +10,15 @@ import { applyReviewToNextExtraction } from "./review.js";
 import { type ProposedSignalType, type ExtractionResult } from "./types.js";
 import type { TypeQualification } from "./qualification.js";
 import { evaluateCustomerDecisionGate } from "./decision-gate.js";
+import { calibrateScore, type TypeCalibrationMapping } from "./calibration.js";
 
 export interface EvidenceRunnerOptions {
   pool: DatabasePool;
   provider: EvidenceModelProvider;
   packet: EvidencePacketOptions;
   qualifications?: (at: Date) => Promise<Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>>;
+  /** Server-owned calibrations; provider scores and calibration metadata are untrusted. */
+  calibrations?: (at: Date) => Promise<Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>>;
   now?: () => Date;
 }
 
@@ -46,7 +49,7 @@ export class DailyEvidenceRunner {
       const failed = this.failedResult(customer.customerId, readModel.snapshot.snapshotId, packetResult.reason);
       const extractionId = await persistExtraction(this.options.pool, failed,
         createHash("sha256").update(`${customer.customerId}\u0000${readModel.snapshot.snapshotId}\u0000${packetResult.reason}`).digest("hex"),
-        this.options.provider.metadata.configurationVersion);
+        this.options.provider.metadata.configurationVersion, { allowed: false, reason: packetResult.reason });
       return { customerId: customer.customerId, status: "failed", allowed: false, reason: packetResult.reason, extractionId };
     }
     const packet = packetResult.packet;
@@ -60,9 +63,11 @@ export class DailyEvidenceRunner {
     }
 
     const qualifications = await (this.options.qualifications?.(at) ?? Promise.resolve({}));
-    const gate = evaluateCustomerDecisionGate(result, qualifications);
+    const calibrations = await (this.options.calibrations?.(at) ?? Promise.resolve({}));
+    result = applyTrustedCalibration(result, calibrations);
+    const gate = evaluateCustomerDecisionGate(result, qualifications, calibrations);
     const extractionId = await persistExtraction(
-      this.options.pool, result, fingerprint, this.options.provider.metadata.configurationVersion,
+      this.options.pool, result, fingerprint, this.options.provider.metadata.configurationVersion, gate,
     );
     return {
       customerId: customer.customerId,
@@ -83,6 +88,30 @@ export class DailyEvidenceRunner {
       failureReason: reason,
     };
   }
+}
+
+function applyTrustedCalibration(
+  result: ExtractionResult,
+  calibrations: Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>,
+): ExtractionResult {
+  if (result.status !== "success") return result;
+  const versions = new Set<string>();
+  const signals = result.signals.map((signal) => {
+    const mapping = calibrations[signal.type];
+    if (!mapping || mapping.signalType !== signal.type) return { ...signal, calibratedScore: null };
+    try {
+      const calibratedScore = calibrateScore(mapping, signal.rawScore);
+      versions.add(mapping.version);
+      return { ...signal, calibratedScore };
+    } catch {
+      return { ...signal, calibratedScore: null };
+    }
+  });
+  return {
+    ...result,
+    signals,
+    model: { ...result.model, calibrationVersion: versions.size === 1 ? [...versions][0]! : null },
+  };
 }
 
 function packetFingerprint(packet: { customerId: string; entries: readonly { sourceType: string; fields: Readonly<Record<string, unknown>> }[] }): string {

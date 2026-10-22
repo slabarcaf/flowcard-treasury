@@ -16,6 +16,7 @@ interface State {
   requestDecisions: Map<string, readonly unknown[]>;
   failOutbox: boolean;
   evidenceRunId: string;
+  evidenceAllowed: boolean;
 }
 
 class PolicyReservationPool implements DatabasePool {
@@ -29,6 +30,7 @@ class PolicyReservationPool implements DatabasePool {
     requestDecisions: new Map(),
     failOutbox: false,
     evidenceRunId: "evidence-1",
+    evidenceAllowed: true,
   };
   private transaction: State | null = null;
   private locked = false;
@@ -93,7 +95,7 @@ class PolicyReservationPool implements DatabasePool {
           }]);
         }
         if (text.includes("FROM ai_evidence_extractions")) {
-          return rows<Row>([{ extraction_id: state.evidenceRunId, status: "success" }]);
+          return rows<Row>([{ extraction_id: state.evidenceRunId, status: "success", decision_allowed: state.evidenceAllowed, decision_block_reason: "fixture blocked" }]);
         }
         if (text.includes("FROM bridge_cases AS bridge") && text.includes("JOIN provider_operations")) {
           const bridge = state.bridges.find((item) => item.id === values[0]);
@@ -224,6 +226,17 @@ describe("transactional policy reservation", () => {
 
     expect(result.reservation).toBeNull();
     expect(pool.state.evaluations).toHaveLength(2);
+    expect(pool.state.bridges).toHaveLength(0);
+    expect(pool.state.outbox).toHaveLength(0);
+  });
+
+  it("rejects reservation when successful evidence has no allowed decision gate", async () => {
+    const pool = new PolicyReservationPool();
+    pool.state.evidenceAllowed = false;
+    await expect(reservePolicyBridge(pool, input(async () => ({
+      decision: decision("auto_approved", 1_000_000),
+      precheck: readyPrecheck(),
+    })))).rejects.toThrow("fixture blocked");
     expect(pool.state.bridges).toHaveLength(0);
     expect(pool.state.outbox).toHaveLength(0);
   });

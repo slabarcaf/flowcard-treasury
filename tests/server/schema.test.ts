@@ -34,6 +34,10 @@ const remoteAuthorizationDispatchGateMigrationUrl = new URL(
   "../../server/src/db/migrations/013_remote_authorization_dispatch_gate.sql",
   import.meta.url,
 );
+const aiEvidenceDecisionGateMigrationUrl = new URL(
+  "../../server/src/db/migrations/014_ai_evidence_decision_gate.sql",
+  import.meta.url,
+);
 
 describe("bridge ledger schema", () => {
   it("defines the required tables and enforces core constraints", async () => {
@@ -137,4 +141,11 @@ describe("bridge ledger schema", () => {
     expect(sql).toContain("authorization_request_id text");
     expect(sql).toContain("dispatch_ready boolean NOT NULL DEFAULT true");
   });
+
+  it("adds fail-closed decision columns to existing evidence schemas", async () => {
+    const sql = await readFile(aiEvidenceDecisionGateMigrationUrl, "utf8");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS decision_allowed boolean NOT NULL DEFAULT false");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS decision_block_reason text");
+  });
+
 });
