@@ -444,13 +444,19 @@ Salesforce completeness state and does not write to the roster.
 - Modify: src/kit5/scenarios.ts
 - Create: tests/kit5/salesforce-snapshot-client.test.ts
 
-- [ ] Select synthetic fixtures in demo mode and the server read API in
+- [x] Select synthetic fixtures in demo mode and the server read API in
   production mode.
-- [ ] Keep Salesforce MCP credentials on the server; never place them in the
+- [x] Keep Salesforce MCP credentials on the server; never place them in the
   browser bundle.
-- [ ] Keep the existing mock extraction panel and policy behavior unchanged.
-- [ ] Test deterministic demo behavior and production client error handling.
-- [ ] Run focused client tests before Task 10.
+- [x] Keep the existing mock extraction panel and policy behavior unchanged.
+- [x] Test deterministic demo behavior and production client error handling.
+- [x] Run focused client tests before Task 10.
+
+Implementation note: the browser-safe production client calls only the server
+read API and sends no credentials. The current API's production bearer-token
+gate therefore remains fail-closed (401) until a trusted same-origin server
+proxy is available; no token is exposed to the browser and no fixture fallback
+is attempted in production. Demo mode reads the deterministic local fixtures.
 
 #### Task 10 (TASK-010): Verify snapshot acceptance and production readiness
 

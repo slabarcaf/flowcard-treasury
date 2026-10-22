@@ -9,6 +9,8 @@ import type { DashboardState } from '../state/types.js';
 export interface ScenarioCustomer extends CustomerProfile {
   /** Short key that events use to refer to this customer. */
   key: string;
+  /** Stable roster ID used only to read the customer's Salesforce snapshot. */
+  salesforceSnapshotCustomerId?: string;
   /** One-line AI rationale shown when the bridge is funded or sent for approval. */
   rationale?: string;
   /**

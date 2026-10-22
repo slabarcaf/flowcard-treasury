@@ -69,6 +69,39 @@ export interface CrmNote {
 }
 
 // ---------------------------------------------------------------------------
+// Salesforce snapshot read API
+// ---------------------------------------------------------------------------
+
+import type { SalesforceCustomerSnapshot } from '../../server/src/salesforce/types.js';
+
+export type SalesforceSnapshotSourceMode = 'demo' | 'production_mcp';
+export type SalesforceSnapshotFreshness = 'fresh' | 'missing' | 'stale' | 'invalid' | 'deactivated';
+
+/** Browser-safe shape returned by the server's read-only snapshot endpoint. */
+export interface SalesforceSnapshotReadModel {
+  customerId: string;
+  active: boolean;
+  freshness: SalesforceSnapshotFreshness;
+  ageSeconds: number | null;
+  snapshot: null | {
+    snapshotId: string;
+    version: number;
+    capturedAt: string;
+    publishedAt: string;
+    sourceMode: SalesforceSnapshotSourceMode;
+    schemaVersion: number;
+    mappingVersion: string;
+    data: SalesforceCustomerSnapshot | null;
+  };
+  latestAttempt: null | { status: 'succeeded' | 'failed'; finishedAt: string };
+  validationErrors: string[];
+}
+
+export interface SalesforceSnapshotClient {
+  getSnapshot(customerId: string): Promise<SalesforceSnapshotReadModel>;
+}
+
+// ---------------------------------------------------------------------------
 // Agent types
 // ---------------------------------------------------------------------------
 
