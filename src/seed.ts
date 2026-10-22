@@ -51,6 +51,7 @@ export const CUSTOMERS: Record<string, CustomerProfile> = {
     monthlyInflow: 40_000,
     signals: bloomSignals,
     historyDays: 730, // 2 years
+    fullyRepaidOnTimeBridges: 0,
     noGo: {
       excludedIndustry: false,
       fraudFlag: false,
@@ -65,6 +66,7 @@ export const CUSTOMERS: Record<string, CustomerProfile> = {
     monthlyInflow: 20_000,
     signals: atlasSignals,
     historyDays: 365,
+    fullyRepaidOnTimeBridges: 3,
     noGo: {
       excludedIndustry: false,
       fraudFlag: false,
@@ -79,6 +81,7 @@ export const CUSTOMERS: Record<string, CustomerProfile> = {
     monthlyInflow: 35_000,
     signals: novaSignals,
     historyDays: 180,
+    fullyRepaidOnTimeBridges: 3,
     noGo: {
       excludedIndustry: false,
       fraudFlag: false,
@@ -98,6 +101,7 @@ export const CUSTOMERS: Record<string, CustomerProfile> = {
       trackRecord: 'yellow',
     },
     historyDays: 41,
+    fullyRepaidOnTimeBridges: 0,
     noGo: {
       excludedIndustry: false,
       fraudFlag: false,

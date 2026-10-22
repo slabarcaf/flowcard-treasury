@@ -180,4 +180,33 @@ describe("Airwallex remote authorization v2 route", () => {
     expect(result.status).toBe(200);
     expect(result.json).toMatchObject({ card_transaction_event_id: eventId, response_status: "DECLINED", status_reason: "policy_timeout_or_unavailable" });
   });
+
+  it("never confirms dispatch when an authorization reservation resolves after timeout", async () => {
+    let finish!: (value: { responseStatus: "AUTHORIZED"; statusReason: string }) => void;
+    const resolve = vi.fn(() => new Promise<{ responseStatus: "AUTHORIZED"; statusReason: string }>((done) => { finish = done; }));
+    const confirmDispatch = vi.fn(async () => true);
+    const result = await invoke(signedRequest(now), {
+      sharedSecret: secret, resolve, claimNonce: nonceClaimer(), confirmDispatch, now, resolutionBudgetMs: 5,
+    });
+    expect(result.json).toMatchObject({ response_status: "DECLINED", status_reason: "policy_timeout_or_unavailable" });
+    finish({ responseStatus: "AUTHORIZED", statusReason: "policy_approved" });
+    await new Promise((done) => setTimeout(done, 0));
+    expect(confirmDispatch).not.toHaveBeenCalled();
+  });
+
+  it("writes AUTHORIZED before waiting on a delayed dispatch-gate commit", async () => {
+    const result = response();
+    let releaseCommit!: (confirmed: boolean) => void;
+    const confirmDispatch = vi.fn(() => new Promise<boolean>((resolve) => { releaseCommit = resolve; }));
+    const handling = handleRemoteAuthorization(signedRequest(now), result as unknown as ServerResponse, {
+      sharedSecret: secret,
+      resolve: async () => ({ responseStatus: "AUTHORIZED", statusReason: "policy_approved" }),
+      claimNonce: nonceClaimer(), confirmDispatch, now, resolutionBudgetMs: 100,
+    });
+    await new Promise((done) => setTimeout(done, 0));
+    expect(JSON.parse(result.body)).toMatchObject({ response_status: "AUTHORIZED" });
+    expect(confirmDispatch).toHaveBeenCalledTimes(1);
+    releaseCommit(true);
+    await handling;
+  });
 });

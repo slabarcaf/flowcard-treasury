@@ -1,7 +1,7 @@
 import { loadConfig } from "./config.js";
 import { createHttpServer } from "./http/server.js";
 import { createDatabasePool } from "./db/pool.js";
-import { HttpAirwallexGateway } from "./airwallex/client.js";
+import { HttpAirwallexGateway, HttpAirwallexUnderwritingGateway } from "./airwallex/client.js";
 import { WebhookInboxWorker } from "./webhooks/worker.js";
 import { ReconciliationWorker } from "./reconciliation/worker.js";
 import { OutboxWorker } from "./outbox/worker.js";
@@ -17,9 +17,14 @@ import {
   createRemoteAuthorizationApprovalRevalidator,
   createRemoteAuthorizationResolver,
   createRemoteAuthorizationNonceClaimer,
+  confirmRemoteAuthorizationDispatch,
   resolveStoredRemoteAuthorizationDecision,
 } from "./policy/remote-authorization.js";
 import { runDailyPolicyPrechecks } from "./policy/runner.js";
+import { publishDemoUnderwritingProfiles } from "./underwriting/demo-fixtures.js";
+import { runDailyUnderwritingProfileBuild } from "./underwriting/runner.js";
+import { recordFailedProfileAttempt } from "./underwriting/publisher.js";
+import { randomUUID } from "node:crypto";
 
 if (process.argv[2] === "policy-approval") {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -95,6 +100,7 @@ if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo") {
   const dailyPolicyWorker = {
     async run() {
       const snapshotResult = await snapshotWorker.run();
+      await publishDemoUnderwritingProfiles(pool);
       const results = await runDailyPolicyPrechecks({
         pool,
         facility: { facilitySize: 50_000, reserveFloorPct: 20, maxPerCustomerPct: 0.2,
@@ -121,6 +127,30 @@ if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo") {
   process.on("SIGINT", () => snapshotSchedule.stop());
 } else if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "production_mcp") {
   console.error("Production Salesforce snapshots are disabled: this server has no trusted host MCP runtime binding");
+  const underwritingGateway = new HttpAirwallexUnderwritingGateway({
+    baseUrl: process.env.AIRWALLEX_BASE_URL?.trim() || "https://api.sandbox.airwallex.com",
+    clientId: config.airwallexClientId,
+    apiKey: config.airwallexApiKey,
+  });
+  const dailyUnderwritingWorker = {
+    async run() {
+      const results = await runDailyUnderwritingProfileBuild({ pool, gateway: underwritingGateway, runId: randomUUID() });
+      for (const result of results) {
+        await recordFailedProfileAttempt(pool, {
+          customerId: result.customerId, runId: result.candidate.runId, sourceMode: "production",
+          startedAt: result.candidate.startedAt, finishedAt: new Date(),
+          sourceVersions: result.candidate.sourceVersions, queryCompletion: result.candidate.queryCompletion,
+          errorMessage: result.failure ?? "Trusted expected deposit dates are unavailable",
+        });
+      }
+    },
+  };
+  const underwritingSchedule = startDemoSnapshotSync(dailyUnderwritingWorker, {
+    runAtUtc: snapshotDailyRunTime(),
+    onError: (error) => console.error("Production Airwallex underwriting sync failed", error),
+  });
+  process.on("SIGTERM", () => underwritingSchedule.stop());
+  process.on("SIGINT", () => underwritingSchedule.stop());
 }
 const remoteAuthorizationResolver = createRemoteAuthorizationResolver({
   pool,
@@ -135,6 +165,7 @@ const server = createHttpServer(
   (requestId) => resolveStoredRemoteAuthorizationDecision(pool, requestId),
   remoteAuthorizationResolver,
   remoteAuthorizationNonceClaimer,
+  (request, signal) => confirmRemoteAuthorizationDispatch(pool, request, signal),
 );
 server.listen(config.port, "0.0.0.0", () => {
   console.log(`Bridge ledger server listening on port ${config.port}`);

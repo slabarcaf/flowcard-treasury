@@ -8,7 +8,7 @@ import { handleCustomerSnapshot, requestAuthorization } from "./routes/customer-
 import { handleLedgerProjection } from "./routes/ledger-projection.js";
 import { handleBridgeDecision } from "./routes/bridge-decision.js";
 import type { TrustedBridgeDecisionResult } from "./routes/bridge-decision.js";
-import { handleRemoteAuthorization, type RemoteAuthorizationNonceClaimer, type RemoteAuthorizationResolver } from "./routes/remote-authorization.js";
+import { handleRemoteAuthorization, type RemoteAuthorizationDispatchConfirmer, type RemoteAuthorizationNonceClaimer, type RemoteAuthorizationResolver } from "./routes/remote-authorization.js";
 import { timingSafeEqual } from "node:crypto";
 
 export function createHttpServer(
@@ -18,8 +18,9 @@ export function createHttpServer(
   resolveBridgeDecision?: (requestId: string) => Promise<TrustedBridgeDecisionResult>,
   resolveRemoteAuthorization?: RemoteAuthorizationResolver,
   claimRemoteAuthorizationNonce?: RemoteAuthorizationNonceClaimer,
+  confirmRemoteAuthorizationDispatch?: RemoteAuthorizationDispatchConfirmer,
 ): Server {
-  return createServer(createRequestHandler(config, pool, webhookWorker, resolveBridgeDecision, resolveRemoteAuthorization, claimRemoteAuthorizationNonce));
+  return createServer(createRequestHandler(config, pool, webhookWorker, resolveBridgeDecision, resolveRemoteAuthorization, claimRemoteAuthorizationNonce, confirmRemoteAuthorizationDispatch));
 }
 
 /** Exposed so route wiring can be tested directly without opening a TCP listener. */
@@ -30,6 +31,7 @@ export function createRequestHandler(
   resolveBridgeDecision?: (requestId: string) => Promise<TrustedBridgeDecisionResult>,
   resolveRemoteAuthorization?: RemoteAuthorizationResolver,
   claimRemoteAuthorizationNonce?: RemoteAuthorizationNonceClaimer,
+  confirmRemoteAuthorizationDispatch?: RemoteAuthorizationDispatchConfirmer,
 ): RequestListener {
   return (request, response) => {
     if (request.method === "POST" && request.url === "/api/remote-authorization") {
@@ -37,6 +39,7 @@ export function createRequestHandler(
         sharedSecret: config.airwallexRemoteAuthorizationSecret,
         resolve: resolveRemoteAuthorization,
         claimNonce: claimRemoteAuthorizationNonce,
+        confirmDispatch: confirmRemoteAuthorizationDispatch,
       });
       return;
     }

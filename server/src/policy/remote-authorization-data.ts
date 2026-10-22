@@ -242,6 +242,29 @@ export async function claimRequest(
   };
 }
 
+/** Release a reserved transfer only after the route has selected AUTHORIZED before its deadline. */
+export async function confirmRemoteAuthorizationDispatch(
+  pool: Pick<DatabasePool, "query">,
+  request: AirwallexRemoteAuthorizationV2,
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (signal.aborted) return false;
+  const result = await pool.query(
+    `UPDATE outbox_commands AS outbox
+        SET dispatch_ready = true
+       FROM provider_operations AS operation,
+            remote_authorization_requests AS request
+      WHERE operation.id = outbox.provider_operation_id
+        AND operation.authorization_request_id = request.card_transaction_event_id
+        AND request.card_transaction_event_id = $1
+        AND request.response_status = 'AUTHORIZED'
+        AND outbox.command_type = 'create_bridge_transfer'
+        AND outbox.status = 'queued'`,
+    [request.cardTransactionEventId],
+  );
+  return !signal.aborted && result.rowCount === 1;
+}
+
 export async function completeRequest(
   pool: DatabasePool,
   eventId: string,

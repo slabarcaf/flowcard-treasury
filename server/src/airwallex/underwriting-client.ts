@@ -26,7 +26,11 @@ export class HttpAirwallexUnderwritingGateway implements AirwallexUnderwritingGa
   }) {}
 
   async createPlatformReport(input: { type: "TRANSACTION_RECON_REPORT"; fromDate: string; toDate: string }) {
-    const data = await this.request<Record<string, unknown>>("/api/v1/platform_reports/create", { method: "POST", body: JSON.stringify({ report_type: input.type, from_date: input.fromDate, to_date: input.toDate }) });
+    const data = await this.request<Record<string, unknown>>("/api/v1/platform_reports/create", { method: "POST", body: JSON.stringify({
+      file_format: "CSV", type: input.type,
+      from_created_at: `${input.fromDate}T00:00:00+0000`,
+      to_created_at: `${input.toDate}T00:00:00+0000`,
+    }) });
     const reportId = stringField(data, "report_id", "id");
     if (!reportId) throw new Error("Airwallex report creation returned an invalid response");
     return { reportId };
@@ -60,10 +64,8 @@ export class HttpAirwallexUnderwritingGateway implements AirwallexUnderwritingGa
     }
     const response = await (this.options.fetcher ?? fetch)(target, { method: "GET", signal: AbortSignal.timeout(15_000), redirect: "error" });
     if (!response.ok) throw new ProviderHttpError(response.status, `Airwallex report download failed (${response.status})`);
-    const data: unknown = await response.json();
-    if (Array.isArray(data)) return data;
-    if (typeof data === "object" && data !== null && Array.isArray((data as Record<string, unknown>).items)) return (data as { items: unknown[] }).items;
-    throw new Error("Airwallex report download returned an invalid payload");
+    const csv = await response.text();
+    return parseReportCsv(csv);
   }
 
   async getConnectedAccount(accountId: string) {
@@ -115,7 +117,46 @@ export class HttpAirwallexUnderwritingGateway implements AirwallexUnderwritingGa
 function isAllowedReportHost(hostname: string, baseUrl: string): boolean {
   const host = hostname.toLowerCase();
   const apiHost = new URL(baseUrl).hostname.toLowerCase();
-  return host === apiHost || host.endsWith(".airwallex.com") || host.endsWith(".amazonaws.com");
+  return host === apiHost || host === "storage.googleapis.com" || host.endsWith(".airwallex.com") || host.endsWith(".amazonaws.com");
+}
+
+/** Parse provider CSV without losing quoted commas, escaped quotes, or embedded newlines. */
+export function parseReportCsv(csv: string): Record<string, string>[] {
+  if (csv.length > 100_000_000) throw new Error("Airwallex report exceeds the supported size");
+  const records: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  let afterQuote = false;
+  for (let index = 0; index < csv.length; index++) {
+    const char = csv[index]!;
+    if (quoted) {
+      if (char === '"' && csv[index + 1] === '"') { field += '"'; index++; }
+      else if (char === '"') { quoted = false; afterQuote = true; }
+      else field += char;
+      continue;
+    }
+    if (afterQuote && char !== ',' && char !== '\n' && char !== '\r') throw new Error("Airwallex report contains malformed CSV quoting");
+    if (char === '"') {
+      if (field.length) throw new Error("Airwallex report contains malformed CSV quoting");
+      quoted = true;
+    } else if (char === ',') { row.push(field); field = ""; afterQuote = false; }
+    else if (char === '\n' || char === '\r') {
+      row.push(field); records.push(row); row = []; field = "";
+      afterQuote = false;
+      if (char === '\r' && csv[index + 1] === '\n') index++;
+    } else field += char;
+  }
+  if (quoted) throw new Error("Airwallex report contains an unterminated CSV field");
+  if (field.length || row.length) { row.push(field); records.push(row); }
+  while (records.length && records[records.length - 1]!.every((value) => value === "")) records.pop();
+  if (!records.length) throw new Error("Airwallex report CSV is empty");
+  const headers = records.shift()!.map((header) => header.replace(/^\uFEFF/, "").trim());
+  if (headers.some((header) => !header) || new Set(headers).size !== headers.length) throw new Error("Airwallex report contains invalid CSV headers");
+  return records.map((values) => {
+    if (values.length !== headers.length) throw new Error("Airwallex report contains a malformed CSV row");
+    return Object.fromEntries(headers.map((header, index) => [header, values[index]!]));
+  });
 }
 
 async function resolvePublicAddresses(hostname: string): Promise<string[]> {

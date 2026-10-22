@@ -91,6 +91,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_r
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/011_remote_authorization_nonce_claims.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/012_remote_authorization_decision_identity.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/013_remote_authorization_dispatch_gate.sql
 ```
 
 Set these server environment variables before starting the service:

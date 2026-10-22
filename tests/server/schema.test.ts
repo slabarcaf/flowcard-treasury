@@ -30,6 +30,10 @@ const remoteAuthorizationDecisionIdentityMigrationUrl = new URL(
   "../../server/src/db/migrations/012_remote_authorization_decision_identity.sql",
   import.meta.url,
 );
+const remoteAuthorizationDispatchGateMigrationUrl = new URL(
+  "../../server/src/db/migrations/013_remote_authorization_dispatch_gate.sql",
+  import.meta.url,
+);
 
 describe("bridge ledger schema", () => {
   it("defines the required tables and enforces core constraints", async () => {
@@ -126,5 +130,11 @@ describe("bridge ledger schema", () => {
     expect(sql).toContain("merchant_category_code text NOT NULL");
     expect(sql).not.toContain("raw_body");
     expect(sql).not.toContain("merchant_name");
+  });
+
+  it("gates policy transfer dispatch until remote authorization is confirmed", async () => {
+    const sql = await readFile(remoteAuthorizationDispatchGateMigrationUrl, "utf8");
+    expect(sql).toContain("authorization_request_id text");
+    expect(sql).toContain("dispatch_ready boolean NOT NULL DEFAULT true");
   });
 });

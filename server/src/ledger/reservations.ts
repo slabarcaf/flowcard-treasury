@@ -237,9 +237,9 @@ export async function reservePolicyBridge(
       [input.bridgeId, input.customerId, decision.amountCents, input.repaymentTerm, input.repaymentDueAt ?? null, requestId],
     );
     await client.query(
-      `INSERT INTO provider_operations (id, bridge_id, operation_type, request_id, status, amount_cents, currency)
-       VALUES ($1, $2, 'bridge', $3, 'created', $4, 'USD')`,
-      [providerOperationId, input.bridgeId, requestId, decision.amountCents],
+      `INSERT INTO provider_operations (id, bridge_id, operation_type, request_id, status, amount_cents, currency, authorization_request_id)
+       VALUES ($1, $2, 'bridge', $3, 'created', $4, 'USD', $5)`,
+      [providerOperationId, input.bridgeId, requestId, decision.amountCents, input.requestId],
     );
     const appended = await appendLedgerEvent(client, {
       eventType: "bridge_reserved",
@@ -251,8 +251,8 @@ export async function reservePolicyBridge(
     });
     if (!appended) throw new Error("Bridge reservation event already exists");
     await client.query(
-      `INSERT INTO outbox_commands (provider_operation_id, command_type, payload)
-       VALUES ($1, 'create_bridge_transfer', $2::jsonb)`,
+      `INSERT INTO outbox_commands (provider_operation_id, command_type, payload, dispatch_ready)
+       VALUES ($1, 'create_bridge_transfer', $2::jsonb, false)`,
       [providerOperationId, JSON.stringify({
         bridgeId: input.bridgeId, amountCents: decision.amountCents, currency: "USD", requestId,
       })],

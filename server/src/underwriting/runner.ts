@@ -6,7 +6,7 @@ import type { UnderwritingProfileCandidate } from "./types.js";
 
 interface ActiveRosterRow { customer_id: string; airwallex_connected_account_id: string; }
 interface RepaymentRow { customer_id: string; due_at: Date | null; repaid_at: Date | null; status: string; }
-export interface DailyProfileResult { customerId: string; candidate: UnderwritingProfileCandidate; publishable: false; blockedReason: "expected_inflow_dates_unavailable"; }
+export interface DailyProfileResult { customerId: string; candidate: UnderwritingProfileCandidate; publishable: false; blockedReason: "expected_inflow_dates_unavailable" | "account_source_failed"; failure?: string; }
 
 /** Builds the daily source snapshot. It deliberately does not publish incomplete reliability profiles. */
 export async function runDailyUnderwritingProfileBuild(input: {
@@ -19,11 +19,19 @@ export async function runDailyUnderwritingProfileBuild(input: {
   const capturedAt = input.now ?? new Date();
   const windowEnd = new Date(Date.UTC(capturedAt.getUTCFullYear(), capturedAt.getUTCMonth(), capturedAt.getUTCDate()));
   const windowStart = new Date(windowEnd.getTime() - 90 * 86_400_000);
-  const rosterRows = await input.pool.query<ActiveRosterRow>(
-    `SELECT customer_id, airwallex_connected_account_id
-       FROM customer_roster WHERE is_active ORDER BY customer_id`,
-  );
-  const roster = rosterRows.rows.map((row) => ({
+  const rosterRows: ActiveRosterRow[] = [];
+  let afterCustomerId: string | null = null;
+  while (true) {
+    const page: { rows: ActiveRosterRow[] } = await input.pool.query<ActiveRosterRow>(
+      `SELECT customer_id, airwallex_connected_account_id
+         FROM customer_roster WHERE is_active AND ($1::text IS NULL OR customer_id > $1)
+        ORDER BY customer_id LIMIT 1000`, [afterCustomerId],
+    );
+    rosterRows.push(...page.rows);
+    if (page.rows.length < 1000) break;
+    afterCustomerId = page.rows[page.rows.length - 1]!.customer_id;
+  }
+  const roster = rosterRows.map((row) => ({
     customerId: row.customer_id,
     airwallexConnectedAccountId: row.airwallex_connected_account_id,
     isActive: true,
@@ -44,7 +52,8 @@ export async function runDailyUnderwritingProfileBuild(input: {
   )).rows : [];
   const repayments = groupRepayments(repaymentRows);
   return roster.map((customer) => {
-    const sourceCompletion = (pages: number) => ({ complete: pages > 0, pages });
+    const failure = sources.sourceFailures.get(customer.customerId);
+    const sourceCompletion = (pages: number) => ({ complete: !failure && pages > 0, pages: failure ? 0 : pages });
     const candidate = buildProfileCandidate({
       customerId: customer.customerId,
       runId: input.runId,
@@ -72,7 +81,9 @@ export async function runDailyUnderwritingProfileBuild(input: {
         repayments: sourceCompletion(1),
       },
     });
-    return { customerId: customer.customerId, candidate, publishable: false, blockedReason: "expected_inflow_dates_unavailable" };
+    return failure
+      ? { customerId: customer.customerId, candidate, publishable: false, blockedReason: "account_source_failed", failure }
+      : { customerId: customer.customerId, candidate, publishable: false, blockedReason: "expected_inflow_dates_unavailable" };
   });
 }
 

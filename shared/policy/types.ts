@@ -95,6 +95,8 @@ export interface CustomerProfile {
   monthlyInflow: number;
   signals: Signals;
   historyDays: number;
+  /** Explicit fixture/profile count of fully repaid on-time bridges; absent means none. */
+  fullyRepaidOnTimeBridges?: number;
   noGo: {
     excludedIndustry: boolean;
     fraudFlag: boolean;

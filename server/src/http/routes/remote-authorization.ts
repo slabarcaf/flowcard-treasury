@@ -37,6 +37,10 @@ export type RemoteAuthorizationNonceClaimer = (
   nonce: string,
   receivedAt: Date,
 ) => Promise<"claimed" | "exact_retry" | "replay_mismatch">;
+export type RemoteAuthorizationDispatchConfirmer = (
+  request: AirwallexRemoteAuthorizationV2,
+  signal: AbortSignal,
+) => Promise<boolean>;
 
 /** Airwallex remote authorization v2 endpoint. Unknown and unsafe requests decline. */
 export async function handleRemoteAuthorization(
@@ -46,6 +50,7 @@ export async function handleRemoteAuthorization(
     sharedSecret?: string;
     resolve?: RemoteAuthorizationResolver;
     claimNonce?: RemoteAuthorizationNonceClaimer;
+    confirmDispatch?: (request: AirwallexRemoteAuthorizationV2, signal: AbortSignal) => Promise<boolean>;
     now?: Date;
     maxAgeMs?: number;
     resolutionBudgetMs?: number;
@@ -95,8 +100,10 @@ export async function handleRemoteAuthorization(
   }
 
   let result: RemoteAuthorizationDecision = { responseStatus: "DECLINED", statusReason: "policy_unavailable" };
+  let dispatchSignal: AbortSignal | undefined;
   if (options.resolve) {
     const controller = new AbortController();
+    dispatchSignal = controller.signal;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       result = await Promise.race([
@@ -115,6 +122,16 @@ export async function handleRemoteAuthorization(
     }
   }
   send(response, 200, providerResponse(parsed.cardTransactionEventId, result.responseStatus, result.statusReason));
+  // The outbox stays unclaimable until after the selected provider response has
+  // been written. A late or timed-out resolver can therefore never release it.
+  if (result.responseStatus === "AUTHORIZED" && options.confirmDispatch && dispatchSignal && !dispatchSignal.aborted) {
+    try {
+      const confirmed = await options.confirmDispatch(parsed, dispatchSignal);
+      if (!confirmed) console.error("Remote authorization response was sent but its transfer outbox gate was not released");
+    } catch (error) {
+      console.error("Remote authorization response was sent but its transfer outbox gate failed", error);
+    }
+  }
 }
 
 export function fingerprintRemoteAuthorizationRequest(request: AirwallexRemoteAuthorizationV2): string {

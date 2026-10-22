@@ -25,7 +25,7 @@ export async function dispatchOne(pool: DatabasePool, gateway: AirwallexGateway)
               outbox.payload, outbox.attempts
          FROM outbox_commands AS outbox
          JOIN provider_operations AS operation ON operation.id = outbox.provider_operation_id
-        WHERE outbox.status = 'queued' AND outbox.available_at <= now()
+        WHERE outbox.status = 'queued' AND outbox.dispatch_ready AND outbox.available_at <= now()
         ORDER BY outbox.id
         LIMIT 1 FOR UPDATE OF outbox SKIP LOCKED`,
     );

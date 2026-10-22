@@ -197,6 +197,19 @@ describe('shared demo decision fixtures', () => {
     snapshot: 'fresh', evidence: 'no_signal', creditReview: 'approved', priorDefault: 'no', ...overrides,
   });
 
+  it('applies profile repayment counts through the shared starter multiplier in both engines', () => {
+    const starterInput = { ...base, profile: { ...profile, fullyRepaidOnTimeBridges: 0 }, readiness: readiness() };
+    const promotedInput = { ...base, profile: { ...profile, fullyRepaidOnTimeBridges: 3 }, readiness: readiness() };
+    const dashboardStarter = evaluateDashboardCustomerPolicy(starterInput);
+    const kit5Starter = evaluateKit5CustomerPolicy(starterInput);
+    const dashboardPromoted = evaluateDashboardCustomerPolicy(promotedInput);
+    const kit5Promoted = evaluateKit5CustomerPolicy(promotedInput);
+    expect(dashboardStarter).toEqual(kit5Starter);
+    expect(dashboardPromoted).toEqual(kit5Promoted);
+    expect(dashboardStarter.creditLine).toBe(2_000);
+    expect(dashboardPromoted.creditLine).toBe(6_000);
+  });
+
   it.each([
     ['stale snapshot', readiness({ snapshot: 'stale' }), 'blocked', 'SNAPSHOT_STALE'],
     ['review-required evidence', readiness({ evidence: 'review_required' }), 'blocked', 'EVIDENCE_REVIEW_REQUIRED'],

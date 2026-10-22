@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import type { AirwallexGateway } from "../../../server/src/airwallex/client.js";
+import { dispatchOne } from "../../../server/src/outbox/dispatcher.js";
 import { createDatabasePool, type DatabasePool } from "../../../server/src/db/pool.js";
 import { persistExtraction } from "../../../server/src/ai-evidence/repository.js";
 import type { ExtractionResult } from "../../../server/src/ai-evidence/types.js";
@@ -11,7 +12,7 @@ import { publishCustomerSnapshot } from "../../../server/src/snapshots/publisher
 import { publishCustomerProfile } from "../../../server/src/underwriting/publisher.js";
 import { UNDERWRITING_FEATURE_VERSION, UNDERWRITING_PROFILE_SCHEMA_VERSION, type UnderwritingProfileCandidate } from "../../../server/src/underwriting/types.js";
 import { runDailyPolicyPrechecks } from "../../../server/src/policy/runner.js";
-import { createRemoteAuthorizationNonceClaimer, createRemoteAuthorizationResolver } from "../../../server/src/policy/remote-authorization.js";
+import { confirmRemoteAuthorizationDispatch, createRemoteAuthorizationNonceClaimer, createRemoteAuthorizationResolver } from "../../../server/src/policy/remote-authorization.js";
 import type { NoGoMappingReadiness } from "../../../server/src/policy/gates.js";
 import type { SalesforceCustomerSnapshot } from "../../../server/src/salesforce/types.js";
 import { getDemoSalesforceSnapshot } from "../../../server/src/salesforce/fixture-source.js";
@@ -28,6 +29,7 @@ const migrationFiles = [
   "010_remote_authorization_nonce_fingerprint.sql",
   "011_remote_authorization_nonce_claims.sql",
   "012_remote_authorization_decision_identity.sql",
+  "013_remote_authorization_dispatch_gate.sql",
 ];
 const now = new Date();
 const nowIso = now.toISOString();
@@ -164,6 +166,16 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
     expect(storedClaim.rows[0]).toMatchObject({ nonce_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/), nonce: null });
     const outcome = await resolve(request, nonce, new AbortController().signal);
     expect(outcome).toEqual({ responseStatus: "AUTHORIZED", statusReason: "auto_approved" });
+    const blockedOutbox = await pool.query<{ dispatch_ready: boolean }>("SELECT dispatch_ready FROM outbox_commands");
+    expect(blockedOutbox.rows).toEqual([{ dispatch_ready: false }]);
+    const blockedGateway = {
+      getTransferByRequestId: vi.fn(), getChargeByRequestId: vi.fn(),
+      createTransfer: vi.fn(), createCharge: vi.fn(),
+    } as unknown as AirwallexGateway;
+    expect(await dispatchOne(pool, blockedGateway)).toBe(false);
+    expect(blockedGateway.getTransferByRequestId).not.toHaveBeenCalled();
+    const dispatchGate = new AbortController();
+    expect(await confirmRemoteAuthorizationDispatch(pool, request, dispatchGate.signal)).toBe(true);
 
     const exactRetry = await resolve(request, nonce, new AbortController().signal);
     expect(exactRetry).toEqual(outcome);
@@ -194,9 +206,9 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
     const reservation = await pool.query<{ amount_cents: number; customer_id: string }>(
       `SELECT amount_cents::int AS amount_cents, customer_id FROM bridge_cases WHERE customer_id = $1`, [customerId]);
     expect(reservation.rows).toEqual([{ amount_cents: 10000, customer_id: customerId }]);
-    const outbox = await pool.query<{ command_type: string; payload: { amountCents: number } }>(
-      `SELECT command_type, payload FROM outbox_commands`);
-    expect(outbox.rows).toEqual([{ command_type: "create_bridge_transfer", payload: expect.objectContaining({ amountCents: 10000 }) }]);
+    const outbox = await pool.query<{ command_type: string; payload: { amountCents: number }; dispatch_ready: boolean }>(
+      `SELECT command_type, payload, dispatch_ready FROM outbox_commands`);
+    expect(outbox.rows).toEqual([{ command_type: "create_bridge_transfer", payload: expect.objectContaining({ amountCents: 10000 }), dispatch_ready: true }]);
   });
 
   it("accepts only evidence types whose qualification is backed by enough exact audit examples", () => {

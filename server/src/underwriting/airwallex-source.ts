@@ -20,6 +20,7 @@ export interface ProfileSourceData {
   transactions: LedgerTransaction[];
   balances: BalancePoint[];
   standings: Map<string, AccountStanding>;
+  sourceFailures: Map<string, string>;
   queryPages: { transactions: number; balances: number; account: number; expectedInflows: number };
   sourceVersions: { transactions: string; balances: string; account: string; expected_inflows: string; repayments: string };
 }
@@ -56,8 +57,10 @@ export async function loadAirwallexProfileSources(
 
   const balances: BalancePoint[] = [];
   const standings = new Map<string, AccountStanding>();
+  const sourceFailures = new Map<string, string>();
   let balancePages = 0;
   for (const entry of roster) {
+    try {
     const account = await withBoundedRetries(() => gateway.getConnectedAccount(entry.accountId));
     const status = normalizeAccountStatus(account.status);
     const rfiRows: unknown[] = [];
@@ -93,9 +96,12 @@ export async function loadAirwallexProfileSources(
         }
       }
     }
+    } catch (error) {
+      sourceFailures.set(entry.customerId, error instanceof Error ? error.message.slice(0, 300) : "Airwallex account source failed");
+    }
   }
   return {
-    transactions, balances, standings,
+    transactions, balances, standings, sourceFailures,
     queryPages: { transactions: 1, balances: Math.max(balancePages, 1), account: Math.max(roster.length, 1), expectedInflows: 1 },
     sourceVersions: { transactions: "TRANSACTION_RECON_REPORT:v1", balances: "balances-history:v1", account: "accounts-rfi:v1", expected_inflows: "expected-inflows-unavailable:v1", repayments: "internal-ledger:v1" },
   };
@@ -120,11 +126,11 @@ function parseTransaction(value: unknown): LedgerTransaction | null {
   const id = requiredString(value, "transaction_id", "id");
   const timestamp = requiredString(value, "settled_at", "posted_at", "transaction_date");
   const occurredAt = new Date(timestamp);
-  const amount = numberField(value, "amount", "net");
+  const amount = numberField(value, "settlement_amount", "net_amount");
   const currency = requiredString(value, "currency").toUpperCase();
   const status = requiredString(value, "status").toLowerCase();
-  const sourceType = requiredString(value, "source_type", "transaction_type").toLowerCase();
-  const direction = String(value.direction ?? value.type ?? "").toLowerCase();
+  const sourceType = requiredString(value, "financial_transaction_type", "type").toLowerCase();
+  const direction = sourceType;
   if (!accountId || !id || !Number.isFinite(occurredAt.getTime()) || amount === null || !currency || !status || !sourceType) throw new Error("Airwallex transaction report contains an incomplete row");
   const kind = direction.includes("credit") || direction === "inbound" ? "credit" : direction.includes("debit") || direction === "outbound" ? "debit" : amount >= 0 ? "credit" : "debit";
   const cents = Math.round(Math.abs(amount) * 100);
@@ -156,5 +162,15 @@ function isOpenPolicyRfi(value: unknown): boolean {
 function normalizePayerKey(value: string): string { return value.trim().toLocaleLowerCase("en-US").replace(/\s+/g, " "); }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function requiredString(value: Record<string, unknown>, ...keys: string[]): string { for (const key of keys) if (typeof value[key] === "string" && (value[key] as string).trim()) return (value[key] as string).trim(); return ""; }
-function numberField(value: Record<string, unknown>, ...keys: string[]): number | null { for (const key of keys) if (typeof value[key] === "number" && Number.isFinite(value[key])) return value[key] as number; return null; }
+function numberField(value: Record<string, unknown>, ...keys: string[]): number | null {
+  for (const key of keys) {
+    const raw = value[key];
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    if (typeof raw === "string" && raw.trim() && /^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/.test(raw.trim())) {
+      const parsed = Number(raw.replaceAll(",", ""));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
 function safeSourceError(error: unknown): Error { return new Error(error instanceof Error ? error.message.replace(/https?:\/\/\S+/gi, "[redacted-url]").replace(/Bearer\s+\S+/gi, "Bearer [redacted]").slice(0, 300) : "Airwallex underwriting source failed"); }

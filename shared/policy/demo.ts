@@ -112,7 +112,9 @@ export function evaluateDemoPolicy(input: {
   }
 
   const tier = assignTier(input.profile.signals);
-  const creditLine = computeCreditLine(tier, input.profile.monthlyInflow, input.facility);
+  const fullyRepaidOnTimeBridges = input.profile.fullyRepaidOnTimeBridges ?? 0;
+  const creditLine = computeCreditLine(tier, input.profile.monthlyInflow, input.facility,
+    input.profile.signals, { fullyRepaidOnTimeBridges });
   const bridge = checkBridge({
     shortfall: input.shortfall,
     creditLine,
