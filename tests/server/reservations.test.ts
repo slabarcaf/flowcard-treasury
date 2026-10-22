@@ -264,7 +264,7 @@ describe("USD facility reservations", () => {
     expect(pool.state.deployable).toBe(1_250_000);
   });
 
-  it("blocks unresolved evidence per customer until an operator disposition is recorded", async () => {
+  it("blocks unresolved evidence until an allowed result is persisted for the active snapshot", async () => {
     const pool = new ReservationPool();
     pool.state.evidenceStatus = "unmapped";
     const blocked = { bridgeId: "00000000-0000-4000-8000-000000000021", customerId: "customer-1",
@@ -273,6 +273,11 @@ describe("USD facility reservations", () => {
     expect(pool.state.bridges).toHaveLength(0);
 
     pool.state.evidenceReviewed = true;
+    await expect(reserveBridge(pool, blocked)).rejects.toThrow("AI evidence decision gate is unresolved");
+    expect(pool.state.bridges).toHaveLength(0);
+
+    pool.state.evidenceStatus = "success";
+    pool.state.evidenceDecisionAllowed = true;
     await expect(reserveBridge(pool, blocked)).resolves.toMatchObject({ bridgeId: blocked.bridgeId });
     const otherCustomerPool = new ReservationPool();
     await expect(reserveBridge(otherCustomerPool, { ...blocked, bridgeId: "00000000-0000-4000-8000-000000000022",
