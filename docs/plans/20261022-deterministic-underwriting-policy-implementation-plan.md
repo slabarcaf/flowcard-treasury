@@ -357,17 +357,17 @@ provider operation unless all checks still pass.
 - Create: `tests/server/underwriting/repository.test.ts`
 - Create: `tests/server/underwriting/publisher.test.ts`
 
-- [ ] Define the allowlisted profile schema, source versions, 90-day window,
+- [x] Define the allowlisted profile schema, source versions, 90-day window,
   per-query completion, capture time, source mode, and feature version.
-- [ ] Store immutable profile versions and a current pointer per customer.
-- [ ] Publish each customer profile atomically; retain the previous version and
+- [x] Store immutable profile versions and a current pointer per customer.
+- [x] Publish each customer profile atomically; retain the previous version and
   mark the current attempt failed when any required query or validation fails.
-- [ ] Use active roster customers only and process records in batches of at
+- [x] Use active roster customers only and process records in batches of at
   most 1,000.
-- [ ] Enforce a maximum profile age of 24 hours for new decisions.
-- [ ] Test atomic publication, completeness, freshness, failure isolation,
+- [x] Enforce a maximum profile age of 24 hours for new decisions.
+- [x] Test atomic publication, completeness, freshness, failure isolation,
   unknown-versus-zero values, and source version retention.
-- [ ] Run focused profile persistence tests before Task 3.
+- [x] Run focused profile persistence tests before Task 3.
 
 ### Task 3: Build daily Airwallex profile sources and features
 
