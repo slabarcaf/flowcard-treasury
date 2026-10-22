@@ -3,6 +3,7 @@ import {
   SALESFORCE_FIELDS,
   SALESFORCE_MAPPING_VERSION,
   assertSupportedSchemaVersion,
+  boundedText,
   mapAccountRecord,
   mapCallActivityRecord,
   mapCaseRecord,
@@ -11,7 +12,6 @@ import {
   requireVerifiedMapping,
 } from "../../server/src/salesforce/field-map.js";
 import {
-  boundText,
   isProductionMappingVerified,
   parseTextLengthConfig,
   requireProductionSalesforceReadiness,
@@ -108,8 +108,8 @@ describe("Salesforce snapshot validation and text configuration", () => {
     expect(() => parseTextLengthConfig({ SALESFORCE_MAX_CASE_TEXT_LENGTH: "0" })).toThrow(/positive integer/);
     expect(() => requireProductionSalesforceReadiness({ maxCaseTextLength: 1200, maxActivityTextLength: 500 })).toThrow(/mapping .* provisional/);
     expect(() => requireProductionSalesforceReadiness({ maxCaseTextLength: 1200, maxActivityTextLength: null })).toThrow(/text length limits/);
-    expect(boundText("abcdef", 3, "note")).toBe("abc");
-    expect(boundText(null, null, "note")).toBeNull();
-    expect(() => boundText("abc", null, "note")).toThrow(/not configured/);
+    expect(boundedText("abcdef", 3, "note")).toBe("abc");
+    expect(boundedText(null, null, "note")).toBeNull();
+    expect(() => boundedText("abc", null, "note")).toThrow(/not configured/);
   });
 });

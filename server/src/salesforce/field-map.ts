@@ -50,6 +50,13 @@ export const SALESFORCE_FIELDS = {
 } as const;
 
 export const PICKLIST_VALUES = {
+  contractStatus: {
+    Activated: "active",
+    Draft: "inactive",
+    Inactive: "inactive",
+    Expired: "expired",
+    Terminated: "terminated",
+  } satisfies Record<string, SalesforceContractSnapshot["status"]["value"] & string>,
   customerStatus: {
     Active: "active",
     Paused: "paused",
@@ -96,7 +103,7 @@ export type PicklistName = keyof typeof PICKLIST_VALUES;
 
 type SalesforceRecord = Record<string, unknown>;
 
-function boundedText(value: unknown, maxLength: number | null, name: string): string | null {
+export function boundedText(value: unknown, maxLength: number | null, name: string): string | null {
   if (value === null || value === undefined) return null;
   if (typeof value !== "string") throw new Error(`${name} must be text or null`);
   if (maxLength === null) throw new Error(`${name} text length limit is not configured`);
@@ -145,12 +152,9 @@ export function mapAccountRecord(record: SalesforceRecord): SalesforceAccountSna
 export function mapContractRecord(record: SalesforceRecord): SalesforceContractSnapshot {
   const id = requiredRecordId(record);
   const metadata = source(record, id);
-  const rawStatus = record[SALESFORCE_FIELDS.contract.status];
-  const statuses = { Activated: "active", Draft: "inactive", Inactive: "inactive", Expired: "expired", Terminated: "terminated" } as const;
-  if (rawStatus !== null && rawStatus !== undefined && (typeof rawStatus !== "string" || !(rawStatus in statuses))) throw new Error(`Unrecognized contract status picklist value: ${String(rawStatus)}`);
   return {
     ...metadata,
-    status: { value: rawStatus === null || rawStatus === undefined ? null : statuses[rawStatus as keyof typeof statuses], source: metadata },
+    status: { value: mapPicklist("contractStatus", record[SALESFORCE_FIELDS.contract.status]), source: metadata },
     endDate: { value: optionalDate(record, SALESFORCE_FIELDS.contract.endDate), source: metadata },
   };
 }
