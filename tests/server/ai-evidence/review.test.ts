@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyReviewToNextExtraction } from "../../../server/src/ai-evidence/review.js";
+import { applyReviewToNextExtraction, applyReviewToNextExtractionWithProvenance } from "../../../server/src/ai-evidence/review.js";
 import type { ExtractionResult } from "../../../server/src/ai-evidence/types.js";
 import type { EvidencePacket } from "../../../server/src/ai-evidence/packet.js";
 
@@ -28,7 +28,6 @@ describe("next-run evidence review application", () => {
   it("applies a correction to a later snapshot without mutating the prior model output", () => {
     const prior = result("snapshot-1");
     const current = result("snapshot-2", "success");
-    current.signals[0]!.value = { disputed: false };
     const corrected = { ...signal, value: { disputed: false } };
     const applied = applyReviewToNextExtraction(current, prior, {
       extractionId: "reviewed-1", reviewerId: "ramil", action: "corrected", correctedSignal: corrected,
@@ -49,6 +48,17 @@ describe("next-run evidence review application", () => {
     expect(applyReviewToNextExtraction(current, prior, {
       extractionId: "reviewed-1", reviewerId: "ramil", action: "corrected", correctedSignal: unsupportedQuote,
     }, packet)).toMatchObject({ status: "review_required" });
+  });
+
+  it("requires a new review when the model output changed after a correction was recorded", () => {
+    const prior = result("snapshot-1");
+    const changed = result("snapshot-2", "success");
+    changed.signals[0]!.value = { disputed: false };
+    const applied = applyReviewToNextExtractionWithProvenance(changed, prior, {
+      extractionId: "reviewed-1", reviewerId: "ramil", action: "corrected", correctedSignal: { ...signal, value: { disputed: false } },
+    }, packet);
+    expect(applied.result).toMatchObject({ status: "review_required" });
+    expect(applied.exactReviewerResolution).toBe(false);
   });
 
   it("keeps cleared claims and unrelated evidence blocked until a claim-level review is available", () => {
@@ -81,9 +91,31 @@ describe("next-run evidence review application", () => {
     const changed = result("snapshot-2", "success");
     changed.signals[0]!.value = { disputed: false };
 
-    expect(applyReviewToNextExtraction(changed, prior, {
+    const applied = applyReviewToNextExtractionWithProvenance(changed, prior, {
       extractionId: "reviewed-1", reviewerId: "ramil", action: "confirmed",
-    }, packet)).toMatchObject({ status: "review_required", signals: [{ value: { disputed: false } }] });
+    }, packet);
+    expect(applied.result).toMatchObject({ status: "review_required", signals: [{ value: { disputed: false } }] });
+    expect(applied.exactReviewerResolution).toBe(false);
+  });
+
+  it("marks only the exact matching reviewer-confirmed result for manual policy use", () => {
+    const prior = result("snapshot-1");
+    const same = result("snapshot-2");
+    const applied = applyReviewToNextExtractionWithProvenance(same, prior, {
+      extractionId: "reviewed-1", reviewerId: "configured-reviewer", action: "confirmed",
+    }, packet);
+    expect(applied).toMatchObject({ result: { status: "success" }, exactReviewerResolution: true });
+
+    const changed = result("snapshot-2");
+    changed.signals[0]!.quotes[0]!.quote = "Northstar Supply disputed the invoice";
+    expect(applyReviewToNextExtractionWithProvenance(changed, prior, {
+      extractionId: "reviewed-1", reviewerId: "configured-reviewer", action: "confirmed",
+    }, packet).exactReviewerResolution).toBe(false);
+
+    const unmapped = { ...result("snapshot-2", "unmapped"), unmapped: [{ type: "future_signal", value: true, evidence: [] }] };
+    expect(applyReviewToNextExtraction(unmapped, prior, {
+      extractionId: "reviewed-1", reviewerId: "configured-reviewer", action: "confirmed",
+    }, packet)).toMatchObject({ status: "unmapped" });
   });
 
   it("rejects review reuse on the same snapshot or a different customer", () => {
@@ -95,6 +127,9 @@ describe("next-run evidence review application", () => {
     expect(() => applyReviewToNextExtraction(result("snapshot-2"), differentCustomer, {
       extractionId: "reviewed-1", reviewerId: "ramil", action: "confirmed",
     }, packet)).toThrow("later snapshot");
+    expect(() => applyReviewToNextExtraction(result("snapshot-2"), result("snapshot-1"), {
+      extractionId: "reviewed-1", reviewerId: "ramil", action: "confirmed",
+    }, { ...packet, customerId: "customer-other" })).toThrow("packet must match");
   });
 
   it("keeps failed extraction blocked until extraction is retried successfully", () => {

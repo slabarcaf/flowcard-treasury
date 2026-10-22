@@ -66,8 +66,18 @@ function AgentBanner({ phase, onReveal, onReEvaluate }: {
 }
 
 export function CustomerDetailPanel({ detail, onBloomReveal, onBloomReEvaluate, onApprove, showCollection, collectionRows }: Props) {
+  const outcome = detail.status === 'Pending approval' ? 'Human review required' : detail.status;
+  const outcomeColor = ['Blocked', 'Ineligible', 'Declined'].includes(detail.status)
+    ? 'text-red-700 bg-red-50 border-red-200'
+    : detail.status === 'Pending approval'
+      ? 'text-amber-800 bg-amber-50 border-amber-200'
+      : 'text-gray-700 bg-white border-gray-200';
   return (
     <div className="bg-gray-50 border-t border-gray-200 px-6 py-5 space-y-4 animate-panel-in">
+      <div className={`inline-flex items-center gap-2 border rounded-md px-3 py-1.5 text-sm font-medium ${outcomeColor}`}>
+        <span>Outcome</span>
+        <span>{outcome}</span>
+      </div>
       {/* Underwriting pipeline flowchart */}
       <UnderwritingPipeline precheck={detail.precheck} perRequest={detail.perRequest} />
 
@@ -92,8 +102,8 @@ export function CustomerDetailPanel({ detail, onBloomReveal, onBloomReEvaluate, 
       {detail.showSignals && <SignalExtraction visible />}
 
       {/* Policy checks */}
-      {detail.policyChecks.length > 0 && (
-        <PolicyChecks visible checks={detail.policyChecks} />
+      {(detail.policyChecks.length > 0 || (detail.reasonCodes?.length ?? 0) > 0) && (
+        <PolicyChecks visible checks={detail.policyChecks} reasonCodes={detail.reasonCodes} reasonTexts={detail.reasonTexts} />
       )}
 
       {/* Nova: Approval card */}

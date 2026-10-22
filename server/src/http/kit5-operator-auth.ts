@@ -6,6 +6,7 @@ const SESSION_TTL_SECONDS = 8 * 60 * 60;
 
 export interface Kit5OperatorAuthConfig {
   operatorToken?: string;
+  operatorId?: string;
   allowedOrigins?: readonly string[];
 }
 
@@ -30,8 +31,8 @@ export function handleKit5Session(
       send(response, 401, { error: "operator_auth_required" });
       return;
     }
-    response.setHeader("Set-Cookie", `${COOKIE_NAME}=${createOperatorSessionCookie(config.operatorToken!)}; Path=/api/kit5; HttpOnly; Secure; SameSite=None; Max-Age=${SESSION_TTL_SECONDS}`);
-    send(response, 200, { status: "authenticated" });
+    response.setHeader("Set-Cookie", `${COOKIE_NAME}=${createOperatorSessionCookie(config.operatorToken!, Date.now(), config.operatorId)}; Path=/api/kit5; HttpOnly; Secure; SameSite=None; Max-Age=${SESSION_TTL_SECONDS}`);
+    send(response, 200, { status: "authenticated", approvalAvailable: Boolean(config.operatorId) });
   }).catch(() => send(response, 400, { error: "invalid_request" }));
 }
 
@@ -77,19 +78,39 @@ export function handleKit5Preflight(
   response.end();
 }
 
-export function createOperatorSessionCookie(operatorToken: string, now = Date.now()): string {
+export function createOperatorSessionCookie(operatorToken: string, now = Date.now(), operatorId?: string): string {
   const expiresAt = Math.floor(now / 1000) + SESSION_TTL_SECONDS;
   const nonce = randomBytes(24).toString("hex");
-  const payload = `${expiresAt}.${nonce}`;
+  const actor = operatorId ? Buffer.from(operatorId, "utf8").toString("base64url") : "";
+  const payload = `${expiresAt}.${nonce}.${actor}`;
   return `${payload}.${sign(payload, operatorToken)}`;
 }
 
+/** Return only the server-configured actor identity bound into the signed session. */
+export function authenticatedKit5OperatorActor(
+  request: IncomingMessage,
+  config: Kit5OperatorAuthConfig,
+): string | null {
+  if (!config.operatorToken || config.operatorToken.length < 32 || !config.operatorId) return null;
+  const session = parseCookies(request.headers.cookie ?? "")[COOKIE_NAME];
+  if (!session || !validOperatorSession(session, config.operatorToken)) return null;
+  const [, , actor, signature, extra] = session.split(".");
+  if (!actor || !signature || extra !== undefined) return null;
+  let decoded: string;
+  try {
+    decoded = Buffer.from(actor, "base64url").toString("utf8");
+  } catch {
+    return null;
+  }
+  return decoded === config.operatorId ? decoded : null;
+}
+
 function validOperatorSession(value: string, operatorToken: string): boolean {
-  const [expiresAt, nonce, signature, extra] = value.split(".");
-  if (!expiresAt || !nonce || !signature || extra !== undefined || !/^\d+$/.test(expiresAt)) return false;
+  const [expiresAt, nonce, actor, signature, extra] = value.split(".");
+  if (!expiresAt || !nonce || actor === undefined || !signature || extra !== undefined || !/^\d+$/.test(expiresAt)) return false;
   const expiration = Number(expiresAt);
   if (!Number.isSafeInteger(expiration) || expiration <= Math.floor(Date.now() / 1000)) return false;
-  return constantTimeEqual(signature, sign(`${expiresAt}.${nonce}`, operatorToken));
+  return constantTimeEqual(signature, sign(`${expiresAt}.${nonce}.${actor}`, operatorToken));
 }
 
 function sign(payload: string, secret: string): string {

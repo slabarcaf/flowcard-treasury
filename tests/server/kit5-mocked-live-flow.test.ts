@@ -120,6 +120,8 @@ class MemoryPool implements DatabasePool {
       provider_result: attempt.result,
       error: attempt.error,
       funding_claimed: attempt.fundingClaimed,
+      policy_status: attempt.policyStatus,
+      bridge_id: attempt.bridgeId,
     };
   }
 }
@@ -127,6 +129,8 @@ class MemoryPool implements DatabasePool {
 function fixture(): Kit5CustomerFixture {
   return {
     orderedCustomerIds: customers.map((customer) => customer.id),
+    // Fictional test-only policy facts. Production uses operator-verified mappings.
+    policyFacts: () => ({ transactionType: "AUTHORIZATION", transactionCategory: "PURCHASE", merchantCategoryCode: "5411" }),
     resolveCustomer: (id) => {
       const customer = customers.find((item) => item.id === id);
       return customer ? {
@@ -183,6 +187,67 @@ async function callRoute(
 }
 
 describe("Kit 5 mocked sandbox-live flow", () => {
+  it("does not fund Bloom while evidence is unresolved and enters the bridge boundary after reviewer release", async () => {
+    const cardProvider: IssuingSimulationGateway = {
+      createIssuingSimulation: vi.fn(async (request) => ({
+        process_result: "DECLINED", failure_reason: "INSUFFICIENT_FUNDS",
+        card_transaction_event_id: "evt_bloom_reviewed", card_transaction_id: "txn_bloom_reviewed",
+        card_transaction_lifecycle_id: request.lifecycleId,
+      })),
+      getIssuingLifecycle: vi.fn(async () => null),
+    };
+    const approvedCommand = {
+      scenarioId, actionId: "bloom-review-action", customerId: customers[0]!.id,
+      bridgeId: "00000000-0000-4000-8000-000000000001", amountCents: 700_000, repaymentTerm: "asap" as const,
+      policyInput: { accountId: customers[0]!.accountId, cardId: customers[0]!.cardId,
+        attemptedAmountCents: customers[0]!.amountCents, currency: "USD",
+        providerResult: { processResult: "DECLINED" as const, failureReason: "INSUFFICIENT_FUNDS",
+          cardTransactionEventId: "evt_bloom_reviewed", cardTransactionId: "txn_bloom_reviewed",
+          cardTransactionLifecycleId: "life-bloom-review" } },
+    };
+    const unresolved = {
+      evaluate: vi.fn(async () => ({ status: "ineligible" as const })),
+      reserveAndWaitForSettlement: vi.fn(async () => ({ bridgeId: approvedCommand.bridgeId, status: "settled" as const })),
+      retryCardAfterSettlement: vi.fn(async () => {}),
+    };
+    const unresolvedPool = new MemoryPool();
+    const unresolvedRoute = createRequestHandler({
+      port: 8000, databaseUrl: "fixture", airwallexClientId: "fixture", airwallexApiKey: "fixture",
+      airwallexWebhookSecret: "fixture", kit5OperatorToken: operatorToken, kit5AllowedOrigins: allowedOrigins,
+    }, unresolvedPool, undefined, { pool: unresolvedPool, gateway: cardProvider, resolveScenario: () => fixture(),
+      operatorAuth: { operatorToken, allowedOrigins }, bridgeFunding: unresolved });
+    const denied = await callRoute(unresolvedRoute, customers[0]!.id, "bloom-review-action");
+    expect(denied.statusCode).toBe(202);
+    expect(denied.body.status).toBe("in_progress");
+    expect(unresolved.evaluate).toHaveBeenCalledOnce();
+    expect(unresolved.reserveAndWaitForSettlement).not.toHaveBeenCalled();
+    expect(unresolved.retryCardAfterSettlement).not.toHaveBeenCalled();
+
+    const reviewed = {
+      evaluate: vi.fn(async () => ({ status: "approved" as const, command: approvedCommand })),
+      reserveAndWaitForSettlement: vi.fn(async () => ({ bridgeId: approvedCommand.bridgeId, status: "settled" as const })),
+      retryCardAfterSettlement: vi.fn(async () => {
+        const attempt = reviewedPool.attempts.get(`${scenarioId}/bloom-review-action`);
+        if (attempt) {
+          attempt.policyStatus = "retry_completed";
+          attempt.bridgeId = approvedCommand.bridgeId;
+        }
+      }),
+    };
+    const reviewedPool = new MemoryPool();
+    const reviewedRoute = createRequestHandler({
+      port: 8000, databaseUrl: "fixture", airwallexClientId: "fixture", airwallexApiKey: "fixture",
+      airwallexWebhookSecret: "fixture", kit5OperatorToken: operatorToken, kit5AllowedOrigins: allowedOrigins,
+    }, reviewedPool, undefined, { pool: reviewedPool, gateway: cardProvider, resolveScenario: () => fixture(),
+      operatorAuth: { operatorToken, allowedOrigins }, bridgeFunding: reviewed });
+    const accepted = await callRoute(reviewedRoute, customers[0]!.id, "bloom-review-action");
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.body.status).toBe("completed");
+    expect(reviewed.evaluate).toHaveBeenCalledOnce();
+    expect(reviewed.reserveAndWaitForSettlement).toHaveBeenCalledOnce();
+    expect(reviewed.retryCardAfterSettlement).toHaveBeenCalledOnce();
+  });
+
   it("creates one fixture-backed card attempt per customer and returns provider fields for FlowCard", async () => {
     const pool = new MemoryPool();
     const providerCalls: IssuingSimulationRequest[] = [];

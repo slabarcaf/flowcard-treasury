@@ -83,6 +83,8 @@ class FundingTestPool implements DatabasePool {
 function fixture(): Kit5CustomerFixture {
   return {
     orderedCustomerIds: [customerId],
+    // Fictional test-only policy facts. Production uses operator-verified mappings.
+    policyFacts: () => ({ transactionType: "AUTHORIZATION", transactionCategory: "PURCHASE", merchantCategoryCode: "5411" }),
     resolveCustomer: (id) => id === customerId ? {
       accountId: "fixture-account-nova",
       cardId: "fixture-card-nova",
@@ -136,7 +138,8 @@ describe("Kit 5 bridge funding gate", () => {
     const funding = boundary();
     const result = await run(provider, funding);
 
-    expect(result.status).toBe("completed");
+    // The mock retry callback does not persist a terminal retry result, so the action remains resumable.
+    expect(result.status).toBe("in_progress");
     expect(funding.evaluate).toHaveBeenCalledWith(expect.objectContaining({
       customerId,
       actionId,

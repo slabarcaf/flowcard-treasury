@@ -77,13 +77,43 @@ export function normalizeIssuingResponse(value: unknown, expectedLifecycleId: st
     throw new Error("Airwallex issuing simulation returned a different lifecycle ID");
   }
 
+  const transactionType = response.transaction_type;
+  if (transactionType !== undefined && transactionType !== "AUTHORIZATION" && transactionType !== "CLEARING") {
+    throw new Error("Airwallex issuing simulation returned a malformed transaction_type");
+  }
+  const transactionCategory = optionalProviderString(response.transaction_category, "transaction_category");
+  const merchantCategoryCode = optionalProviderString(response.merchant_category_code, "merchant_category_code");
+  const accountId = optionalProviderString(response.account_id, "account_id");
+  const cardId = optionalProviderString(response.card_id, "card_id");
+  const transactionCurrency = optionalProviderString(response.transaction_currency, "transaction_currency");
+  let transactionAmountCents: number | undefined;
+  if (response.transaction_amount !== undefined && response.transaction_amount !== null) {
+    if (typeof response.transaction_amount !== "number" || !Number.isFinite(response.transaction_amount) || response.transaction_amount <= 0) {
+      throw new Error("Airwallex issuing simulation returned a malformed transaction_amount");
+    }
+    transactionAmountCents = Math.round(response.transaction_amount * 100);
+    if (!Number.isSafeInteger(transactionAmountCents)) throw new Error("Airwallex issuing simulation returned an invalid transaction_amount");
+  }
   return {
     processResult: result,
     failureReason: typeof response.failure_reason === "string" ? response.failure_reason : null,
     cardTransactionEventId,
     cardTransactionId,
     cardTransactionLifecycleId,
+    ...(transactionType === undefined ? {} : { transactionType }),
+    ...(transactionCategory === undefined ? {} : { transactionCategory }),
+    ...(merchantCategoryCode === undefined ? {} : { merchantCategoryCode }),
+    ...(accountId === undefined ? {} : { accountId }),
+    ...(cardId === undefined ? {} : { cardId }),
+    ...(transactionAmountCents === undefined ? {} : { transactionAmountCents }),
+    ...(transactionCurrency === undefined ? {} : { transactionCurrency }),
   };
+}
+
+function optionalProviderString(value: unknown, label: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Airwallex issuing simulation returned a malformed ${label}`);
+  return value.trim();
 }
 
 function validateInput(input: IssuingSimulationInput): Omit<IssuingSimulationInput, "currency"> & { currency: "USD" } {

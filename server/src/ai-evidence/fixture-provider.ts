@@ -2,13 +2,13 @@ import type { EvidencePacket } from "./packet.js";
 import type { EvidenceModelProvider } from "./provider.js";
 import type { EvidenceProviderMetadata } from "./provider.js";
 
-export type EvidenceFixtureScenario = "direct" | "ambiguous" | "conflicting" | "irrelevant" | "duplicate" | "superseded";
+export type EvidenceFixtureScenario = "direct" | "ambiguous" | "conflicting" | "bloom_dispute" | "irrelevant" | "duplicate" | "superseded";
 
 /** Synthetic packets are selected explicitly by customer ID; fixture output is stable and offline. */
 export const EVIDENCE_FIXTURES: Readonly<Record<string, EvidenceFixtureScenario>> = Object.freeze({
-  // The normal demo roster has no named-counterparty fixture evidence, so it
-  // must produce a valid no-signal result instead of an extraction failure.
-  acct_bloom001: "irrelevant",
+  // Synthetic source-bound evidence; it remains blocked until an operator
+  // confirms or corrects the exact extracted result.
+  acct_bloom001: "bloom_dispute",
   acct_atlas001: "irrelevant",
   acct_nova001: "irrelevant",
   acct_pixel001: "irrelevant",
@@ -37,7 +37,10 @@ export class FixtureEvidenceProvider implements EvidenceModelProvider {
   async extract(packet: EvidencePacket): Promise<unknown> {
     const scenario = EVIDENCE_FIXTURES[packet.customerId];
     if (!scenario) throw new Error(`No AI evidence fixture for customer: ${packet.customerId}`);
-    const evidence = packet.entries[0];
+    const evidence = scenario === "bloom_dispute"
+      ? packet.entries.find((entry) => entry.sourceType === "call_activity" &&
+        typeof entry.fields.note === "string" && entry.fields.note.includes("Northstar Supply"))
+      : packet.entries[0];
     const ref = evidence ? { sourceType: evidence.sourceType, sourceId: evidence.sourceIds[0] } : null;
     const narrativeField = evidence?.sourceType === "case" ? "description" : "note";
     const quote = evidence ? firstText(evidence.fields[narrativeField]) : null;
@@ -62,6 +65,19 @@ export class FixtureEvidenceProvider implements EvidenceModelProvider {
         return { ...common, status: "review_required", signals: [signal({ disputed: "unclear" }, 0.51, "Synthetic wording is ambiguous.")], unmapped: [] };
       case "conflicting":
         return { ...common, status: "review_required", signals: [signal({ disputed: true }, 0.72, "Synthetic sources conflict.")], unmapped: [] };
+      case "bloom_dispute": {
+        const note = evidence?.sourceType === "call_activity" && typeof evidence.fields.note === "string"
+          ? evidence.fields.note : "";
+        const bloomClaims = [
+          sourceBoundSignal("client_payment_dispute", "true", "Northstar Supply is the largest client, representing about 65% of revenue, and is disputing last month's invoice.", note, ref,
+            "Synthetic Bloom note reports a client dispute."),
+          sourceBoundSignal("client_revenue_share", "65%", "Northstar Supply is the largest client, representing about 65% of revenue", note, ref,
+            "Synthetic Bloom note reports the 65% revenue share."),
+          sourceBoundSignal("expected_inflow_delay", "≥ 5 days", "Northstar Supply is the largest client, representing about 65% of revenue, and is disputing last month's invoice. Payment expected next week at the earliest.", note, ref,
+            "Synthetic Bloom note reports an expected delay of at least five days."),
+        ];
+        return { ...common, status: "review_required", signals: bloomClaims, unmapped: [] };
+      }
       case "irrelevant":
         return { ...common, status: "no_signal", signals: [], unmapped: [] };
       case "duplicate":
@@ -70,6 +86,23 @@ export class FixtureEvidenceProvider implements EvidenceModelProvider {
         return { ...common, status: "review_required", signals: [signal({ supersessionRequiresReview: true }, 0.8, "Superseded synthetic claim remains for review.")], unmapped: [] };
     }
   }
+}
+
+function sourceBoundSignal(
+  type: "client_payment_dispute" | "client_revenue_share" | "expected_inflow_delay",
+  value: string,
+  quote: string,
+  sourceText: string,
+  ref: { sourceType: "case" | "call_activity"; sourceId: string } | null,
+  rationale: string,
+) {
+  const start = sourceText.indexOf(quote);
+  if (start < 0 || !ref) throw new Error("Bloom evidence quote is not present in its packet source");
+  return {
+    type, value, counterparty: { name: "Northstar Supply" }, evidence: [ref],
+    quotes: [{ ...ref, quote, start, end: start + quote.length }], rawScore: 0.72,
+    calibratedScore: null, alternatives: [], selectionRationale: rationale,
+  };
 }
 
 function firstText(value: unknown): string | null {

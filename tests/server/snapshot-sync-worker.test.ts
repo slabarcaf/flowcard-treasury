@@ -41,6 +41,35 @@ describe("Salesforce daily snapshot worker", () => {
     expect(() => mapRecordsInBatches([1], (value) => value, 1_001)).toThrow("between 1 and 1000");
   });
 
+  it("keyset-pages more than 1,000 roster customers and processes every customer once", async () => {
+    const customers = Array.from({ length: 1_005 }, (_, index) => roster(`customer-${String(index).padStart(4, "0")}`));
+    const pool = rosterPool(customers);
+    const fetched: string[] = [];
+    const published: string[] = [];
+    const worker = new SnapshotSyncWorker({
+      pool,
+      source: sourceFor(async (customer) => {
+        fetched.push(customer.customerId);
+        return { kind: "mcp", queries: queryResults({ accountId: customer.salesforceAccountId }) };
+      }),
+      textLimits,
+      now: () => now,
+      publish: async (_pool, candidate) => { published.push(candidate.customerId); return {} as never; },
+    });
+
+    const result = await worker.run();
+
+    expect(pool.sql).toHaveLength(2);
+    expect(pool.sql.every((sql) => sql.includes("LIMIT $2"))).toBe(true);
+    expect(pool.values.map((values) => values[1])).toEqual([1_000, 1_000]);
+    expect(pool.values[0]?.[0]).toBeNull();
+    expect(pool.values[1]?.[0]).toBe(customers[999]?.customerId);
+    expect(result.customers).toHaveLength(1_005);
+    expect(fetched).toHaveLength(1_005);
+    expect(new Set(fetched).size).toBe(1_005);
+    expect(published).toEqual(fetched);
+  });
+
   it("publishes successful empty case and activity results as complete", async () => {
     let published: { payload: { cases: unknown[]; callActivities: unknown[] }; queryCompletion: { case: { complete: boolean }; activity: { complete: boolean } } } | undefined;
     const worker = new SnapshotSyncWorker({
@@ -282,14 +311,20 @@ function roster(customerId: string, isActive = true): CustomerRosterEntry {
   };
 }
 
-function rosterPool(customers: CustomerRosterEntry[]): DatabasePool & { sql: string[] } {
+function rosterPool(customers: CustomerRosterEntry[]): DatabasePool & { sql: string[]; values: readonly unknown[][] } {
   const sql: string[] = [];
+  const values: unknown[][] = [];
   return {
     sql,
-    async query<Row>(text: string): Promise<QueryResult<Row>> {
+    values,
+    async query<Row>(text: string, parameters: readonly unknown[] = []): Promise<QueryResult<Row>> {
       sql.push(text.replace(/\s+/g, " ").trim());
+      values.push([...parameters]);
       if (!text.includes("FROM customer_roster")) return { rows: [], rowCount: 0 };
-      const rows = customers.map((entry) => ({
+      const afterCustomerId = parameters[0] as string | null | undefined;
+      const limit = parameters[1] as number | undefined;
+      const active = customers.filter((entry) => entry.isActive && (!afterCustomerId || entry.customerId > afterCustomerId));
+      const rows = (limit === undefined ? active : active.slice(0, limit)).map((entry) => ({
         customer_id: entry.customerId,
         salesforce_account_id: entry.salesforceAccountId,
         airwallex_connected_account_id: entry.airwallexConnectedAccountId,

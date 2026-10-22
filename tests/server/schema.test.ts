@@ -14,8 +14,47 @@ const rosterMigrationUrl = new URL(
   "../../server/src/db/migrations/002_customer_roster.sql",
   import.meta.url,
 );
+const remoteAuthorizationMigrationUrl = new URL(
+  "../../server/src/db/migrations/008_remote_authorization.sql",
+  import.meta.url,
+);
+const remoteAuthorizationFingerprintMigrationUrl = new URL(
+  "../../server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql",
+  import.meta.url,
+);
+const remoteAuthorizationNonceClaimsMigrationUrl = new URL(
+  "../../server/src/db/migrations/011_remote_authorization_nonce_claims.sql",
+  import.meta.url,
+);
+const remoteAuthorizationDecisionIdentityMigrationUrl = new URL(
+  "../../server/src/db/migrations/012_remote_authorization_decision_identity.sql",
+  import.meta.url,
+);
+const remoteAuthorizationDispatchGateMigrationUrl = new URL(
+  "../../server/src/db/migrations/013_remote_authorization_dispatch_gate.sql",
+  import.meta.url,
+);
+const aiEvidenceDecisionGateMigrationUrl = new URL(
+  "../../server/src/db/migrations/014_ai_evidence_decision_gate.sql",
+  import.meta.url,
+);
+const kit5RepaymentDepositMigrationUrl = new URL(
+  "../../server/src/db/migrations/017_kit5_repayment_deposits.sql",
+  import.meta.url,
+);
 
 describe("bridge ledger schema", () => {
+  it("persists one immutable, bridge-linked Kit 5 USD repayment deposit operation", async () => {
+    const sql = await readFile(kit5RepaymentDepositMigrationUrl, "utf8");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS kit5_repayment_deposits");
+    expect(sql).toContain("amount_cents bigint NOT NULL DEFAULT 800000 CHECK (amount_cents = 800000)");
+    expect(sql).toContain("UNIQUE (bridge_id)");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS kit5_repayment_deposit_events");
+    expect(sql).toContain("statement_ref text NOT NULL UNIQUE");
+    expect(sql).toContain("FOREIGN KEY (scenario_id, action_id)");
+    expect(sql).toContain("reject_kit5_repayment_deposit_identity_mutation");
+  });
+
   it("defines the required tables and enforces core constraints", async () => {
     const sql = await readFile(migrationUrl, "utf8");
 
@@ -86,4 +125,42 @@ describe("bridge ledger schema", () => {
     expect(sql).toContain("Synthetic Bloom demo customer");
     expect(sql).toContain("ON CONFLICT (customer_id) DO NOTHING");
   });
+
+  it("stores only allowlisted remote authorization facts and audited card bindings", async () => {
+    const sql = await readFile(remoteAuthorizationMigrationUrl, "utf8");
+    const fingerprintSql = await readFile(remoteAuthorizationFingerprintMigrationUrl, "utf8");
+    const nonceClaimsSql = await readFile(remoteAuthorizationNonceClaimsMigrationUrl, "utf8");
+    const decisionIdentitySql = await readFile(remoteAuthorizationDecisionIdentityMigrationUrl, "utf8");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS issuing_card_bindings");
+    expect(sql).toContain("issuing_card_binding_audit_immutable");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS remote_authorization_requests");
+    expect(fingerprintSql).toContain("nonce_fingerprint text");
+    expect(fingerprintSql).toContain("request_fingerprint text");
+    expect(fingerprintSql).toContain("digest(nonce, 'sha256')");
+    expect(fingerprintSql).toContain("DROP COLUMN IF EXISTS nonce");
+    expect(fingerprintSql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS remote_authorization_nonce_fingerprint_unique");
+    expect(nonceClaimsSql).toContain("CREATE TABLE IF NOT EXISTS remote_authorization_nonce_claims");
+    expect(nonceClaimsSql).toContain("nonce_fingerprint text PRIMARY KEY");
+    expect(nonceClaimsSql).toContain("request_fingerprint text NOT NULL");
+    expect(nonceClaimsSql).not.toContain("nonce text");
+    expect(decisionIdentitySql).toContain("ALTER COLUMN decision_id SET DEFAULT gen_random_uuid()");
+    expect(decisionIdentitySql).toContain("ALTER COLUMN decision_id SET NOT NULL");
+    expect(sql).toContain("card_transaction_event_id text PRIMARY KEY");
+    expect(sql).toContain("merchant_category_code text NOT NULL");
+    expect(sql).not.toContain("raw_body");
+    expect(sql).not.toContain("merchant_name");
+  });
+
+  it("gates policy transfer dispatch until remote authorization is confirmed", async () => {
+    const sql = await readFile(remoteAuthorizationDispatchGateMigrationUrl, "utf8");
+    expect(sql).toContain("authorization_request_id text");
+    expect(sql).toContain("dispatch_ready boolean NOT NULL DEFAULT true");
+  });
+
+  it("adds fail-closed decision columns to existing evidence schemas", async () => {
+    const sql = await readFile(aiEvidenceDecisionGateMigrationUrl, "utf8");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS decision_allowed boolean NOT NULL DEFAULT false");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS decision_block_reason text");
+  });
+
 });

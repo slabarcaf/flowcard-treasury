@@ -6,7 +6,7 @@ import { buildEvidencePacket, type EvidencePacketOptions } from "./packet.js";
 import { extractEvidence } from "./extract.js";
 import type { EvidenceModelProvider } from "./provider.js";
 import { persistExtraction, getLatestEvidenceReview, getStoredExtraction } from "./repository.js";
-import { applyReviewToNextExtraction } from "./review.js";
+import { applyReviewToNextExtractionWithProvenance } from "./review.js";
 import { type ProposedSignalType, type ExtractionResult } from "./types.js";
 import type { TypeQualification } from "./qualification.js";
 import { evaluateCustomerDecisionGate } from "./decision-gate.js";
@@ -20,6 +20,8 @@ export interface EvidenceRunnerOptions {
   qualifications?: (at: Date) => Promise<Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>>;
   /** Server-owned calibration mappings. Provider metadata is never authoritative. */
   calibrations?: (at: Date) => Promise<Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>>;
+  /** Only reviews by this server-configured operator authorize manual policy use. */
+  reviewerId?: string;
   now?: () => Date;
 }
 
@@ -56,17 +58,24 @@ export class DailyEvidenceRunner {
     const packet = packetResult.packet;
     const fingerprint = packetFingerprint(packet);
     let result = await extractEvidence(packet, this.options.provider);
+    let exactReviewerResolution = false;
 
     const priorReview = await getLatestEvidenceReview(this.options.pool, customer.customerId, fingerprint);
     if (priorReview) {
       const prior = await getStoredExtraction(this.options.pool, priorReview.extractionId);
-      if (prior) result = applyReviewToNextExtraction(result, prior.result, priorReview, packet);
+      const configuredReviewerId = this.options.reviewerId?.trim();
+      if (prior && configuredReviewerId && priorReview.reviewerId === configuredReviewerId &&
+          prior.evidenceFingerprint === fingerprint && prior.result.customerId === customer.customerId) {
+        const applied = applyReviewToNextExtractionWithProvenance(result, prior.result, priorReview, packet);
+        result = applied.result;
+        exactReviewerResolution = applied.exactReviewerResolution;
+      }
     }
 
     const qualifications = await (this.options.qualifications?.(at) ?? Promise.resolve({}));
     const calibrations = await (this.options.calibrations?.(at) ?? Promise.resolve({}));
     result = applyTrustedCalibration(result, calibrations);
-    const gate = evaluateCustomerDecisionGate(result, qualifications, calibrations);
+    const gate = evaluateCustomerDecisionGate(result, qualifications, calibrations, exactReviewerResolution);
     const extractionId = await persistExtraction(
       this.options.pool, result, fingerprint, this.options.provider.metadata.configurationVersion,
       gate,

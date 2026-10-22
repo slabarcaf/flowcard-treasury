@@ -67,10 +67,13 @@ export async function runEvidenceReviewCli(
     write(`${JSON.stringify(row, null, 2)}\n`);
     return;
   }
-  if (row.status !== "review_required" && row.status !== "unmapped") {
-    throw new Error("only review_required or unmapped extractions can be dispositioned");
+  if (row.status !== "review_required") {
+    throw new Error("only mapped review_required extractions can be dispositioned");
   }
   const reviewerId = required(options, "--reviewer-id");
+  const configuredReviewerId = env.AI_EVIDENCE_REVIEWER_ID?.trim();
+  if (!configuredReviewerId) throw new Error("AI_EVIDENCE_REVIEWER_ID is required for evidence disposition");
+  if (reviewerId !== configuredReviewerId) throw new Error("--reviewer-id must match AI_EVIDENCE_REVIEWER_ID");
   if (command === "confirm") {
     await recordEvidenceReview(pool, { extractionId, reviewerId, action: "confirmed" });
   } else if (command === "correct") {

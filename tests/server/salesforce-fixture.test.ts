@@ -59,7 +59,7 @@ describe("Salesforce demo snapshot fixtures", () => {
     expect(notes).toEqual([{
       author: "Salesforce call activity",
       timestamp: "2026-10-20T15:40:00Z",
-      text: "Spoke with Bloom's CFO. Their largest client, about 65% of revenue, is disputing last month's invoice. Payment expected next week at the earliest.",
+      text: "Spoke with Bloom's CFO. Northstar Supply is the largest client, representing about 65% of revenue, and is disputing last month's invoice. Payment expected next week at the earliest.",
       sourceRecordId: "demo-call-bloom001",
     }]);
     expect(await mockCrmClient.getLatestNotes("unknown-customer")).toEqual([]);

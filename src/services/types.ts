@@ -73,6 +73,7 @@ export interface CrmNote {
 // ---------------------------------------------------------------------------
 
 import type { SalesforceCustomerSnapshot } from '../../server/src/salesforce/types.js';
+export type { DemoPolicyReadiness } from '../../shared/policy/types.js';
 
 export type SalesforceSnapshotSourceMode = 'demo' | 'production_mcp';
 export type SalesforceSnapshotFreshness = 'fresh' | 'missing' | 'stale' | 'invalid' | 'deactivated';
@@ -169,9 +170,42 @@ export interface Kit5ProviderTransaction {
   cardTransactionLifecycleId: string;
 }
 
+export interface Kit5PolicyDecisionSummary {
+  outcome: 'human_review' | 'auto_approved' | 'declined' | 'blocked';
+  amountCents: number;
+  creditLineCents: number;
+  tier: string;
+  capitalBand: string | null;
+  door: string | null;
+  reasonCodes: string[];
+  rationale: string;
+}
+
+export interface Kit5RepaymentCollectionCharge {
+  status: string;
+  amountCents: number;
+  providerOperationId: string;
+  providerObjectId: string | null;
+}
+
+export interface Kit5RepaymentCollectionSummary {
+  fee: Kit5RepaymentCollectionCharge | null;
+  principal: Kit5RepaymentCollectionCharge | null;
+}
+
+export interface Kit5RepaymentDepositResponse {
+  status: 'creating' | 'ambiguous' | 'created' | 'settled' | 'blocked';
+  depositId: string | null;
+  providerStatus: string | null;
+  bridgeId: string;
+  statementRef: string;
+  error: string | null;
+  collection: Kit5RepaymentCollectionSummary | null;
+}
+
 export type Kit5NextCustomerResponse =
-  | { status: 'completed'; attemptId: string; attemptedAmount: { amountCents: number; currency: string } | null; result: Kit5ProviderTransaction }
-  | { status: 'in_progress' | 'ambiguous' | 'failed'; attemptId: string; lifecycleId: string | null; attemptedAmount: { amountCents: number; currency: string } | null }
+  | { status: 'completed'; attemptId: string; lifecycleId?: string | null; attemptedAmount: { amountCents: number; currency: string } | null; result: Kit5ProviderTransaction; policyStatus?: string; policyError?: string | null; policyDecisionId?: string | null; policyDecision?: Kit5PolicyDecisionSummary | null; bridgeId?: string | null; retryLifecycleId?: string | null; retryResult?: Kit5ProviderTransaction & { requestId?: string } | null; retryError?: string | null; humanApproved?: boolean }
+  | { status: 'in_progress' | 'ambiguous' | 'failed'; attemptId: string; lifecycleId: string | null; attemptedAmount: { amountCents: number; currency: string } | null; result?: Kit5ProviderTransaction; policyStatus?: string; policyError?: string | null; policyDecisionId?: string | null; policyDecision?: Kit5PolicyDecisionSummary | null; bridgeId?: string | null; retryLifecycleId?: string | null; retryResult?: Kit5ProviderTransaction & { requestId?: string } | null; retryError?: string | null; humanApproved?: boolean }
   | { status: 'rejected'; reason: string };
 
 export type Kit5AttemptStatusResponse = Exclude<Kit5NextCustomerResponse, { status: 'rejected' }>;

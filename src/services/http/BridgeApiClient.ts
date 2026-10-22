@@ -1,4 +1,4 @@
-import type { Kit5AttemptStatusResponse, Kit5NextCustomerRequest, Kit5NextCustomerResponse, LedgerProjectionResponse } from '../types.js';
+import type { Kit5AttemptStatusResponse, Kit5NextCustomerRequest, Kit5NextCustomerResponse, Kit5RepaymentDepositResponse, LedgerProjectionResponse } from '../types.js';
 
 export class BridgeApiError extends Error {
   readonly status: number;
@@ -52,7 +52,7 @@ export class BridgeApiClient {
     return body as Kit5NextCustomerResponse;
   }
 
-  async createOperatorSession(token: string): Promise<void> {
+  async createOperatorSession(token: string): Promise<{ approvalAvailable: boolean }> {
     const response = await this.fetchImpl(`${this.baseUrl}/api/kit5/session`, {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
@@ -60,6 +60,8 @@ export class BridgeApiClient {
       body: JSON.stringify({ token }),
     });
     if (!response.ok) throw new Error(`Kit 5 operator login failed (${response.status})`);
+    const body = await response.json() as { approvalAvailable?: unknown };
+    return { approvalAvailable: body.approvalAvailable === true };
   }
 
   async refreshAttempt(input: Kit5NextCustomerRequest): Promise<Kit5AttemptStatusResponse> {
@@ -72,5 +74,34 @@ export class BridgeApiClient {
     const body = await response.json() as unknown;
     if (!response.ok) throw new BridgeApiError(`Kit 5 status refresh failed (${response.status})`, response.status);
     return body as Kit5AttemptStatusResponse;
+  }
+
+  async approveHumanReview(input: Kit5NextCustomerRequest & { reason: string }): Promise<{ status: 'approved' | 'pending' | 'blocked'; bridgeId?: string }> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/kit5/approve`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    });
+    const body = await response.json() as unknown;
+    if (!response.ok) throw new BridgeApiError(`Kit 5 approval failed (${response.status})`, response.status);
+    return body as { status: 'approved' | 'pending' | 'blocked'; bridgeId?: string };
+  }
+
+  async createOrRefreshNovaRepaymentDeposit(input: Kit5NextCustomerRequest): Promise<Kit5RepaymentDepositResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/kit5/repayment-deposit`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    });
+    const body = await response.json() as unknown;
+    if (!response.ok) {
+      const message = typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string'
+        ? body.error
+        : `Nova repayment deposit failed (${response.status})`;
+      throw new BridgeApiError(message, response.status);
+    }
+    return body as Kit5RepaymentDepositResponse;
   }
 }

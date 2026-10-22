@@ -8,11 +8,13 @@
     "server:build": "tsc -p server/tsconfig.json",
     "server:start": "npm run server:build && node dist/server/src/main.js",
     "ai-evidence:review": "npm run server:build && node dist/server/src/main.js evidence-review",
+    "policy:approval": "npm run server:build && node dist/server/src/main.js policy-approval",
     "roster:cli": "npm run server:build && node dist/server/src/roster/cli.js",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:acceptance": "node scripts/run-policy-acceptance.mjs"
   },
   "dependencies": {
     "pg": "^8.16.3",

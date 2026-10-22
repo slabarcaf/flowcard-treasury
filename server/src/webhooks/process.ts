@@ -2,8 +2,8 @@ import { normalizeProviderStatus, type AirwallexGateway, type ProviderStatus } f
 import type { DatabasePool } from "../db/pool.js";
 import { appendLedgerEvent, type LedgerEventType } from "../ledger/events.js";
 import { rebuildLedgerProjections } from "../ledger/projector.js";
-import { applySettledCollectionCharge } from "../collections/service.js";
-import { scheduleDepositCollection } from "../collections/scheduler.js";
+import { applySettledCollectionCharge, processSettledDeposit } from "../collections/service.js";
+import { bindKit5DepositSettlement, collectKit5SettledDeposit } from "../collections/kit5-repayment-deposit.js";
 import type { AirwallexWebhookEvent } from "./inbox.js";
 
 interface InboxRow { provider_event_id: string; event_type: string; raw_body: Buffer; processed_at: Date | null }
@@ -31,6 +31,7 @@ export async function processWebhookEvent(pool: DatabasePool, gateway: Airwallex
     const depositId = stringValue(object.id ?? object.deposit_id);
     const accountId = stringValue(object.account_id);
     if (depositId && accountId) {
+      const mappedCustomerId = await resolveInternalCustomerId(pool, accountId);
       const deposit = await gateway.getDeposit(depositId, accountId);
       if (deposit.id !== depositId || deposit.currency !== "USD") {
         throw new Error("Provider deposit lookup did not match the USD deposit event");
@@ -39,13 +40,43 @@ export async function processWebhookEvent(pool: DatabasePool, gateway: Airwallex
         if (!deposit.settledAt || !Number.isFinite(deposit.settledAt.getTime())) {
           throw new Error("Provider settled deposit did not include a valid settled_at timestamp");
         }
-        await scheduleDepositCollection(pool, gateway, {
+        const association = await bindKit5DepositSettlement(pool, {
+          eventId,
           depositId,
-          customerId: accountId,
           accountId,
-          amountCents: deposit.amountCents,
+          globalAccountId: stringValue(object.global_account_id) ??
+            (typeof object.source === "object" && object.source !== null
+              ? stringValue((object.source as Record<string, unknown>).global_account_id)
+              : null),
+          statementRef: stringValue(object.statement_ref ?? object.reference),
           settledAt: deposit.settledAt,
         });
+        if (association) {
+          if (association.customerId !== mappedCustomerId || association.accountId !== accountId ||
+              association.amountCents !== deposit.amountCents) {
+            throw new Error("Settled deposit customer or terms do not match the saved Kit 5 bridge association");
+          }
+          await collectKit5SettledDeposit(pool, gateway, {
+            depositId,
+            bridgeId: association.bridgeId,
+            customerId: association.customerId,
+            accountId,
+            amountCents: deposit.amountCents,
+            settledAt: deposit.settledAt,
+          });
+        } else {
+          const statementRef = stringValue(object.statement_ref ?? object.reference);
+          if (statementRef?.startsWith("kit5-")) {
+            throw new Error("Kit 5 deposit reference has no valid saved bridge association");
+          }
+          await processSettledDeposit(pool, gateway, {
+            depositId,
+            customerId: mappedCustomerId,
+            accountId,
+            amountCents: deposit.amountCents,
+            settledAt: deposit.settledAt,
+          });
+        }
       }
     }
   }
@@ -150,6 +181,19 @@ export async function processWebhookEvent(pool: DatabasePool, gateway: Airwallex
   } finally {
     client.release();
   }
+}
+
+async function resolveInternalCustomerId(pool: Pick<DatabasePool, "query">, accountId: string): Promise<string> {
+  if (!accountId.trim()) throw new Error("Settled deposit has an invalid connected-account ID");
+  const matches = await pool.query<{ customer_id: string }>(
+    `SELECT customer_id FROM customer_roster
+      WHERE airwallex_connected_account_id = $1 AND is_active`, [accountId]);
+  if (matches.rowCount !== 1) throw new Error("Settled deposit connected account does not resolve to exactly one active customer");
+  const customerId = matches.rows[0]?.customer_id;
+  if (typeof customerId !== "string" || !customerId.trim()) {
+    throw new Error("Settled deposit connected-account binding is malformed");
+  }
+  return customerId.trim();
 }
 
 function stringValue(value: unknown): string | null {

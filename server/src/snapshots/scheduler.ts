@@ -1,4 +1,5 @@
 import type { SnapshotSyncWorker } from "./sync-worker.js";
+type DailyWorker = { run(): Promise<unknown> };
 
 export interface DailySnapshotSchedule {
   runAtUtc: string;
@@ -20,7 +21,7 @@ export function snapshotDailyRunTime(env: NodeJS.ProcessEnv = process.env): stri
 }
 
 /** Schedule exactly one run per UTC day, recalculating after each completion to avoid overlap. */
-export function scheduleDailySnapshotSync(worker: Pick<SnapshotSyncWorker, "run">, options: DailySnapshotSchedule): { stop: () => void } {
+export function scheduleDailySnapshotSync(worker: DailyWorker | Pick<SnapshotSyncWorker, "run">, options: DailySnapshotSchedule): { stop: () => void } {
   const [hour, minute] = parseClockTime(options.runAtUtc);
   const now = options.now ?? (() => new Date());
   const setTimer = options.setTimer ?? setTimeout;

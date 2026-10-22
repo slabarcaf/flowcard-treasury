@@ -38,7 +38,7 @@
       "sourceUpdatedAt": "2026-10-20T16:40:00Z",
       "activityAt": { "value": "2026-10-20T15:40:00Z", "source": { "recordId": "demo-call-bloom001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
       "outcome": { "value": "connected", "source": { "recordId": "demo-call-bloom001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
-      "note": { "value": "Spoke with Bloom's CFO. Their largest client, about 65% of revenue, is disputing last month's invoice. Payment expected next week at the earliest.", "source": { "recordId": "demo-call-bloom001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } }
+      "note": { "value": "Spoke with Bloom's CFO. Northstar Supply is the largest client, representing about 65% of revenue, and is disputing last month's invoice. Payment expected next week at the earliest.", "source": { "recordId": "demo-call-bloom001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } }
     }
   ]
 }

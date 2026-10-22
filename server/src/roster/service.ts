@@ -1,6 +1,6 @@
 import type { DatabasePool } from "../db/pool.js";
-import { enrollCustomer as insertCustomer, listActiveCustomersForSnapshots, listCustomers, softDeactivateCustomer as deactivate } from "./repository.js";
-import type { CustomerRosterEntry, DeactivateCustomerInput, EnrollCustomerInput } from "./types.js";
+import { enrollCustomer as insertCustomer, listActiveCustomersForSnapshots, listCustomers, mapCustomerConnectedAccount as mapAccount, softDeactivateCustomer as deactivate } from "./repository.js";
+import type { CustomerAccountMappingChange, CustomerRosterEntry, DeactivateCustomerInput, EnrollCustomerInput, MapCustomerAccountInput } from "./types.js";
 
 function required(value: string, field: string): string {
   const normalized = value.trim();
@@ -26,7 +26,11 @@ function validateDeactivation(input: DeactivateCustomerInput): DeactivateCustome
   };
 }
 
-async function inTransaction<T>(pool: DatabasePool, operation: (client: Awaited<ReturnType<DatabasePool["connect"]>>) => Promise<T>): Promise<T> {
+async function inTransaction<T>(
+  pool: DatabasePool,
+  operation: (client: Awaited<ReturnType<DatabasePool["connect"]>>) => Promise<T>,
+  uniqueViolationMessage = "Customer ID and provider account IDs must be unique across the roster",
+): Promise<T> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -36,7 +40,7 @@ async function inTransaction<T>(pool: DatabasePool, operation: (client: Awaited<
   } catch (error) {
     await client.query("ROLLBACK");
     if (isUniqueViolation(error)) {
-      throw new Error("Customer ID and provider account IDs must be unique across the roster");
+      throw new Error(uniqueViolationMessage);
     }
     throw error;
   } finally {
@@ -57,6 +61,26 @@ export async function deactivateCustomer(pool: DatabasePool, rawInput: Deactivat
   const input = validateDeactivation(rawInput);
   const changed = await inTransaction(pool, (client) => deactivate(client, input));
   if (!changed) throw new Error(`Active enrolled customer not found: ${input.customerId}`);
+}
+
+export async function mapCustomerAccount(
+  pool: DatabasePool,
+  rawInput: MapCustomerAccountInput,
+): Promise<CustomerAccountMappingChange> {
+  const input = {
+    customerId: required(rawInput.customerId, "customerId"),
+    airwallexConnectedAccountId: required(rawInput.airwallexConnectedAccountId, "airwallexConnectedAccountId"),
+    actor: required(rawInput.actor, "actor"),
+    reason: required(rawInput.reason, "reason"),
+  };
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(input.airwallexConnectedAccountId)) {
+    throw new Error("airwallexConnectedAccountId must be a valid provider ID");
+  }
+  if (input.airwallexConnectedAccountId === input.customerId) {
+    throw new Error("airwallexConnectedAccountId must differ from the internal customer ID");
+  }
+  return inTransaction(pool, (client) => mapAccount(client, input),
+    "Connected-account ID is already assigned to a roster customer");
 }
 
 export { listActiveCustomersForSnapshots, listCustomers };

@@ -40,6 +40,27 @@ describe("server configuration", () => {
     expect(config.kit5OperatorToken).toBe("runtime-operator-token");
     expect(config.kit5AllowedOrigins).toEqual(["https://demo.example", "https://local.example"]);
   });
+
+  it("loads Nova Global Account settings only when their format and USD currency are valid", () => {
+    const config = loadConfig({
+      ...validEnv,
+      KIT5_NOVA_GLOBAL_ACCOUNT_ID: " verified-global-account ",
+      KIT5_NOVA_GLOBAL_ACCOUNT_CONNECTED_ACCOUNT_ID: " verified-connected-account ",
+      KIT5_NOVA_GLOBAL_ACCOUNT_CURRENCY: "USD",
+    });
+    expect(config.kit5NovaGlobalAccountId).toBe("verified-global-account");
+    expect(config.kit5NovaGlobalAccountConnectedAccountId).toBe("verified-connected-account");
+    expect(config.kit5NovaGlobalAccountCurrency).toBe("USD");
+
+    const invalid = loadConfig({
+      ...validEnv,
+      KIT5_NOVA_GLOBAL_ACCOUNT_ID: "bad account id",
+      KIT5_NOVA_GLOBAL_ACCOUNT_CONNECTED_ACCOUNT_ID: "valid-account",
+      KIT5_NOVA_GLOBAL_ACCOUNT_CURRENCY: "EUR",
+    });
+    expect(invalid.kit5NovaGlobalAccountId).toBeUndefined();
+    expect(invalid.kit5NovaGlobalAccountCurrency).toBeUndefined();
+  });
 });
 
 describe("health route", () => {

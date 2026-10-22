@@ -27,3 +27,16 @@ export interface DeactivateCustomerInput {
   actor: string;
   reason: string;
 }
+
+export interface MapCustomerAccountInput {
+  customerId: string;
+  airwallexConnectedAccountId: string;
+  actor: string;
+  reason: string;
+}
+
+export interface CustomerAccountMappingChange {
+  customerId: string;
+  oldAccountId: string;
+  newAccountId: string;
+}

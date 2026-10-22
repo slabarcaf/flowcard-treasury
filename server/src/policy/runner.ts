@@ -1,0 +1,127 @@
+import type { FacilityConfig } from "../../../shared/policy/types.js";
+import type { DatabasePool } from "../db/pool.js";
+import type { ExtractionResult, ProposedSignalType } from "../ai-evidence/types.js";
+import type { TypeQualification } from "../ai-evidence/qualification.js";
+import type { TypeCalibrationMapping } from "../ai-evidence/calibration.js";
+import { listActiveCustomersForSnapshots } from "../roster/repository.js";
+import { getCustomerSnapshotReadModel } from "../snapshots/freshness.js";
+import { getCurrentUnderwritingProfile } from "../underwriting/repository.js";
+import type { NoGoMappingReadiness } from "./gates.js";
+import { joinPolicyInputs } from "./input.js";
+import { computeDailyPrecheck } from "./precheck.js";
+import { persistDailyPrecheck } from "./repository.js";
+
+export type DailyPrecheckResult =
+  | { customerId: string; status: "evaluated"; evaluationId: string; outcome: "ready" | "ineligible" | "blocked" }
+  | { customerId: string; status: "waiting"; reason: "profile_missing" | "snapshot_missing" | "evidence_missing" }
+  | { customerId: string; status: "failed"; reason: string };
+
+/** Evaluate complete source tuples independently; absent upstream results wait for a later daily pass. */
+export async function runDailyPolicyPrechecks(input: {
+  pool: DatabasePool;
+  facility: FacilityConfig;
+  mappings: NoGoMappingReadiness;
+  qualifications: Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>;
+  calibrations?: Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>;
+  customerIds?: readonly string[];
+  now?: Date;
+}): Promise<DailyPrecheckResult[]> {
+  const now = input.now ?? new Date();
+  const results: DailyPrecheckResult[] = [];
+  let afterCustomerId: string | null = null;
+  while (true) {
+    const customers = await listActiveCustomersForSnapshots(input.pool, { afterCustomerId, limit: 1_000 });
+    if (customers.length === 0) break;
+    for (const roster of customers) {
+      if (input.customerIds && !input.customerIds.includes(roster.customerId)) continue;
+      results.push(await evaluateCustomerPrecheck(input, roster, now));
+    }
+    afterCustomerId = customers[customers.length - 1]!.customerId;
+    if (customers.length < 1_000) break;
+  }
+  return results;
+}
+
+
+async function evaluateCustomerPrecheck(
+  input: {
+    pool: DatabasePool;
+    facility: FacilityConfig;
+    mappings: NoGoMappingReadiness;
+    qualifications: Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>;
+    calibrations?: Readonly<Partial<Record<ProposedSignalType, TypeCalibrationMapping>>>;
+  },
+  roster: Awaited<ReturnType<typeof listActiveCustomersForSnapshots>>[number],
+  now: Date,
+): Promise<DailyPrecheckResult> {
+  try {
+    const profileRead = await getCurrentUnderwritingProfile(input.pool, roster.customerId, now);
+    if (!profileRead.profile) return { customerId: roster.customerId, status: "waiting", reason: "profile_missing" };
+
+    const snapshotRead = await getCustomerSnapshotReadModel(input.pool, roster.customerId, now);
+    if (!snapshotRead.snapshot) return { customerId: roster.customerId, status: "waiting", reason: "snapshot_missing" };
+
+    const extraction = await input.pool.query<{ extraction_id: string; configuration_version: string; output: ExtractionResult; decision_allowed: boolean | null; decision_block_reason: string | null }>(
+      `SELECT extraction_id, configuration_version, output, decision_allowed, decision_block_reason FROM ai_evidence_extractions
+        WHERE customer_id = $1 AND snapshot_id = $2
+        ORDER BY created_at DESC, extraction_id DESC LIMIT 1`,
+      [roster.customerId, snapshotRead.snapshot.snapshotId],
+    );
+    const evidenceRow = extraction.rows[0];
+    if (!evidenceRow) return { customerId: roster.customerId, status: "waiting", reason: "evidence_missing" };
+
+    const evidence = evidenceRow.output;
+    const policyInput = joinPolicyInputs({
+      roster, profile: profileRead, snapshot: snapshotRead, evidence,
+      evidenceDecisionAllowed: evidenceRow.decision_allowed === true,
+      qualifications: input.qualifications, calibrations: input.calibrations,
+      noGoMappings: input.mappings, now,
+    });
+    const repayment = await input.pool.query<{ fully_repaid_on_time: string | number; ledger_sequence: string | number }>(
+      `SELECT count(*)::int AS fully_repaid_on_time,
+              (SELECT COALESCE(MAX(id), 0) FROM ledger_events WHERE currency = 'USD') AS ledger_sequence
+         FROM (
+           SELECT bridge.id, bridge.repayment_due_at,
+                  MAX(event.occurred_at) FILTER (WHERE event.event_type = 'principal_repaid') AS repaid_at
+             FROM bridge_cases bridge
+             LEFT JOIN ledger_events event ON event.bridge_id = bridge.id
+            WHERE bridge.customer_id = $1 AND bridge.status = 'repaid'
+            GROUP BY bridge.id, bridge.repayment_due_at
+         ) AS repayments
+        WHERE repayment_due_at IS NOT NULL AND repaid_at IS NOT NULL AND repaid_at <= repayment_due_at`,
+      [roster.customerId],
+    );
+    const decision = computeDailyPrecheck({
+      policyInput, profile: profileRead.profile.data, evidenceRunId: evidenceRow.extraction_id,
+      rosterUpdatedAt: roster.updatedAt, facility: input.facility, mappings: input.mappings,
+      fullyRepaidOnTimeBridges: Number(repayment.rows[0]?.fully_repaid_on_time ?? 0), evaluatedAt: now,
+      inputVersions: {
+        rosterUpdatedAt: roster.updatedAt.toISOString(),
+        profileId: profileRead.profile.profileId,
+        profileVersion: profileRead.profile.version,
+        profileFeatureVersion: profileRead.profile.featureVersion,
+        profileAccountSourceVersion: profileRead.profile.sourceVersions.account,
+        profileBalancesSourceVersion: profileRead.profile.sourceVersions.balances,
+        profileTransactionsSourceVersion: profileRead.profile.sourceVersions.transactions,
+        profileExpectedInflowsSourceVersion: profileRead.profile.sourceVersions.expected_inflows,
+        profileRepaymentsSourceVersion: profileRead.profile.sourceVersions.repayments,
+        salesforceSnapshotId: snapshotRead.snapshot.snapshotId,
+        salesforceSnapshotVersion: snapshotRead.snapshot.version,
+        salesforceMappingVersion: snapshotRead.snapshot.mappingVersion,
+        evidenceRunId: evidenceRow.extraction_id,
+        evidenceConfigurationVersion: evidenceRow.configuration_version,
+        evidenceCatalogVersion: evidence.model.catalogVersion,
+        evidenceSchemaVersion: evidence.schemaVersion,
+        ledgerSequence: String(repayment.rows[0]?.ledger_sequence ?? 0),
+      },
+    });
+    const evaluationId = await persistDailyPrecheck(input.pool, { ...decision, rosterUpdatedAt: roster.updatedAt });
+    return { customerId: roster.customerId, status: "evaluated", evaluationId, outcome: decision.outcome };
+  } catch (error) {
+    return {
+      customerId: roster.customerId,
+      status: "failed",
+      reason: error instanceof Error ? error.message : "unknown evaluation failure",
+    };
+  }
+}

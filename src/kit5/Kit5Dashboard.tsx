@@ -4,9 +4,10 @@ import { BridgeQueue } from '../components/BridgeQueue.js';
 import { ActivityFeed } from '../components/ActivityFeed.js';
 import { FeedToast } from '../components/FeedToast.js';
 import { Sidebar } from '../components/Sidebar.js';
-import { useKit5Dashboard } from './useKit5Dashboard.js';
+import { canApproveKit5Decision, canCreateNovaRepaymentDeposit, useKit5Dashboard } from './useKit5Dashboard.js';
 import { nextEvent, shortDate } from './engine.js';
 import { SettingsPanel } from './SettingsPanel.js';
+import { formatCollectionCharge } from './live-format.js';
 
 /** Kit 5 version: 20% reserve floor, requests decided one at a time as they arrive. */
 export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
@@ -172,7 +173,8 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 {k.livePending && <p role="status" className="text-sm text-sky-700">Waiting for the provider result…</p>}
                 {k.liveError && <p role="alert" className="text-sm text-red-700">{k.liveError}</p>}
                 {k.liveHistory.map((activity) => (
-                  <dl key={activity.attemptId} className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs text-gray-600 border-t border-gray-100 pt-2">
+                  <div key={activity.attemptId} className="border-t border-gray-100 pt-2">
+                  <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs text-gray-600">
                     <dt>Customer</dt><dd>{activity.customerName}</dd>
                     <dt>Transaction status</dt><dd>{activity.result?.processResult ?? activity.status}</dd>
                     <dt>Scenario amount attempted</dt><dd>{activity.amount === undefined ? 'Unavailable' : `$${activity.amount.toLocaleString('en-US')} USD (provider response does not include amount)`}</dd>
@@ -180,9 +182,47 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                     <dt>Provider event ID</dt><dd className="font-mono break-all">{activity.result?.cardTransactionEventId ?? 'Unavailable'}</dd>
                     <dt>Provider transaction ID</dt><dd className="font-mono break-all">{activity.result?.cardTransactionId ?? 'Unavailable'}</dd>
                     <dt>Lifecycle ID</dt><dd className="font-mono break-all">{activity.result?.cardTransactionLifecycleId ?? activity.lifecycleId ?? 'Unavailable'}</dd>
+                    <dt>Policy status</dt><dd>{activity.policyStatus ?? 'Pending evaluation'}</dd>
+                    {activity.policyError && <><dt>Policy recovery</dt><dd>{activity.policyError}</dd></>}
+                    {activity.policyDecision && <>
+                      <dt>Proposed bridge</dt><dd>${(activity.policyDecision.amountCents / 100).toLocaleString('en-US')} USD</dd>
+                      <dt>Credit line</dt><dd>${(activity.policyDecision.creditLineCents / 100).toLocaleString('en-US')} USD</dd>
+                      <dt>Tier / capital door</dt><dd>{activity.policyDecision.tier} / {activity.policyDecision.capitalBand ?? 'unavailable'} / {activity.policyDecision.door ?? 'unavailable'}</dd>
+                      <dt>Policy reasons</dt><dd>{activity.policyDecision.reasonCodes.join(', ') || activity.policyDecision.rationale}</dd>
+                    </>}
+                    {activity.bridgeId && <><dt>Bridge ID</dt><dd className="font-mono break-all">{activity.bridgeId}</dd></>}
+                    {activity.retryLifecycleId && <><dt>Card retry lifecycle</dt><dd className="font-mono break-all">{activity.retryLifecycleId}</dd></>}
+                    {activity.retryResult && <><dt>Card retry result</dt><dd>{activity.retryResult.processResult} ({activity.retryResult.failureReason ?? 'no failure reason'})</dd></>}
+                    {activity.retryError && <><dt>Card retry status</dt><dd>{activity.retryError}</dd></>}
+                    {activity.repaymentDeposit && <>
+                      <dt>Nova deposit status</dt><dd>{activity.repaymentDeposit.status} (provider: {activity.repaymentDeposit.providerStatus ?? 'unavailable'})</dd>
+                      <dt>Nova provider deposit ID</dt><dd className="font-mono break-all">{activity.repaymentDeposit.depositId ?? 'Not returned'}</dd>
+                      <dt>Fee collection</dt><dd>{formatCollectionCharge(activity.repaymentDeposit.collection?.fee)}</dd>
+                      <dt>Principal collection</dt><dd>{formatCollectionCharge(activity.repaymentDeposit.collection?.principal)}</dd>
+                    </>}
+                    {activity.repaymentDepositError && <><dt>Nova deposit</dt><dd role="alert">{activity.repaymentDepositError}</dd></>}
                   </dl>
+                  {(activity.status !== 'completed' || ['evaluating', 'pending_review', 'blocked', 'reserving', 'reserved', 'settled', 'retry_submitting', 'retry_ambiguous'].includes(activity.policyStatus ?? '')) && (
+                    <button type="button" onClick={() => void k.refreshLiveHistoryActivity(activity)} disabled={k.livePending} className="mr-2 mt-2 px-3 py-1.5 text-sm border rounded-md disabled:opacity-50">
+                      Refresh policy and provider status
+                    </button>
+                  )}
+                  {canApproveKit5Decision(k.operatorAuthenticated && k.operatorApprovalAvailable, activity.policyStatus, activity.policyDecision) && (
+                    <button type="button" onClick={() => {
+                      const reason = window.prompt('Reason for approving the saved policy terms');
+                      if (reason?.trim()) void k.approveLiveReview(reason.trim(), activity);
+                    }} disabled={k.livePending} className="mt-2 px-3 py-1.5 text-sm border rounded-md disabled:opacity-50">
+                      Approve saved terms
+                    </button>
+                  )}
+                  {k.mode === 'sandbox-live' && canCreateNovaRepaymentDeposit(k.operatorAuthenticated, activity) && (
+                    <button type="button" onClick={() => void k.createOrRefreshNovaRepaymentDeposit(activity)} disabled={k.livePending || !k.ledgerApiEnabled} className="ml-2 mt-2 px-3 py-1.5 text-sm border rounded-md disabled:opacity-50">
+                      {activity.repaymentDeposit ? 'Refresh Nova $8,000 deposit and collection' : 'Create Nova $8,000 USD deposit'}
+                    </button>
+                  )}
+                  </div>
                 ))}
-                {k.liveAction && k.liveAction.status !== 'completed' && (
+                {k.liveAction && (k.liveAction.status !== 'completed' || ['evaluating', 'pending_review', 'blocked', 'reserving', 'reserved', 'settled', 'retry_submitting', 'retry_ambiguous'].includes(k.liveAction.policyStatus ?? '')) && (
                   <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs text-gray-600">
                     <dt>Customer</dt><dd>{k.liveAction.customerName}</dd>
                     <dt>Transaction status</dt><dd>{k.liveAction.result?.processResult ?? k.liveAction.status}</dd>
@@ -191,9 +231,30 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                     <dt>Provider event ID</dt><dd className="font-mono break-all">{k.liveAction.result?.cardTransactionEventId ?? 'Unavailable'}</dd>
                     <dt>Provider transaction ID</dt><dd className="font-mono break-all">{k.liveAction.result?.cardTransactionId ?? 'Unavailable'}</dd>
                     <dt>Lifecycle ID</dt><dd className="font-mono break-all">{k.liveAction.result?.cardTransactionLifecycleId ?? k.liveAction.lifecycleId ?? 'Unavailable'}</dd>
+                    <dt>Policy decision</dt><dd>{k.liveAction.policyStatus ?? 'Pending evaluation'}</dd>
+                    {k.liveAction.policyError && <><dt>Policy recovery</dt><dd>{k.liveAction.policyError}</dd></>}
+                    {k.liveAction.policyDecision && <>
+                      <dt>Proposed bridge</dt><dd>${(k.liveAction.policyDecision.amountCents / 100).toLocaleString('en-US')} USD</dd>
+                      <dt>Credit line</dt><dd>${(k.liveAction.policyDecision.creditLineCents / 100).toLocaleString('en-US')} USD</dd>
+                      <dt>Tier / capital door</dt><dd>{k.liveAction.policyDecision.tier} / {k.liveAction.policyDecision.capitalBand ?? 'unavailable'} / {k.liveAction.policyDecision.door ?? 'unavailable'}</dd>
+                      <dt>Policy reasons</dt><dd>{k.liveAction.policyDecision.reasonCodes.join(', ') || k.liveAction.policyDecision.rationale}</dd>
+                    </>}
+                    {k.liveAction.bridgeId && <><dt>Bridge ID</dt><dd className="font-mono break-all">{k.liveAction.bridgeId}</dd></>}
+                    {k.liveAction.retryLifecycleId && <><dt>Card retry lifecycle</dt><dd className="font-mono break-all">{k.liveAction.retryLifecycleId}</dd></>}
+                    {k.liveAction.retryResult && <><dt>Card retry result</dt><dd>{k.liveAction.retryResult.processResult} ({k.liveAction.retryResult.failureReason ?? 'no failure reason'})</dd></>}
+                    {k.liveAction.retryError && <><dt>Card retry status</dt><dd>{k.liveAction.retryError}</dd></>}
                   </dl>
                 )}
-                {k.liveAction && k.liveAction.status !== 'completed' && k.liveAction.attemptId && (
+                {canApproveKit5Decision(k.operatorAuthenticated && k.operatorApprovalAvailable,
+                  k.liveAction?.policyStatus, k.liveAction?.policyDecision) && k.liveAction?.attemptId && (
+                  <button type="button" onClick={() => {
+                    const reason = window.prompt('Reason for approving the saved policy terms');
+                    if (reason?.trim()) void k.approveLiveReview(reason.trim());
+                  }} disabled={k.livePending} className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50">
+                    {k.livePending ? 'Submitting approval…' : 'Approve saved terms'}
+                  </button>
+                )}
+                {k.liveAction && (k.liveAction.status !== 'completed' || ['evaluating', 'pending_review', 'blocked', 'reserving', 'reserved', 'settled', 'retry_submitting', 'retry_ambiguous'].includes(k.liveAction.policyStatus ?? '')) && k.liveAction.attemptId && (
                   <button type="button" onClick={() => void k.refreshLiveAction()} disabled={k.livePending} className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50">
                     {k.livePending ? 'Refreshing…' : 'Refresh provider status'}
                   </button>

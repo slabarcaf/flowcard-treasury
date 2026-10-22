@@ -30,6 +30,8 @@ export interface SettledDepositInput {
   accountId: string;
   amountCents: number;
   settledAt: Date;
+  /** When supplied, collections are pinned to this explicitly approved bridge. */
+  bridgeId?: string;
 }
 
 export interface CollectionAttemptResult {
@@ -58,13 +60,17 @@ export async function processSettledDeposit(
       `SELECT id, customer_id, amount_cents, repayment_term, repayment_due_at, status
          FROM bridge_cases
         WHERE customer_id = $1 AND status IN ('funded', 'collecting')
+          AND ($2::uuid IS NULL OR id = $2::uuid)
         ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
-      [deposit.customerId],
+      [deposit.customerId, deposit.bridgeId ?? null],
     );
     const bridge = bridgeResult.rows[0];
     if (!bridge) {
       await client.query("COMMIT");
       return { created: false };
+    }
+    if (deposit.bridgeId && bridge.id !== deposit.bridgeId) {
+      throw new Error("Settled deposit bridge binding did not match the approved Kit 5 bridge");
     }
 
     const feeAssessment = await client.query<{ exists: boolean; funded_at: Date | string | null }>(

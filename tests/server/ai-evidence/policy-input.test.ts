@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildPolicyInput } from "../../../server/src/ai-evidence/policy-input.js";
+import { fitCalibrationMapping } from "../../../server/src/ai-evidence/calibration.js";
 import type { ExtractionResult } from "../../../server/src/ai-evidence/types.js";
 import type { Signals } from "../../../src/policy/types.js";
-import { fitCalibrationMapping } from "../../../server/src/ai-evidence/calibration.js";
 
 const existing: Signals = { inflowReliability: "yellow", inflowConcentration: "green", cashBuffer: "yellow", trackRecord: "green" };
 const noSignal: ExtractionResult = {
@@ -27,6 +27,8 @@ describe("deterministic policy input boundary", () => {
     const result = buildPolicyInput(existing, success, {}, { client_payment_dispute: { key: "trackRecord", ratingsByValue: { '{"disputed":true}': "red" } } });
     expect(result.gate.allowed).toBe(false);
     expect(result.signals).toBeNull();
+    const partiallyUnmapped = { ...noSignal, status: "unmapped" as const, unmapped: [{ type: "unknown", value: "private", evidence: [] }] };
+    expect(buildPolicyInput(existing, partiallyUnmapped, {}).signals).toBeNull();
   });
 
   it("uses an explicitly approved meaning without changing calculation code or values", () => {
@@ -39,10 +41,14 @@ describe("deterministic policy input boundary", () => {
     const qualification = { signalType: "client_payment_dispute" as const, calibrationVersion: "cal-v1",
       policyVersion: "one-sided-exact-binomial-95-v1" as const, evaluatedAt: "2026-10-22T00:00:00Z", sampleCount: 59,
       errors: 0, precisionLowerBound: 0.95, qualified: true, mode: "auto_apply_with_audit" as const };
+    const calibration = fitCalibrationMapping("client_payment_dispute", "cal-v1", [
+      { signalType: "client_payment_dispute", rawScore: 0.99, correct: true, labelId: "cal-1", labeledAt: "2026-10-22T00:00:00Z" },
+    ]);
     expect(buildPolicyInput(existing, success, { client_payment_dispute: qualification }, {
       client_payment_dispute: { key: "trackRecord", ratingsByValue: { '"confirmed-dispute"': "red" } },
-    }, { client_payment_dispute: fitCalibrationMapping("client_payment_dispute", "cal-v1", [
-      { signalType: "client_payment_dispute", rawScore: 0.99, correct: true, labelId: "cal-label-1", labeledAt: "2026-10-22T00:00:00Z" },
-    ]) })).toMatchObject({ gate: { allowed: true }, signals: { ...existing, trackRecord: "red" } });
+    }).gate).toMatchObject({ allowed: false, reason: expect.stringContaining("calibration score") });
+    expect(buildPolicyInput(existing, success, { client_payment_dispute: qualification }, {
+      client_payment_dispute: { key: "trackRecord", ratingsByValue: { '"confirmed-dispute"': "red" } },
+    }, { client_payment_dispute: calibration })).toMatchObject({ gate: { allowed: true }, signals: { ...existing, trackRecord: "red" } });
   });
 });

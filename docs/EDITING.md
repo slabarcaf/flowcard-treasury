@@ -108,7 +108,7 @@ customers get funded.
 
 ## How a click becomes a screen update
 
-```
+```text
 button in gd/GdDashboard.tsx / BridgeQueue.tsx
   → action in src/hooks/useDashboard.ts   (scan, selectCustomer, approve, collect, reset)
   → pure function in src/state/machine.ts (takes old state, returns new state)
@@ -121,55 +121,53 @@ To add a new interaction: write a function in `machine.ts`, expose it from
 ## Airwallex bridge ledger
 
 The server in `server/src/` owns the PostgreSQL bridge ledger, provider
-operations, transactional outbox, and webhook inbox. Its browser API currently
-exposes only the read-only `GET /api/ledger` projection. Kit 5 remains a
-deterministic local mock; setting `VITE_BRIDGE_API_URL` to the server origin
-displays the ledger projection beside that scenario. Leaving it unset keeps Kit
-5 on mock data without a server projection.
+operations, transactional outbox, webhook inbox, and protected Kit 5 operator
+routes. `GET /api/ledger` returns the read-only ledger projection. Set
+`VITE_BRIDGE_API_URL` to connect Kit 5 to the server. Fixture mode remains a
+deterministic local mock; sandbox-live mode sends authenticated requests through
+the server.
 
-The browser funding command remains unavailable until the policy module can
-submit a trusted server-side approval. The Kit 5 sandbox-live route remains
-fail-closed until real customer mappings and policy/ledger composition are
-verified. Fixture aliases and a mocked Airwallex gateway are for local
-implementation tests only. Do not treat a browser decision or the Kit 5 UI as
-authority to fund a bridge. The server does not expose a funding route for the
-browser.
+The browser sends scenario, customer, and action IDs. The server resolves the
+provider account, card, amount, policy decision, and funding terms from trusted
+server data. It does not accept a browser-created transfer command or treat a
+fixture result as a provider result. Sandbox-live actions fail closed when
+customer or card mappings are missing, inactive, duplicate, or inconsistent.
+Nova's repayment action requires an authenticated operator, an approved saved
+decision, a settled bridge, and a completed card retry.
 
-For the demo, use deterministic fixture mode for the video and reserve
-sandbox-live mode for final submission after implementation and external
-acceptance checks pass. Each sandbox-live **Next customer** action creates one
-issuing simulation for the mapped customer's card; the server resolves the
-scenario amount and the provider response supplies the result and IDs. Bloom's
-supplier attempt is $9,000 with a $2,000 opening USD balance and a $7,000
-shortfall in both the original and Kit 5 target scenarios. The simulation API
-limit is $9,999.99 per transaction, and the mapped card must also allow the
-attempt.
+Each sandbox-live **Next customer** action creates one issuing simulation for
+the mapped card. Bloom's supplier attempt is $9,000 with a $2,000 opening USD
+balance and a $7,000 shortfall in both the original and Kit 5 target scenarios.
+The simulation API limit is $9,999.99 per transaction, and the mapped card must
+also allow the attempt.
 
-The current route remains fail-closed until these implementation prerequisites
-are complete:
-
-- Connect the active Kit 5 policy adapter as the source of approval and amount.
-- Compose it with durable bridge reservation, transfer settlement, and the
-  separate card retry.
-- The typed server-side Nova Global Account deposit-simulation operation and
-  mocked tests exist. Compose it with webhook settlement and fee-first then
-  principal collection before treating Nova's path as production-ready.
-
-After implementation, external sandbox acceptance still requires real customer
-and account/card IDs, verified API scopes and product enablement, Bloom's
-natural provider `INSUFFICIENT_FUNDS` result, configured webhook delivery with
-signature validation and HTTP 200 acknowledgement, and provider record
-retrieval and reconciliation. The existing ngrok forwarding to
-`localhost:8000` remains unverified. See the
+The repository now includes the policy adapter, durable bridge reservation,
+transfer settlement, separate card retry, Nova deposit association, and
+fee-first then principal collection. External sandbox acceptance still
+requires verified customer and account/card/Global Account IDs, API scopes and
+product enablement, Bloom's natural provider `INSUFFICIENT_FUNDS` result, signed
+webhook delivery with HTTP 200 acknowledgement, and provider record retrieval
+and reconciliation. The existing ngrok forwarding to `localhost:8000` remains
+unverified. See the
 [Kit 5 demo flow and sandbox acceptance gates](/docs/airwallex-kit5-demo-flow-draft.md).
 
-The server requires the Airwallex names `AIRWALLEX_CLIENT_ID`,
-`AIRWALLEX_API_KEY`, `AIRWALLEX_ORG_ID`, `AIRWALLEX_ACCOUNT_ID`,
-`AIRWALLEX_WEBHOOK_EVENTS_FROM`, `AIRWALLEX_WEBHOOK_ID`, and
-`AIRWALLEX_WEBHOOK_SECRET`. Keep values in server environment configuration;
-never copy the ignored root `.env` from the main checkout into this worktree,
-browser variables, fixtures, source control, or logs. The demo uses direct
-server-side REST and does not use the Airwallex AgentOS production connector.
+The runtime server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,
+`AIRWALLEX_API_KEY`, and `AIRWALLEX_WEBHOOK_SECRET`. The main-checkout `.env`
+also contains `AIRWALLEX_ORG_ID`, `AIRWALLEX_ACCOUNT_ID`,
+`AIRWALLEX_WEBHOOK_EVENTS_FROM`, and `AIRWALLEX_WEBHOOK_ID` for setup and
+verification; the current server does not read those four values. Reviewer
+resolution also needs server-only `AI_EVIDENCE_REVIEWER_ID`. Keep all values in
+server environment configuration. Never copy the ignored root `.env` from the
+main checkout into this worktree, browser variables, fixtures, source control,
+or logs. The demo uses direct server-side REST and does not use the Airwallex
+AgentOS production connector.
+
+The policy service accepts only trusted stored request IDs from its internal
+decision route. It joins roster, Salesforce, underwriting-profile, and evidence
+versions on the server, then asks the ledger to reserve capacity and enqueue a
+transfer in one transaction. The browser cannot submit ratings, tiers, credit
+lines, approvals, bridge amounts, or transfer commands. Fixture-mode decisions
+are presentation-only; sandbox-live decisions come from the server policy.
 
 ### Salesforce customer snapshots
 
@@ -192,16 +190,48 @@ reconciliation, mapping checks, and the production browser access gate.
 ### Run the local server
 
 Use Node 20.19+ or 22.12+ and a PostgreSQL database. The server does not run
-SQL migrations automatically. Apply all five in order from the repository
-root:
+SQL migrations automatically. Apply all eighteen migrations in order from the
+repository root before using the policy APIs, operator approval CLI, or Kit 5
+attempt persistence:
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_kit5_card_attempts.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_underwriting_profiles.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/006_policy_evaluations.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/007_policy_request_evaluations.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/008_remote_authorization.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_request_ledger_sequence.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/011_remote_authorization_nonce_claims.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/012_remote_authorization_decision_identity.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/013_remote_authorization_dispatch_gate.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/014_ai_evidence_decision_gate.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/015_kit5_card_attempts.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/016_kit5_policy_retry_lifecycle.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/017_kit5_repayment_deposits.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/018_customer_roster_account_mapping_audit.sql
 ```
+
+To replace a seeded connected-account placeholder, first deactivate any active
+card binding with `npm run roster:cli -- unbind-card`. With migration 018
+applied, map the provider-verified account to the existing active customer:
+
+```bash
+npm run roster:cli -- map-account \
+  --customer-id acct_bloom001 \
+  --airwallex-account-id "$VERIFIED_CONNECTED_ACCOUNT_ID" \
+  --actor "$OPERATOR_ID" \
+  --reason "Verified connected-account mapping"
+```
+
+The command rejects inactive or missing customers, account IDs that are already
+assigned, and any active card binding. It atomically updates the roster and
+appends an immutable record containing old/new IDs, actor, reason, and
+timestamp.
+Bind verified cards only after the account mapping succeeds.
 
 The server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,
 `AIRWALLEX_API_KEY`, and `AIRWALLEX_WEBHOOK_SECRET`. `PORT` is optional and
@@ -215,14 +245,15 @@ forwards to `localhost:8000`, so run the webhook-capable server on port `8000`:
 PORT=8000 npm run server:start
 ```
 
-For sandbox-live Kit 5 actions, configure the server-only `KIT5_OPERATOR_TOKEN`
-and comma-separated `KIT5_ALLOWED_ORIGINS`. Use a high-entropy token of at
-least 32 characters and allow the exact frontend origin. The operator enters
-the token at runtime; the server returns a short-lived `HttpOnly`, `Secure`,
-`SameSite=None` session cookie. The token must not be placed in a `VITE_`
-variable or frontend asset. Missing auth configuration denies transaction
-actions. The signed Airwallex webhook endpoint remains available without a
-browser session.
+For sandbox-live Kit 5 actions, configure server-only
+`KIT5_OPERATOR_TOKEN`, `KIT5_OPERATOR_ID`, and comma-separated
+`KIT5_ALLOWED_ORIGINS`. Use a high-entropy token of at least 32 characters and
+allow the exact frontend origin. The operator
+enters the token at runtime; the server returns a short-lived `HttpOnly`,
+`Secure`, `SameSite=None` session cookie bound to the configured operator ID.
+The token and operator ID must not be placed in a `VITE_` variable or frontend
+asset. Missing auth configuration denies transaction actions. The signed
+Airwallex webhook endpoint remains available without a browser session.
 
 Start the local Kit 5 frontend with the matching API origin:
 
@@ -244,7 +275,8 @@ docker compose -p flowcard-ledger-demo up -d --build
 
 Compose starts PostgreSQL and the ledger API, then applies migrations 001
 through 003 when PostgreSQL creates its empty data volume. It does not apply
-migrations 004 and 005; apply them manually for the current schema. Compose uses
+migrations 004 through 018; apply them manually for the current schema. Compose
+uses
 placeholder Airwallex values and a localhost-only base URL. It does not make
 provider calls. Open `http://localhost:3000/api/ledger` to inspect the seeded
 projection, or check `http://localhost:3000/health` for service health.
@@ -269,6 +301,31 @@ HMAC-SHA256 using `x-timestamp`, the raw body, and the notification URL's
 secret, deduplicates by event ID, and promptly acknowledges verified requests
 with HTTP 200. Airwallex may deliver events out of order. Use a sandbox webhook
 subscription and keep its signing secret server-side.
+
+### Deterministic underwriting policy
+
+Salesforce owns the mapped customer, contract, KYB, credit-review, approved-cap,
+and prior-default fields. The Airwallex underwriting profile owns derived
+settled-inflow, expected-date reliability, payer-concentration, low-balance,
+connected-account, RFI, spend-eligibility, and ledger-based repayment facts.
+AI evidence extraction proposes typed, source-referenced claims; qualification
+and a versioned approved mapping are required before a claim can affect a
+rating. A successful `no_signal` result is distinct from failed or unresolved
+evidence and can pass the readiness gate.
+
+The deterministic server policy owns ratings, tiers, credit lines, request
+outcomes, and human-review requirements. The ledger owns facility capacity,
+reservations, bridge exposure, and provider-operation outbox commands. Human
+approval records an operator and reason, then rechecks exact terms and current
+input versions before reservation. No model output or browser state can
+authorize funding.
+
+Production decisions remain blocked until provider permissions and data
+coverage are verified, expected deposit dates have a trusted source, no-go and
+signal mappings are approved and versioned, Jev's signal definitions are
+settled and qualified, and production authentication and authorization protect
+operator actions. Preserve customer-level fail-closed behavior when a source is
+missing, stale, incomplete, unmapped, or awaiting review.
 
 ### V1 ledger and repayment behavior
 

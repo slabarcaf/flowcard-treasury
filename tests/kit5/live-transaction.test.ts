@@ -8,7 +8,10 @@ import type { Kit5NextCustomerRequest, Kit5NextCustomerResponse, Kit5ProviderTra
 import { Kit5Dashboard } from '../../src/kit5/Kit5Dashboard.js';
 
 const { useKit5DashboardMock } = vi.hoisted(() => ({ useKit5DashboardMock: vi.fn() }));
-vi.mock('../../src/kit5/useKit5Dashboard.js', () => ({ useKit5Dashboard: useKit5DashboardMock }));
+vi.mock('../../src/kit5/useKit5Dashboard.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/kit5/useKit5Dashboard.js')>(),
+  useKit5Dashboard: useKit5DashboardMock,
+}));
 
 const request: Kit5NextCustomerRequest = {
   scenarioId: 'original',

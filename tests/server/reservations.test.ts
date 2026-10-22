@@ -102,11 +102,12 @@ class ReservationPool implements DatabasePool {
             rowCount: 1,
           } as QueryResult<Row>;
         }
-        if (text.includes("FROM ai_evidence_extractions AS extraction")) {
+        if (text.includes("FROM ai_evidence_extractions")) {
           if (!this.state.evidenceStatus || this.state.evidenceSnapshotId !== values[1]) return { rows: [], rowCount: 0 } as QueryResult<Row>;
-          return { rows: [{ extraction_id: "extraction-1", decision_allowed: this.state.evidenceDecisionAllowed ??
-            (this.state.evidenceStatus === "success" || this.state.evidenceStatus === "no_signal"),
-            blocking_status: this.state.evidenceStatus }] as Row[], rowCount: 1 };
+          return { rows: [{ extraction_id: "extraction-1", status: this.state.evidenceStatus,
+            decision_allowed: this.state.evidenceDecisionAllowed ??
+              (this.state.evidenceStatus === "success" || this.state.evidenceStatus === "no_signal"),
+            decision_block_reason: null }] as Row[], rowCount: 1 };
         }
         if (text.includes("FROM ai_evidence_reviews")) {
           return { rows: this.state.evidenceReviewed ? [{ id: 1 }] as Row[] : [], rowCount: this.state.evidenceReviewed ? 1 : 0 };
@@ -293,6 +294,16 @@ describe("USD facility reservations", () => {
     pool.state.evidenceDecisionAllowed = false;
     await expect(reserveBridge(pool, { bridgeId: "00000000-0000-4000-8000-000000000024", customerId: "customer-1",
       amountCents: 100_000, repaymentTerm: "asap" })).rejects.toThrow("AI evidence decision gate is unresolved");
+  });
+
+  it("rejects a successful extraction when its persisted decision gate is false", async () => {
+    const pool = new ReservationPool();
+    pool.state.evidenceStatus = "success";
+    pool.state.evidenceDecisionAllowed = false;
+    await expect(reserveBridge(pool, { bridgeId: "00000000-0000-4000-8000-000000000025", customerId: "customer-1",
+      amountCents: 100_000, repaymentTerm: "asap" })).rejects.toThrow("AI evidence decision gate is unresolved");
+    expect(pool.state.bridges).toHaveLength(0);
+    expect(pool.state.outbox).toHaveLength(0);
   });
 
   it("requires evidence for the currently published snapshot", async () => {
