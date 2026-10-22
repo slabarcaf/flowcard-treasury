@@ -513,9 +513,17 @@ provider operation unless all checks still pass.
 - Modify: `server/src/config.ts`
 - Modify: `server/src/roster/repository.ts`
 - Modify: `server/src/roster/cli.ts`
+- Modify: `server/src/policy/approval-cli.ts`
+- Create: `server/src/policy/remote-authorization.ts`
+- Modify: `server/src/ledger/reservations.ts`
+- Modify: `server/src/snapshots/freshness.ts`
+- Modify: `server/src/underwriting/repository.ts`
 - Create: `server/src/http/routes/remote-authorization.ts`
 - Create: `tests/server/policy/bridge-decision-route.test.ts`
+- Create: `tests/server/policy/bridge-decision-auth.test.ts`
 - Create: `tests/server/policy/approval-cli.test.ts`
+- Modify: `tests/server/schema.test.ts`
+- Create: `tests/server/policy/remote-authorization-binding.test.ts`
 - Create: `tests/server/policy/remote-authorization-route.test.ts`
 
 The v2 remote authorization ingress persists only allowlisted transaction IDs,
