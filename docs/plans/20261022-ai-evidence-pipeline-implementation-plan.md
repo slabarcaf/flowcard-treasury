@@ -4,13 +4,13 @@ version: 1.0
 date_created: 2026-10-22
 last_updated: 2026-10-22
 owner: Ramil
-status: Planned
+status: Implementation complete; review pending
 tags: [feature, ai-evidence, salesforce, signal-extraction]
 ---
 
 # 20261022 AI evidence pipeline implementation plan
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Implementation complete; review pending](https://img.shields.io/badge/status-implementation--complete%3B%20review--pending-blue)
 
 [TOC]
 
@@ -459,15 +459,25 @@ demo frontend. A protected production review UI requires a separate auth scope.
 
 ### Task 11: Update documentation and plan status
 
-- [ ] Document the signal result schema, review states, calibration gate, and
+- **Updated:** `README.md` documents the result contract, review and decision
+  states, per-type qualification, configuration versions, fixture and
+  production gates, server variables, migration, and operator CLI.
+- **Validation:** `npm test`, `npm run build`, and `npm run lint` passed in
+  Task 10. Markdown style validation is run for this task.
+- **Scope:** No runtime behavior changed. Production remains gated pending
+  Typesafe.ai signal definitions, provider approval and data-handling terms,
+  and verified Salesforce fields. No live provider calls were made.
+
+- [x] Document the signal result schema, review states, calibration gate, and
   model configuration version key.
-- [ ] Document fixture mode, the approved production provider gate, and the
+- [x] Document fixture mode, the approved production provider gate, and the
   required server configuration.
-- [ ] Update the README with the server-side evidence flow and the operator
+- [x] Update the README with the server-side evidence flow and the operator
   review CLI.
-- [ ] Update this plan with actual files, test commands, and any justified
+- [x] Update this plan with actual files, test commands, and any justified
   scope changes.
-- [ ] Move the completed plan to `docs/plans/completed/` after implementation.
+- [x] Move the completed plan to `docs/plans/completed/` after implementation.
+  The execution harness will move it after reviews; it remains here until then.
 
 ## Post-completion gates
 
