@@ -1,6 +1,8 @@
+import { SIGNAL_CATALOG_VERSION } from "./catalog.js";
+
 /** Versioned contracts for extracting evidence from published CRM snapshots. */
 export const AI_EVIDENCE_SCHEMA_VERSION = 1 as const;
-export const AI_EVIDENCE_CATALOG_VERSION = "proposed-v1" as const;
+export const AI_EVIDENCE_CATALOG_VERSION = SIGNAL_CATALOG_VERSION;
 
 export type ExtractionStatus =
   | "success"

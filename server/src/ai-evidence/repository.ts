@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabasePool } from "../db/pool.js";
 import type { ExtractionResult } from "./types.js";
-import type { EvidenceReference } from "./types.js";
 
 export interface StoredExtraction {
   extractionId: string;
@@ -128,13 +127,6 @@ export async function getLatestEvidenceReview(
     ...(row.corrected_signal === null ? {} : { correctedSignal: row.corrected_signal }),
     ...(row.clear_reason === null ? {} : { clearReason: row.clear_reason }),
   };
-}
-
-export function referencedSources(result: ExtractionResult): EvidenceReference[] {
-  return result.signals.flatMap((signal) => [
-    ...signal.evidence,
-    ...signal.alternatives.flatMap((alternative) => alternative.evidence),
-  ]);
 }
 
 function assertFingerprint(value: string): void {

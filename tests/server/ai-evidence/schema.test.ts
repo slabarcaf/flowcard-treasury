@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { loadSignalCatalog, SIGNAL_CATALOG_PRODUCTION_APPROVED } from "../../../server/src/ai-evidence/catalog.js";
+import { loadSignalCatalog, SIGNAL_CATALOG_PRODUCTION_APPROVED, SIGNAL_CATALOG_VERSION } from "../../../server/src/ai-evidence/catalog.js";
 import { parseExtractionResult } from "../../../server/src/ai-evidence/schema.js";
+import { AI_EVIDENCE_CATALOG_VERSION } from "../../../server/src/ai-evidence/types.js";
 
 const model = {
   modelId: "fixture-v1",
@@ -34,6 +35,10 @@ const base = {
 };
 
 describe("AI evidence result schema", () => {
+  it("uses the catalog's version as the extraction metadata version", () => {
+    expect(AI_EVIDENCE_CATALOG_VERSION).toBe(SIGNAL_CATALOG_VERSION);
+  });
+
   it("parses a valid quote-backed signal with version metadata", () => {
     expect(parseExtractionResult(base)).toMatchObject({
       schemaVersion: 1,
