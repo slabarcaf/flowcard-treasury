@@ -284,18 +284,18 @@ demo frontend. A protected production review UI requires a separate auth scope.
 - Create: `server/src/ai-evidence/config.ts`
 - Create: `tests/server/ai-evidence/provider.test.ts`
 
-- [ ] Define a provider-neutral server interface with explicit model and
+- [x] Define a provider-neutral server interface with explicit model and
   configuration version metadata.
-- [ ] Add deterministic synthetic fixtures for direct, ambiguous, conflicting,
+- [x] Add deterministic synthetic fixtures for direct, ambiguous, conflicting,
   irrelevant, duplicate, and superseded evidence cases.
-- [ ] Define the live-provider adapter boundary; enable it only when the
+- [x] Define the live-provider adapter boundary; enable it only when the
   provider and data-handling terms are approved.
-- [ ] Keep all model credentials server-side and deny tool access to the model.
-- [ ] Delimit Salesforce text as untrusted evidence and instruct the model to
+- [x] Keep all model credentials server-side and deny tool access to the model.
+- [x] Delimit Salesforce text as untrusted evidence and instruct the model to
   ignore instructions embedded in it.
-- [ ] Test fixture selection, production configuration gating, and prompt
+- [x] Test fixture selection, production configuration gating, and prompt
   construction without a live provider call.
-- [ ] Run focused tests before Task 4.
+- [x] Run focused tests before Task 4.
 
 ### Task 4: Implement extraction, attribution, and output validation
 
