@@ -1,4 +1,4 @@
-import type { CustomerProfile, FacilityConfig, Signals } from '../policy/types.js';
+import type { CustomerProfile, DemoPolicyReadiness, FacilityConfig, Signals } from '../policy/types.js';
 import type { DashboardState } from '../state/types.js';
 
 // ---------------------------------------------------------------------------
@@ -18,6 +18,8 @@ export interface ScenarioCustomer extends CustomerProfile {
    * triggers the CRM re-evaluation step when the customer's decline arrives.
    */
   crmSignalsAfter?: Signals;
+  /** Optional deterministic override used by regression scenarios. */
+  policyReadiness?: DemoPolicyReadiness;
 }
 
 /** A card payment declined with INSUFFICIENT_FUNDS. */

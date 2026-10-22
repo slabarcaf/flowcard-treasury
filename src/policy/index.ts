@@ -12,4 +12,6 @@ export {
 } from '../../shared/policy/facility.js';
 export { checkBridge } from '../../shared/policy/bridge.js';
 export type { BridgeCheckParams } from '../../shared/policy/bridge.js';
+export { evaluateDemoPolicy, evaluateDemoPolicyGate, policyReasonText } from '../../shared/policy/demo.js';
+export type { DemoPolicyDecision } from '../../shared/policy/demo.js';
 export { bridgeFee, bridgeFeeVariable } from './fees.js';

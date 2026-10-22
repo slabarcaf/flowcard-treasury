@@ -73,6 +73,7 @@ export interface CrmNote {
 // ---------------------------------------------------------------------------
 
 import type { SalesforceCustomerSnapshot } from '../../server/src/salesforce/types.js';
+export type { DemoPolicyReadiness } from '../../shared/policy/types.js';
 
 export type SalesforceSnapshotSourceMode = 'demo' | 'production_mcp';
 export type SalesforceSnapshotFreshness = 'fresh' | 'missing' | 'stale' | 'invalid' | 'deactivated';

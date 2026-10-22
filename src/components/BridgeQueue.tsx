@@ -45,6 +45,7 @@ const STATUS_COLORS: Record<string, string> = {
   Funded: 'text-emerald-600',
   Repaid: 'text-emerald-600',
   Declined: 'text-red-600',
+  Blocked: 'text-red-700',
   Ineligible: 'text-red-500',
   '—': 'text-gray-400',
 };

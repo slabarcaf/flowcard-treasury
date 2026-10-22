@@ -1,4 +1,4 @@
-import type { FacilityConfig, Signals } from '../policy/types.js';
+import type { DemoPolicyReadiness, FacilityConfig, Signals } from '../policy/types.js';
 import { CUSTOMERS, BLOOM_SIGNALS_AFTER_CRM, AGENT_RATIONALES } from '../seed.js';
 import type { Scenario, ScenarioCustomer, ScenarioInputs } from './types.js';
 
@@ -28,6 +28,9 @@ const ALL_GREEN: Signals = {
   inflowConcentration: 'green',
   cashBuffer: 'green',
   trackRecord: 'green',
+};
+const SYNTHETIC_READY: DemoPolicyReadiness = {
+  snapshot: 'fresh', evidence: 'no_signal', creditReview: 'approved', priorDefault: 'no',
 };
 
 // GD's four customers, unchanged. Bloom keeps the Salesforce re-rating.
@@ -71,6 +74,7 @@ const kit5Target: ScenarioInputs = {
       historyDays: 240,
       noGo: NO_GO,
       rationale: 'Same profile shape as Nova: two yellows on concentration and cash buffer',
+      policyReadiness: SYNTHETIC_READY,
     },
   ],
   events: [
@@ -95,6 +99,7 @@ function twin(key: string, id: string, name: string, monthlyInflow: number): Sce
     historyDays: 400,
     noGo: NO_GO,
     rationale: 'All four signals green, repaid every past bridge on time',
+    policyReadiness: SYNTHETIC_READY,
   };
 }
 

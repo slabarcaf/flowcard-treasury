@@ -46,7 +46,7 @@ export function checkBridge(params: BridgeCheckParams): BridgeDecision {
   }
   if (deployableCapital < shortfall) {
     reasons.push(
-      `Deployable capital $${deployableCapital.toLocaleString()} insufficient for $${shortfall.toLocaleString()} shortfall`,
+      `$${shortfall.toLocaleString()} exceeds the $${deployableCapital.toLocaleString()} left above the floor; insufficient deployable capital, no partial bridge`,
     );
     reasonCodes.push('INSUFFICIENT_DEPLOYABLE_CAPITAL');
   }

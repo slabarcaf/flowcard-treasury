@@ -8,7 +8,11 @@ import {
   reEvaluateCrm,
   approve,
   acknowledge,
+  evaluateKit5CustomerPolicy,
 } from '../../src/kit5/engine.js';
+import { evaluateDashboardCustomerPolicy, initialState, scanDeclines, processCustomer } from '../../src/state/machine.js';
+import { CUSTOMERS } from '../../src/seed.js';
+import type { DemoPolicyReadiness } from '../../src/policy/types.js';
 import { SCENARIOS } from '../../src/kit5/scenarios.js';
 import type { Kit5State } from '../../src/kit5/types.js';
 
@@ -45,11 +49,13 @@ describe('Kit 5 facility', () => {
     expect(s.band).toBe('less');
   });
 
-  it('never processes the next request while one is waiting on a person', () => {
+  it('blocks unresolved evidence and continues without creating a review action', () => {
     let s = start(initialKit5State(scenario('original')));
-    s = step(s); // Bloom → held for CRM
-    expect(s.pause?.kind).toBe('crm');
-    expect(step(s)).toBe(s);
+    s = step(s); // Bloom's evidence fixture is review-required.
+    expect(status(s, 'txn_bloom_payroll_001')).toBe('Blocked');
+    expect(s.customerDetails.txn_bloom_payroll_001.reasonCodes).toContain('EVIDENCE_REVIEW_REQUIRED');
+    s = step(s); // Atlas can proceed independently.
+    expect(status(s, 'txn_atlas_supplier_001')).toBe('Funded');
   });
 });
 
@@ -74,8 +80,8 @@ describe('Original scenario', () => {
     const s = playAll(initialKit5State(scenario('original')), (x) => {
       if (nextEvent(x)?.type === 'repayment' && !x.pause) deployableBeforeCollection = x.deployableCapital;
     });
-    expect(status(s, 'txn_bloom_payroll_001')).toBe('Declined');
-    expect(s.customerDetails.txn_bloom_payroll_001.tierChange).toEqual({ from: 'A', to: 'C' });
+    expect(status(s, 'txn_bloom_payroll_001')).toBe('Blocked');
+    expect(s.customerDetails.txn_bloom_payroll_001.reasonCodes).toContain('EVIDENCE_REVIEW_REQUIRED');
     expect(status(s, 'txn_atlas_supplier_001')).toBe('Funded');
     expect(status(s, 'txn_nova_contractor_001')).toBe('Repaid');
     expect(status(s, 'txn_pixel_ads_001')).toBe('Ineligible');
@@ -103,13 +109,35 @@ describe('Original scenario', () => {
 
   it('sends Nova to a credit officer (Tier B at Less)', () => {
     let s = start(initialKit5State(scenario('original')));
-    s = reEvaluateCrm(revealCrm(step(s))); // Bloom
+    s = step(s); // Bloom is blocked by unresolved evidence.
+    expect(status(s, 'txn_bloom_payroll_001')).toBe('Blocked');
     s = step(s); // Atlas
     expect(s.pause).toEqual({ kind: 'ack', requestId: 'txn_atlas_supplier_001' });
     expect(step(s)).toBe(s); // waits for the presenter
     s = step(acknowledge(s)); // Nova
     expect(s.pause).toEqual({ kind: 'human', requestId: 'txn_nova_contractor_001' });
+    expect(s.customerDetails.txn_nova_contractor_001.approvalTerms).toMatchObject({
+      amount: 6_000, creditLine: 7_000, door: 'human',
+      reviewRequirement: 'Salesforce credit review is on watch.',
+    });
     expect(s.customerDetails.txn_nova_contractor_001.approvalTerms?.capitalImpact).toContain('$10,000 → $4,000');
+  });
+});
+
+describe('GD demo snapshot and evidence gates', () => {
+  it('blocks Bloom on unresolved fixture evidence and requires exact-term review for Nova watch', () => {
+    let state = scanDeclines(initialState());
+    state = processCustomer(state, 'acct_bloom001');
+    expect(state.queue.find((row) => row.customerId === 'acct_bloom001')?.status).toBe('Blocked');
+    expect(state.customerDetails.acct_bloom001.reasonCodes).toContain('EVIDENCE_REVIEW_REQUIRED');
+
+    state = processCustomer(state, 'acct_atlas001');
+    state = processCustomer(state, 'acct_nova001');
+    expect(state.queue.find((row) => row.customerId === 'acct_nova001')?.status).toBe('Pending approval');
+    expect(state.customerDetails.acct_nova001.approvalTerms).toMatchObject({
+      amount: 6_000, creditLine: 7_000, door: 'human',
+      reviewRequirement: 'Salesforce credit review is on watch; a human decision is required.',
+    });
   });
 });
 
@@ -151,5 +179,40 @@ describe('Tight capital → human', () => {
     s = approve(s, 'txn_willow_contractor_001');
     expect(status(s, 'txn_willow_contractor_001')).toBe('Funded');
     expect(s.deployableCapital).toBe(500);
+  });
+});
+
+describe('shared demo decision fixtures', () => {
+  const profile = { ...CUSTOMERS.atlas, signals: { ...CUSTOMERS.atlas.signals } };
+  const facility = { facilitySize: 50_000, reserveFloorPct: 0.2, maxPerCustomerPct: 0.2, feeRatePer30Days: 0.015, minHistoryDays: 90, approvedBridgeCap: 8_000 };
+  const base = {
+    profile,
+    facility,
+    shortfall: 3_000,
+    outstanding: 0,
+    band: 'a_lot' as const,
+    deployableCapital: 40_000,
+  };
+  const readiness = (overrides: Partial<DemoPolicyReadiness> = {}): DemoPolicyReadiness => ({
+    snapshot: 'fresh', evidence: 'no_signal', creditReview: 'approved', priorDefault: 'no', ...overrides,
+  });
+
+  it.each([
+    ['stale snapshot', readiness({ snapshot: 'stale' }), 'blocked', 'SNAPSHOT_STALE'],
+    ['review-required evidence', readiness({ evidence: 'review_required' }), 'blocked', 'EVIDENCE_REVIEW_REQUIRED'],
+    ['valid no-signal evidence', readiness(), 'approved', undefined],
+    ['watch status', readiness({ creditReview: 'watch' }), 'human_review', 'CREDIT_REVIEW_WATCH'],
+    ['prior default', readiness({ priorDefault: 'yes' }), 'ineligible', 'PRIOR_DEFAULT'],
+    ['capital exhaustion', readiness(), 'declined', 'INSUFFICIENT_DEPLOYABLE_CAPITAL'],
+  ] as const)('%s produces the same deterministic result in both demo engines', (_name, gate, expectedStatus, reasonCode) => {
+    const capitalCase = _name === 'capital exhaustion'
+      ? { band: 'at_floor' as const, deployableCapital: 0 }
+      : { band: base.band, deployableCapital: base.deployableCapital };
+    const input = { ...base, ...capitalCase, readiness: gate };
+    const dashboardResult = evaluateDashboardCustomerPolicy(input);
+    const kit5Result = evaluateKit5CustomerPolicy(input);
+    expect(dashboardResult).toEqual(kit5Result);
+    expect(dashboardResult.status).toBe(expectedStatus);
+    if (reasonCode) expect(dashboardResult.reasonCodes).toContain(reasonCode);
   });
 });

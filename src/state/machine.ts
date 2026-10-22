@@ -7,22 +7,34 @@ import {
   BLOOM_SIGNALS_AFTER_CRM,
   AGENT_RATIONALES,
   NOVA_COLLECTION,
+  NOVA_APPROVAL_TERMS,
+  DEMO_APPROVED_BRIDGE_CAPS,
+  demoPolicyReadiness,
 } from '../seed.js';
 import {
   assignTier,
-  computeCreditLine,
   lendable,
   reserveFloor,
   deployable,
   capitalLevel,
   toBand,
-  getDoor,
   hasNoGo,
+  evaluateDemoPolicy,
 } from '../policy/index.js';
 import { bridgeFee } from '../policy/fees.js';
+import type { DemoPolicyDecision } from '../policy/index.js';
+import type { CustomerProfile, DemoPolicyReadiness, FacilityConfig, Band } from '../policy/types.js';
 
 const LENDABLE = lendable(FACILITY_CONFIG);
 const FLOOR = reserveFloor(FACILITY_CONFIG);
+
+/** Policy adapter used by the GD demo engine and shared decision fixtures. */
+export function evaluateDashboardCustomerPolicy(input: {
+  profile: CustomerProfile; facility: FacilityConfig; readiness: DemoPolicyReadiness;
+  shortfall: number; outstanding: number; band: Band; deployableCapital: number;
+}): DemoPolicyDecision {
+  return evaluateDemoPolicy(input);
+}
 
 // ---------------------------------------------------------------------------
 // Initial (idle) state
@@ -126,6 +138,41 @@ export function processCustomer(prev: DashboardState, customerId: string): Dashb
   const txn = DECLINED_TRANSACTIONS.find((t) => t.customerId === customerId);
   if (!txn) return state;
 
+  const readiness = demoPolicyReadiness(profile.id);
+  const facility = { ...FACILITY_CONFIG, approvedBridgeCap: DEMO_APPROVED_BRIDGE_CAPS[profile.id] };
+  const sharedDecision = evaluateDashboardCustomerPolicy({
+    profile, facility, readiness, shortfall: txn.shortfall, outstanding: 0,
+    band: state.band, deployableCapital: state.deployableCapital,
+  });
+
+  if (sharedDecision.status === 'blocked' || sharedDecision.status === 'ineligible') {
+    const reason = sharedDecision.reasons.join(' ');
+    const skipped = (label: string): PipelineStep => ({ label, sublabel: 'Skipped by deterministic policy gate', status: 'skip', tooltip: reason });
+    const precheck: PipelineStep[] = [
+      { label: 'Salesforce snapshot', sublabel: 'Fresh complete snapshot', status: readiness.snapshot === 'fresh' ? 'pass' : 'fail', value: readiness.snapshot, tooltip: reason },
+      { label: 'Evidence readiness', sublabel: 'Qualified or valid no-signal', status: ['ready', 'no_signal'].includes(readiness.evidence) ? 'pass' : 'fail', value: readiness.evidence, tooltip: reason },
+      skipped('Daily precheck'),
+    ];
+    const perRequest = ['Spend check', 'Line check', 'Facility check', 'Door / Approve'].map(skipped);
+    const rowIdx = state.queue.findIndex((r) => r.customerId === customerId);
+    const status = sharedDecision.status === 'blocked' ? 'Blocked' : 'Ineligible';
+    if (rowIdx >= 0) {
+      state.queue[rowIdx].status = status;
+      state.queue[rowIdx].eligible = false;
+      state.queue[rowIdx].ineligibleReason = reason;
+      state.queue[rowIdx].reasonCodes = sharedDecision.reasonCodes;
+      state.queue[rowIdx].reasonTexts = sharedDecision.reasons;
+    }
+    state.customerDetails[customerId] = {
+      customerId, customerName: profile.name, tier: 'none', door: 'closed', allocation: 0,
+      creditLine: 0, reasonCodes: sharedDecision.reasonCodes, reasonTexts: sharedDecision.reasons,
+      status, rationale: '', policyChecks: [], precheck, perRequest, showCrmNote: false,
+      showSignals: false, showApproval: false, awaitingApproval: false, ineligibleReason: reason,
+    };
+    state.processedCustomers = [...state.processedCustomers, customerId];
+    return state;
+  }
+
   const precheck: PipelineStep[] = [];
   const perRequest: PipelineStep[] = [];
   let policyChecks: PolicyCheck[] = [];
@@ -201,7 +248,7 @@ export function processCustomer(prev: DashboardState, customerId: string): Dashb
 
   // Step 3: Four signals — use initial signals only (Bloom CRM re-rating happens later)
   const signals = profile.signals;
-  const initialTier = assignTier(signals);
+  const initialTier = sharedDecision.tier;
   const finalTier = initialTier;
   const showCrmNote = false;
   const showSignals = false;
@@ -229,7 +276,7 @@ export function processCustomer(prev: DashboardState, customerId: string): Dashb
   });
 
   // Step 5: Credit line
-  const creditLine = computeCreditLine(finalTier, profile.monthlyInflow, FACILITY_CONFIG);
+  const creditLine = sharedDecision.creditLine;
   precheck.push({
     label: 'Credit line',
     sublabel: 'Tier multiplier × inflow',
@@ -242,7 +289,7 @@ export function processCustomer(prev: DashboardState, customerId: string): Dashb
   const shortfall = txn.shortfall;
 
   // Step 1: Spend check — shortfall within credit line
-  const spendOk = creditLine >= shortfall;
+  const spendOk = !sharedDecision.reasonCodes.includes('CREDIT_LINE_TOO_SMALL');
   perRequest.push({
     label: 'Spend check',
     sublabel: 'Shortfall ≤ credit line',
@@ -262,7 +309,7 @@ export function processCustomer(prev: DashboardState, customerId: string): Dashb
   });
 
   // Step 3: Facility check — deployable capital >= shortfall
-  const facilityOk = state.deployableCapital >= shortfall;
+  const facilityOk = !sharedDecision.reasonCodes.includes('INSUFFICIENT_DEPLOYABLE_CAPITAL');
   perRequest.push({
     label: 'Facility check',
     sublabel: 'Deployable ≥ shortfall',
@@ -272,9 +319,9 @@ export function processCustomer(prev: DashboardState, customerId: string): Dashb
   });
 
   // Step 4: Door / Approve
-  const door = getDoor(state.band, finalTier);
+  const door = sharedDecision.door;
   const doorOk = door !== 'closed';
-  const allPerRequestOk = spendOk && lineOk && facilityOk && doorOk;
+  const allPerRequestOk = sharedDecision.status === 'approved' || sharedDecision.status === 'human_review';
 
   perRequest.push({
     label: 'Door / Approve',
@@ -285,13 +332,13 @@ export function processCustomer(prev: DashboardState, customerId: string): Dashb
   });
 
   // ---- Determine outcome ----
-  const allocation = allPerRequestOk ? shortfall : 0;
+  const allocation = sharedDecision.allocation;
   let status: string;
   let rationale: string;
   let showApproval = false;
   let awaitingApproval = false;
 
-  if (!allPerRequestOk) {
+  if (sharedDecision.status === 'declined' || !allPerRequestOk) {
     status = 'Declined';
     rationale = key === 'bloom' ? AGENT_RATIONALES.bloom_declined : '';
     policyChecks = [];
@@ -360,6 +407,9 @@ export function processCustomer(prev: DashboardState, customerId: string): Dashb
     tierChange: undefined,
     door,
     allocation,
+    creditLine,
+    reasonCodes: sharedDecision.reasonCodes,
+    reasonTexts: sharedDecision.reasons,
     status,
     rationale,
     policyChecks,
@@ -370,6 +420,17 @@ export function processCustomer(prev: DashboardState, customerId: string): Dashb
     ...(key === 'bloom' ? { bloomAgentPhase: 'found' as const } : {}),
     showApproval,
     awaitingApproval,
+    ...(showApproval ? { approvalTerms: {
+      ...NOVA_APPROVAL_TERMS,
+      amount: allocation,
+      creditLine,
+      door: 'human' as const,
+      reviewRequirement: sharedDecision.reasonCodes.includes('CREDIT_REVIEW_WATCH')
+        ? 'Salesforce credit review is on watch; a human decision is required.'
+        : 'A credit officer must review and approve these exact terms.',
+      to: `${profile.name} (${profile.id})`,
+      covers: `Declined card transaction ${txn.transactionId}`,
+    } } : {}),
   };
 
   state.processedCustomers = [...state.processedCustomers, customerId];
@@ -419,15 +480,21 @@ export function reEvaluateBloom(prev: DashboardState): DashboardState {
 
   // Re-rate with CRM signals
   const signals = BLOOM_SIGNALS_AFTER_CRM;
-  const finalTier = assignTier(signals);
 
   const sigVals = Object.values(signals);
   const greens = sigVals.filter((s) => s === 'green').length;
   const yellows = sigVals.filter((s) => s === 'yellow').length;
 
-  const creditLine = computeCreditLine(finalTier, profile.monthlyInflow, FACILITY_CONFIG);
   const shortfall = txn.shortfall;
-  const door = getDoor(state.band, finalTier);
+  const sharedDecision = evaluateDashboardCustomerPolicy({
+    profile: { ...profile, signals },
+    facility: { ...FACILITY_CONFIG, approvedBridgeCap: DEMO_APPROVED_BRIDGE_CAPS[profile.id] },
+    readiness: demoPolicyReadiness(profile.id), shortfall, outstanding: 0,
+    band: state.band, deployableCapital: state.deployableCapital,
+  });
+  const finalTier = sharedDecision.tier;
+  const creditLine = sharedDecision.creditLine;
+  const door = sharedDecision.door;
 
   // Rebuild precheck with final signals
   const precheck: PipelineStep[] = [
@@ -469,12 +536,10 @@ export function reEvaluateBloom(prev: DashboardState): DashboardState {
   ];
 
   // Rebuild per-request with final values
-  const spendOk = creditLine >= shortfall;
+  const spendOk = !sharedDecision.reasonCodes.includes('CREDIT_LINE_TOO_SMALL');
   const lineOk = spendOk;
-  const facilityOk = state.deployableCapital >= shortfall;
+  const facilityOk = !sharedDecision.reasonCodes.includes('INSUFFICIENT_DEPLOYABLE_CAPITAL');
   const doorOk = door !== 'closed';
-  const allPerRequestOk = spendOk && lineOk && facilityOk && doorOk;
-
   const perRequest: PipelineStep[] = [
     {
       label: 'Spend check',
@@ -506,7 +571,7 @@ export function reEvaluateBloom(prev: DashboardState): DashboardState {
     },
   ];
 
-  const allocation = allPerRequestOk ? shortfall : 0;
+  const allocation = sharedDecision.allocation;
 
   // Policy checks for the declined outcome
   const policyChecks: PolicyCheck[] = [
@@ -524,6 +589,9 @@ export function reEvaluateBloom(prev: DashboardState): DashboardState {
   detail.tierChange = { from: initialTier, to: finalTier };
   detail.door = door;
   detail.allocation = allocation;
+  detail.creditLine = creditLine;
+  detail.reasonCodes = sharedDecision.reasonCodes;
+  detail.reasonTexts = sharedDecision.reasons;
   detail.status = 'Declined';
   detail.rationale = AGENT_RATIONALES.bloom_declined;
   detail.policyChecks = policyChecks;
@@ -541,6 +609,8 @@ export function reEvaluateBloom(prev: DashboardState): DashboardState {
     state.queue[rowIdx].allocation = allocation;
     state.queue[rowIdx].status = 'Declined';
     state.queue[rowIdx].rationale = AGENT_RATIONALES.bloom_declined;
+    state.queue[rowIdx].reasonCodes = sharedDecision.reasonCodes;
+    state.queue[rowIdx].reasonTexts = sharedDecision.reasons;
   }
 
   return state;

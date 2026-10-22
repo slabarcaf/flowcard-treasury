@@ -556,18 +556,18 @@ addition because the documented provider request is the trusted request source.
 - Modify: `src/components/ApprovalCard.tsx`
 - Modify: `tests/kit5/engine.test.ts`
 
-- [ ] Run both demo engines through the shared pure policy functions and
+- [x] Run both demo engines through the shared pure policy functions and
   fixture-backed snapshot/evidence gates.
-- [ ] Display blocked, ineligible, human-review, and declined outcomes with
+- [x] Display blocked, ineligible, human-review, and declined outcomes with
   deterministic reason codes and useful text.
-- [ ] Keep demo fixture mode deterministic and prevent browser state from
+- [x] Keep demo fixture mode deterministic and prevent browser state from
   authorizing a live bridge.
-- [ ] Show the exact line, request amount, door, and review requirement before
+- [x] Show the exact line, request amount, door, and review requirement before
   presenting a human approval action.
-- [ ] Add regression scenarios for stale snapshots, review-required evidence,
+- [x] Add regression scenarios for stale snapshots, review-required evidence,
   valid no-signal, watch status, prior default, and capital exhaustion.
-- [ ] Test both demo versions against the same decision fixtures.
-- [ ] Run focused UI and scenario tests before Task 10.
+- [x] Test both demo versions against the same decision fixtures.
+- [x] Run focused UI and scenario tests before Task 10.
 
 ### Task 10: Verify end-to-end acceptance and document the policy boundary
 

@@ -30,7 +30,34 @@ export type PolicyReasonCode =
   | 'DOOR_CLOSED'
   | 'SHORTFALL_EXCEEDS_REMAINING_LINE'
   | 'CREDIT_LINE_TOO_SMALL'
-  | 'INSUFFICIENT_DEPLOYABLE_CAPITAL';
+  | 'INSUFFICIENT_DEPLOYABLE_CAPITAL'
+  | 'SNAPSHOT_MISSING'
+  | 'SNAPSHOT_STALE'
+  | 'SNAPSHOT_INVALID'
+  | 'EVIDENCE_REVIEW_REQUIRED'
+  | 'EVIDENCE_UNMAPPED'
+  | 'EVIDENCE_FAILED'
+  | 'CREDIT_REVIEW_WATCH'
+  | 'CREDIT_REVIEW_BLOCKED'
+  | 'CREDIT_REVIEW_UNKNOWN'
+  | 'PRIOR_DEFAULT'
+  | 'PRIOR_DEFAULT_UNKNOWN';
+
+/** Synthetic input readiness used only by the browser demo engines. */
+export interface DemoPolicyReadiness {
+  snapshot: 'fresh' | 'missing' | 'stale' | 'invalid';
+  evidence: 'no_signal' | 'ready' | 'review_required' | 'unmapped' | 'failed';
+  creditReview: 'approved' | 'watch' | 'hold' | 'review_required' | 'unknown';
+  priorDefault: 'yes' | 'no' | 'unknown';
+}
+
+export interface DemoPolicyGateResult {
+  allowed: boolean;
+  humanApprovalRequired: boolean;
+  ineligible: boolean;
+  reasonCodes: PolicyReasonCode[];
+  reasons: string[];
+}
 
 /** Outcome from mapping ratings to a tier, with stable audit reasons. */
 export interface TierAssignment {
