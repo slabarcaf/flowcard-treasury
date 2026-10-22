@@ -35,6 +35,13 @@ import type {
  */
 export const DEFAULT_TERM_DAYS = 30;
 
+const SIGNAL_LABELS: { key: keyof Signals; label: string }[] = [
+  { key: 'inflowReliability', label: 'Inflow reliability' },
+  { key: 'inflowConcentration', label: 'Inflow concentration' },
+  { key: 'cashBuffer', label: 'Cash buffer' },
+  { key: 'trackRecord', label: 'Track record' },
+];
+
 function fmt(n: number): string {
   return '$' + n.toLocaleString('en-US');
 }
@@ -488,16 +495,53 @@ export function reEvaluateCrm(prev: Kit5State): Kit5State {
   s.pause = null;
   const tierFrom = assignTier(c.signals);
   const tierTo = assignTier(c.crmSignalsAfter);
+  const f = s.inputs.facility;
   pushFeed(s, ev.time, `AI extracted 3 risk signals from the Salesforce note on ${c.name}`, 'info');
   pushFeed(s, ev.time, `${c.name} re-rated: Tier ${tierFrom} → Tier ${tierTo}`, 'info');
+  const beforeEval = evaluate(s, c, c.signals, Math.max(0, ev.paymentAmount - ev.walletBalance));
+  const before = {
+    line: computeCreditLine(tierFrom, c.monthlyInflow, f),
+    door: getDoor(s.band, tierFrom),
+    band: bandLabel(s),
+    outcome: beforeEval.failures.length > 0
+      ? 'declined' as const
+      : beforeEval.door === 'auto' ? 'approved automatically' as const : 'sent to a credit officer' as const,
+  };
   decide(s, ev, { signals: c.crmSignalsAfter, tierFrom });
-  s.customerDetails[ev.requestId].bloomAgentPhase = 'done';
+  const detail = s.customerDetails[ev.requestId];
+  detail.bloomAgentPhase = 'done';
+
+  // Hold on the result so the presenter can explain what the note changed. If the new
+  // decision already pauses (credit officer, auto-approval), that pause takes over.
+  if (!s.pause) {
+    const after = c.crmSignalsAfter;
+    s.pause = {
+      kind: 'crm-result',
+      requestId: ev.requestId,
+      change: {
+        customerName: c.name,
+        signals: SIGNAL_LABELS
+          .filter(({ key }) => c.signals[key] !== after[key])
+          .map(({ key, label }) => ({ label, from: c.signals[key], to: after[key] })),
+        tierFrom,
+        tierTo,
+        lineFrom: before.line,
+        lineTo: computeCreditLine(tierTo, c.monthlyInflow, f),
+        doorFrom: before.door,
+        doorTo: detail.door,
+        bandLabel: before.band,
+        outcomeBefore: before.outcome,
+        status: detail.status,
+        reasons: detail.policyChecks.filter((p) => !p.passed).map((p) => p.label.replace(`${c.name}: `, '')),
+      },
+    };
+  }
   return s;
 }
 
-/** The presenter has seen the auto-approval; move on to the next request. */
+/** The presenter has seen the auto-approval or the CRM result; move on to the next request. */
 export function acknowledge(prev: Kit5State): Kit5State {
-  if (prev.pause?.kind !== 'ack') return prev;
+  if (prev.pause?.kind !== 'ack' && prev.pause?.kind !== 'crm-result') return prev;
   return { ...prev, pause: null };
 }
 

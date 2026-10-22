@@ -33,6 +33,7 @@ but is not rendered anywhere.
 | Speed of arrivals | `ARRIVAL_MS` in `src/kit5/useKit5Dashboard.ts` |
 | Default collect-by window (30 days) | `DEFAULT_TERM_DAYS` in `src/kit5/engine.ts`, or `termDays` on a decline event |
 | Auto-approval callout | `Kit5Dashboard.tsx` (the pause itself is `pause.kind === 'ack'` in `engine.ts`) |
+| "Salesforce note changed …" callout after re-evaluation | `src/kit5/CrmResultCallout.tsx`; the before → after data is built in `reEvaluateCrm()` in `engine.ts` (`pause.kind === 'crm-result'`) |
 | Profiles, Salesforce note text, AI rationales | `src/seed.ts` (`CUSTOMERS`, `BLOOM_CRM_NOTE`, `AI_EXTRACTED_SIGNALS`, `AGENT_RATIONALES`) |
 
 ### Add a scenario
@@ -72,8 +73,8 @@ button in Kit5Dashboard.tsx / BridgeQueue.tsx
 
 `useKit5Dashboard` calls `step()` on a timer. Each step takes the next event in arrival
 order. A decline is decided immediately against the capital left at that moment. The timer
-stops while `state.pause` is set (Salesforce re-evaluation, a credit officer, or an
-auto-approval waiting for **Continue**), and before a repayment, which the presenter
+stops while `state.pause` is set (Salesforce re-evaluation, its result, a credit officer, or
+an auto-approval waiting for **Continue**), and before a repayment, which the presenter
 triggers with **Simulate Collection**.
 
 To add a new interaction: write a function in `engine.ts`, expose it from

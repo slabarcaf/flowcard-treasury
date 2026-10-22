@@ -7,6 +7,7 @@ import { Sidebar } from '../components/Sidebar.js';
 import { useKit5Dashboard } from './useKit5Dashboard.js';
 import { nextEvent, shortDate } from './engine.js';
 import { SettingsPanel } from './SettingsPanel.js';
+import { CrmResultCallout } from './CrmResultCallout.js';
 
 const FEED_KEY = 'flowcard.activityCollapsed';
 
@@ -46,11 +47,13 @@ export function Kit5Dashboard() {
 
   const autoApproved = state.pause?.kind === 'ack' ? state.queue.find((r) => r.id === state.pause!.requestId) : undefined;
   const autoDetail = autoApproved ? state.customerDetails[autoApproved.id] : undefined;
+  const crmChange = state.pause?.kind === 'crm-result' ? state.pause.change : undefined;
   const outstanding = Object.values(state.bridges);
   const funded = state.queue.filter((r) => r.fundedOn);
 
   let statusLine = k.scenario.summary;
-  if (autoApproved) statusLine = `${autoApproved.customerName} was auto-approved. Continue when you're ready for the next request.`;
+  if (crmChange) statusLine = `${crmChange.customerName} was re-rated after the Salesforce note. Continue when you're ready for the next request.`;
+  else if (autoApproved) statusLine = `${autoApproved.customerName} was auto-approved. Continue when you're ready for the next request.`;
   else if (state.pause?.kind === 'human') statusLine = 'Waiting on the credit officer. The next request is decided after this one.';
   else if (state.pause?.kind === 'crm') statusLine = 'Agent found new Salesforce information. Re-evaluate to decide this request.';
   else if (awaitingCollection) statusLine = 'All requests for the day are decided. Simulate the next collection to move the clock forward.';
@@ -162,6 +165,8 @@ export function Kit5Dashboard() {
               floor={state.floor}
               band={state.band}
             />
+
+            {crmChange && <CrmResultCallout change={crmChange} onContinue={k.continueAfterAuto} />}
 
             {autoApproved && (
               <div className="flex items-center justify-between gap-4 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 animate-panel-in" role="status">
