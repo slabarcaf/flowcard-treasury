@@ -152,12 +152,14 @@ reconciliation, mapping checks, and the production browser access gate.
 
 ### Run the local server
 
-Use Node 20.19+ or 22.12+ and a PostgreSQL database. The repository contains one
-SQL schema and seed migration; the server does not run migrations automatically.
-Apply it from the repository root:
+Use Node 20.19+ or 22.12+ and a PostgreSQL database. The repository contains
+three SQL migrations; the server does not run them automatically. Apply them
+in order from the repository root:
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
 ```
 
 The server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,

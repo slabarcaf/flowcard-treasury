@@ -32,7 +32,7 @@ interface SnapshotRow {
 }
 
 interface StoreState {
-  enrolledCustomers: Set<string>;
+  enrolledCustomers: Map<string, boolean>;
   versions: Map<string, SnapshotRow[]>;
   pointers: Map<string, string>;
   attempts: Map<string, { status: string }>;
@@ -40,7 +40,7 @@ interface StoreState {
 
 class SnapshotPool implements DatabasePool {
   state: StoreState = {
-    enrolledCustomers: new Set(["customer-1", "customer-2"]),
+    enrolledCustomers: new Map([["customer-1", true], ["customer-2", true]]),
     versions: new Map(),
     pointers: new Map(),
     attempts: new Map(),
@@ -83,10 +83,11 @@ class SnapshotPool implements DatabasePool {
           transaction = null;
           return emptyResult<Row>();
         }
-        if (sql.startsWith("SELECT customer_id FROM customer_roster")) {
+        if (sql.startsWith("SELECT customer_id, is_active FROM customer_roster")) {
           const customerId = String(values[0]);
-          const rows = transaction.enrolledCustomers.has(customerId)
-            ? [{ customer_id: customerId } as Row]
+          const isActive = transaction.enrolledCustomers.get(customerId);
+          const rows = isActive !== undefined
+            ? [{ customer_id: customerId, is_active: isActive } as Row]
             : [];
           return { rows, rowCount: rows.length };
         }
@@ -194,6 +195,16 @@ describe("atomic per-customer snapshot publication", () => {
     expect(pool.statements).toHaveLength(0);
   });
 
+  it("rejects a customer deactivated before the publication lock", async () => {
+    const pool = new SnapshotPool();
+    pool.state.enrolledCustomers.set("customer-1", false);
+
+    await expect(publishSnapshot(pool, candidate("customer-1", "run-deactivated")))
+      .rejects.toThrow("Customer customer-1 is not active");
+    expect(pool.state.versions.get("customer-1") ?? []).toHaveLength(0);
+    expect(pool.statements).toContain("ROLLBACK");
+  });
+
   it("advances from version one to two while retaining the earlier version", async () => {
     const pool = new SnapshotPool();
     const first = await publishSnapshot(pool, candidate("customer-1", "run-1"));
@@ -252,7 +263,7 @@ function candidate(customerId: string, runId: string): SnapshotCandidate {
 
 function cloneState(state: StoreState): StoreState {
   return {
-    enrolledCustomers: new Set(state.enrolledCustomers),
+    enrolledCustomers: new Map(state.enrolledCustomers),
     versions: new Map([...state.versions].map(([customerId, rows]) => [customerId, [...rows]])),
     pointers: new Map(state.pointers),
     attempts: new Map(state.attempts),

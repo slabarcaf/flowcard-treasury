@@ -61,6 +61,7 @@ describe("Salesforce MCP source", () => {
     expect(requests.every((request) => request.cursor === null)).toBe(true);
     expect(requests[0]).toMatchObject({ accountIdField: "Id", object: "Account" });
     expect(requests[1]).toMatchObject({ accountIdField: "AccountId", object: "Contract" });
+    expect(requests[2]).toMatchObject({ accountIdField: "AccountId", filter: "risk", object: "Case" });
     expect(requests[3]).toMatchObject({ accountIdField: "WhatId", filter: "call", object: "Task" });
     expect(result.account).toEqual({ records: [{ Id: "sf-record" }], complete: true, pages: 1 });
     expect(result.case.complete).toBe(true);

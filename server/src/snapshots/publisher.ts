@@ -15,11 +15,12 @@ export async function publishCustomerSnapshot(
     await client.query("BEGIN");
     transactionOpen = true;
 
-    const roster = await client.query<{ customer_id: string }>(
-      `SELECT customer_id FROM customer_roster WHERE customer_id = $1 FOR UPDATE`,
+    const roster = await client.query<{ customer_id: string; is_active: boolean }>(
+      `SELECT customer_id, is_active FROM customer_roster WHERE customer_id = $1 FOR UPDATE`,
       [candidate.customerId],
     );
     if (!roster.rows[0]) throw new Error(`Customer ${candidate.customerId} is not enrolled`);
+    if (!roster.rows[0].is_active) throw new Error(`Customer ${candidate.customerId} is not active`);
 
     const next = await client.query<{ next_version: number }>(
       `SELECT COALESCE(MAX(version), 0) + 1 AS next_version

@@ -4,6 +4,7 @@ import { SALESFORCE_FIELDS } from "../../server/src/salesforce/field-map.js";
 import type { SalesforceMcpQueryResults } from "../../server/src/salesforce/mcp-source.js";
 import type { CustomerRosterEntry } from "../../server/src/roster/types.js";
 import { scheduleDailySnapshotSync, snapshotDailyRunTime } from "../../server/src/snapshots/scheduler.js";
+import { startDemoSnapshotSync } from "../../server/src/snapshots/runtime.js";
 import { mapRecordsInBatches, SnapshotSyncWorker, type SnapshotSyncSource } from "../../server/src/snapshots/sync-worker.js";
 
 const textLimits = { maxCaseTextLength: 200, maxActivityTextLength: 200 };
@@ -57,6 +58,40 @@ describe("Salesforce daily snapshot worker", () => {
     expect(published?.payload.callActivities).toEqual([]);
     expect(published?.queryCompletion.case.complete).toBe(true);
     expect(published?.queryCompletion.activity.complete).toBe(true);
+  });
+
+  it("retains only risk-relevant Cases that remain open or are escalated", async () => {
+    let published: { payload: { cases: { recordId: string }[] }; recordCounts: { case: number } } | undefined;
+    const fields = SALESFORCE_FIELDS.case;
+    const makeCase = (id: string, status: string, risk: string | null, escalated: boolean) => ({
+      Id: id,
+      LastModifiedDate: now.toISOString(),
+      [fields.status]: status,
+      [fields.priority]: "Medium",
+      [fields.reason]: "Review",
+      [fields.createdAt]: now.toISOString(),
+      [fields.closedAt]: status === "Closed" ? now.toISOString() : null,
+      [fields.isEscalated]: escalated,
+      [fields.riskCategory]: risk,
+      [fields.description]: id,
+    });
+    const worker = new SnapshotSyncWorker({
+      pool: rosterPool([roster("risk-cases")]),
+      source: sourceFor(async () => ({ kind: "mcp", queries: queryResults({ cases: [
+        makeCase("open-risk", "Working", "Repayment", false),
+        makeCase("closed-risk", "Closed", "Repayment", false),
+        makeCase("escalated-risk", "Closed", "Security", true),
+        makeCase("open-non-risk", "New", null, false),
+      ] }) })),
+      textLimits,
+      now: () => now,
+      publish: async (_pool, candidate) => { published = candidate; return {} as never; },
+    });
+
+    await worker.run();
+
+    expect(published?.payload.cases.map(({ recordId }) => recordId)).toEqual(["open-risk", "escalated-risk"]);
+    expect(published?.recordCounts.case).toBe(2);
   });
 
   it("fetches all source query results before validating the candidate and keeps failures customer-local", async () => {
@@ -145,6 +180,24 @@ describe("Salesforce daily snapshot worker", () => {
 });
 
 describe("daily Salesforce snapshot scheduler", () => {
+  it("runs demo fixtures once at startup and installs the daily schedule", async () => {
+    const worker = { run: vi.fn(async () => ({ runId: "startup", customers: [] })) };
+    const timers: (() => void)[] = [];
+    const schedule = startDemoSnapshotSync(worker, {
+      runAtUtc: "02:00",
+      now: () => new Date("2026-10-21T00:00:00.000Z"),
+      setTimer: ((callback: () => void) => {
+        timers.push(callback);
+        return {} as ReturnType<typeof setTimeout>;
+      }) as typeof setTimeout,
+      clearTimer: vi.fn(),
+    });
+
+    await vi.waitFor(() => expect(worker.run).toHaveBeenCalledTimes(1));
+    expect(timers).toHaveLength(1);
+    schedule.stop();
+  });
+
   it("uses one configurable UTC run per day and schedules the next only after completion", async () => {
     let currentTime = new Date("2026-10-21T10:30:00.000Z");
     const timers: { callback: () => void; delay: number; handle: ReturnType<typeof setTimeout> }[] = [];

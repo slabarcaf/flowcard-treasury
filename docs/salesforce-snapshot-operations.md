@@ -57,10 +57,11 @@ authorized operators.
 
 The daily scheduler uses UTC and defaults to `02:00`. Its clock can be set with
 `SALESFORCE_SNAPSHOT_DAILY_RUN_UTC` using `HH:mm`. It schedules one run per day
-and avoids overlapping runs in the scheduler process. The scheduler helper is
-implemented, but the current server entrypoint does not start the Salesforce
-snapshot worker. Therefore, snapshots are not currently refreshed
-automatically; production scheduling is not operationally enabled.
+and avoids overlapping runs in the scheduler process. Set
+`SALESFORCE_SNAPSHOT_MODE=demo` to run a fixture sync once at startup and then
+use that daily schedule. Production scheduling remains disabled because the
+server currently has no trusted host MCP runtime binding; production mode logs
+this limitation and never falls back to fixtures or REST.
 
 When run, the worker selects only active roster entries. It syncs customers
 independently and publishes each complete, validated snapshot atomically. A

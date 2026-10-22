@@ -161,7 +161,9 @@ function buildMcpCandidateParts(
   if (accountRecords.length !== 1) throw new Error(`Expected one Salesforce Account record, received ${accountRecords.length}`);
   if (contractRecords.length === 0) throw new Error("Salesforce Contract query returned no records");
 
-  const caseRecords = mapRecordsInBatches(queries.case.records, (record) => mapCaseRecord(record, textLimits.maxCaseTextLength));
+  const caseRecords = mapRecordsInBatches(queries.case.records, (record) => mapCaseRecord(record, textLimits.maxCaseTextLength))
+    .filter((item) => item.riskCategory.value !== null
+      && (item.status.value === "new" || item.status.value === "working" || item.status.value === "escalated" || item.isEscalated.value === true));
   const eligibleActivities = queries.activity.records
     .filter((record) => isWithinLookback(record.ActivityDate, now))
     .sort((left, right) => dateTimestamp(right.ActivityDate) - dateTimestamp(left.ActivityDate))
