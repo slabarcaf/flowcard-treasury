@@ -1,3 +1,5 @@
+import { ProviderHttpError } from "./errors.js";
+
 /** Typed boundary for server-side Airwallex calls. Tests inject a fake gateway. */
 export type ProviderOperationKind = "transfer" | "charge";
 
@@ -33,6 +35,9 @@ export interface AirwallexGateway {
   getDeposit(depositId: string, accountId: string): Promise<{ id: string; amountCents: number; currency: "USD"; status: ProviderStatus; settledAt: Date | null }>;
   retrySandboxCard(request: { requestId: string; accountId: string; cardId: string; amountCents: number; currency: "USD" }): Promise<ProviderOperationResponse>;
 }
+
+export { HttpAirwallexUnderwritingGateway } from "./underwriting-client.js";
+export type { AirwallexUnderwritingGateway } from "./underwriting-client.js";
 
 export function normalizeProviderStatus(value: unknown): ProviderStatus {
   switch (String(value ?? "").toLowerCase()) {
@@ -164,13 +169,11 @@ function isConnectedAccountPage(value: unknown): value is ConnectedAccountPage {
   return typeof page.has_more === "boolean" && Array.isArray(page.items);
 }
 
-export class ProviderHttpError extends Error {
-  constructor(readonly status: number, message: string) { super(message); this.name = "ProviderHttpError"; }
-}
-
 function parseOperation(value: Record<string, unknown>, requestId: string): ProviderOperationResponse {
   const id = String(value.id ?? value.transfer_id ?? value.charge_id ?? "");
   if (!id) throw new Error("Airwallex response did not contain an operation ID");
   const returnedRequestId = String(value.request_id ?? requestId);
   return { id, requestId: returnedRequestId, status: normalizeProviderStatus(value.status), rawStatus: String(value.status ?? ""), duplicate: Boolean(value.duplicate) };
 }
+
+export { ProviderHttpError } from "./errors.js";

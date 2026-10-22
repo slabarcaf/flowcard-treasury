@@ -1,5 +1,6 @@
 import { createDatabasePool } from "../db/pool.js";
 import { deactivateCustomer, enrollCustomer, listCustomers } from "./service.js";
+import { bindIssuingCard, deactivateIssuingCardBinding } from "./repository.js";
 
 function options(args: string[]): Map<string, string> {
   const parsed = new Map<string, string>();
@@ -24,8 +25,8 @@ function required(parsed: Map<string, string>, name: string): string {
 
 async function run(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
-  if (!command || !["enroll", "deactivate", "list"].includes(command)) {
-    throw new Error("Usage: roster:cli <enroll|deactivate|list> [--options]");
+  if (!command || !["enroll", "deactivate", "list", "bind-card", "unbind-card"].includes(command)) {
+    throw new Error("Usage: roster:cli <enroll|deactivate|list|bind-card|unbind-card> [--options]");
   }
   if (!process.env.DATABASE_URL?.trim()) throw new Error("DATABASE_URL is required");
   const parsed = options(args);
@@ -49,6 +50,27 @@ async function run(): Promise<void> {
         reason: required(parsed, "--reason"),
       });
       process.stdout.write("Customer deactivated. Existing bridge servicing remains available.\n");
+      return;
+    }
+    if (command === "bind-card") {
+      await bindIssuingCard(pool, {
+        customerId: required(parsed, "--customer-id"),
+        accountId: required(parsed, "--airwallex-account-id"),
+        cardId: required(parsed, "--card-id"),
+        actor: required(parsed, "--actor"),
+        reason: required(parsed, "--reason"),
+      });
+      process.stdout.write("Issuing card bound to the active roster customer.\n");
+      return;
+    }
+    if (command === "unbind-card") {
+      const deactivated = await deactivateIssuingCardBinding(pool, {
+        cardId: required(parsed, "--card-id"),
+        actor: required(parsed, "--actor"),
+        reason: required(parsed, "--reason"),
+      });
+      if (!deactivated) throw new Error("Active card binding was not found");
+      process.stdout.write("Issuing card binding deactivated.\n");
       return;
     }
     process.stdout.write(`${JSON.stringify(await listCustomers(pool), null, 2)}\n`);

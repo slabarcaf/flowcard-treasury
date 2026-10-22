@@ -93,7 +93,7 @@ describe("Salesforce snapshot acceptance composition", () => {
 function rosterPool(entries: CustomerRosterEntry[]): DatabasePool {
   return {
     async query<Row>(text: string): Promise<QueryResult<Row>> {
-      if (!text.includes("FROM customer_roster WHERE is_active")) return { rows: [], rowCount: 0 };
+      if (!text.includes("FROM customer_roster") || !text.includes("WHERE is_active")) return { rows: [], rowCount: 0 };
       const rows = entries.filter(({ isActive }) => isActive).map((entry) => ({
         customer_id: entry.customerId,
         salesforce_account_id: entry.salesforceAccountId,

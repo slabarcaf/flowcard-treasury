@@ -20,5 +20,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "tests/policy", "tests/kit5"]
+  "include": ["src", "shared/policy", "tests/policy", "tests/kit5"]
 }

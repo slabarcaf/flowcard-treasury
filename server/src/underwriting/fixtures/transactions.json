@@ -1,0 +1,6 @@
+[
+  { "account_id": "acct-roster-1", "transaction_id": "credit-1", "settled_at": "2026-08-01T12:00:00.000Z", "settlement_amount": "12000.00", "net_amount": "11999.00", "currency": "USD", "status": "SETTLED", "type": "TRANSFER", "financial_transaction_type": "BANK_TRANSFER", "description": "Payroll from payer-a" },
+  { "account_id": "acct-roster-1", "transaction_id": "credit-2", "settled_at": "2026-09-01T12:00:00.000Z", "settlement_amount": "8000.00", "net_amount": "8000.00", "currency": "USD", "status": "SETTLED", "type": "TRANSFER", "financial_transaction_type": "BANK_TRANSFER", "description": "Sales from payer-b" },
+  { "account_id": "acct-roster-1", "transaction_id": "spend-1", "settled_at": "2026-09-10T12:00:00.000Z", "settlement_amount": "-500.00", "net_amount": "-500.00", "currency": "USD", "status": "SETTLED", "type": "ISSUING_TRANSACTION", "financial_transaction_type": "CARD_CAPTURE", "description": "Card capture" },
+  { "account_id": "acct-not-rostered", "transaction_id": "outside-1", "settled_at": "2026-09-11T12:00:00.000Z", "settlement_amount": "900000.00", "net_amount": "900000.00", "currency": "USD", "status": "SETTLED", "type": "TRANSFER", "financial_transaction_type": "BANK_TRANSFER", "description": "Unrelated" }
+]

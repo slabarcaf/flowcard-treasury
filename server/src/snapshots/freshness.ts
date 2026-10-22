@@ -1,4 +1,4 @@
-import type { DatabaseClient, DatabasePool } from "../db/pool.js";
+import type { DatabasePool } from "../db/pool.js";
 import { validateSnapshot } from "../salesforce/validate.js";
 import type { SalesforceCustomerSnapshot } from "../salesforce/types.js";
 import type { SnapshotSourceMode } from "./repository.js";
@@ -44,7 +44,7 @@ export interface CustomerSnapshotReadModel {
 
 /** Reads the active roster, current publication, and latest attempt together. */
 export async function getCustomerSnapshotReadModel(
-  database: DatabasePool | DatabaseClient,
+  database: Pick<DatabasePool, "query">,
   customerId: string,
   now = new Date(),
   lockRoster = false,

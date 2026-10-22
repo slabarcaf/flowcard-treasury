@@ -25,6 +25,7 @@ npm run dev        # http://localhost:5173
 | ----------------- | --------------------------------------------- |
 | `npm run dev`     | Dev server with hot reload                    |
 | `npm test`        | Policy, ledger, and Salesforce snapshot tests (Vitest) |
+| `npm run test:acceptance` | PostgreSQL policy acceptance suite; requires `POLICY_ACCEPTANCE_DATABASE_URL` |
 | `npm run build`   | Type-check + production build into `dist/`    |
 | `npm run lint`    | Lint with oxlint                              |
 | `npm run preview` | Serve the production build locally            |
@@ -32,6 +33,8 @@ npm run dev        # http://localhost:5173
 The local demo Compose service sets `SALESFORCE_SNAPSHOT_MODE=demo`, which
 publishes synthetic snapshots at startup and refreshes them daily. Production
 Salesforce snapshots remain disabled until a trusted host MCP binding exists.
+Run `npm run test:acceptance` to execute the database-backed policy acceptance
+suite. It requires a local PostgreSQL database whose name includes `test`.
 
 ### Update the live demo
 
@@ -67,8 +70,8 @@ The same-repository TypeScript server stores the USD bridge ledger in PostgreSQL
 and processes Airwallex operations through an outbox. It exposes a read-only
 `GET /api/ledger` projection and the `POST /webhooks/airwallex` receiver. Kit 5
 may read the projection by setting `VITE_BRIDGE_API_URL`; its scenario
-behavior remains the deterministic local mock. No browser funding command is
-available until the policy module can submit a trusted server-side approval.
+behavior remains the deterministic local mock. The browser cannot authorize a
+bridge or create a transfer command.
 
 ### Start the server locally
 
@@ -79,6 +82,17 @@ local database, then apply the schema and demo facility seed:
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_underwriting_profiles.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/006_policy_evaluations.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/007_policy_request_evaluations.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/008_remote_authorization.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_request_ledger_sequence.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/011_remote_authorization_nonce_claims.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/012_remote_authorization_decision_identity.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/013_remote_authorization_dispatch_gate.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/014_ai_evidence_decision_gate.sql
 ```
 
 Set these server environment variables before starting the service:
@@ -91,6 +105,10 @@ Set these server environment variables before starting the service:
 | `AIRWALLEX_API_KEY` | Yes | Server-side Airwallex API key. |
 | `AIRWALLEX_WEBHOOK_SECRET` | Yes | Secret used to verify webhook signatures. |
 | `AIRWALLEX_BASE_URL` | No | API base URL; defaults to the Airwallex sandbox. |
+| `AIRWALLEX_REMOTE_AUTHORIZATION_SECRET` | Required for remote authorization | Shared signature secret; without it, remote authorization ingress is rejected. |
+| `POLICY_DECISION_READ_TOKEN` | Required for decision reads | Bearer token for the authenticated server-side decision endpoint. No browser proxy is configured. |
+| `REMOTE_AUTH_REPAYMENT_TERM` | Required to reserve a bridge | Must be `15_days`, `30_days`, or `asap`; missing or invalid values fail closed. |
+| `POLICY_APPROVAL_ENABLED` | Optional, defaults disabled | Set to `true` only for the operator approval CLI. Approval still rechecks current policy and exact request terms. |
 
 Keep the credentials on the server. For example, after exporting the variables
 in the local shell, start the API with:
@@ -233,6 +251,49 @@ running the CLI or evidence runner. See the
 [AI evidence implementation plan](/docs/plans/completed/20261022-ai-evidence-pipeline-implementation-plan.md)
 for the contracts, validation rules, test coverage, and remaining production
 gates.
+
+For existing databases that already applied migration 004, apply migration
+`014_ai_evidence_decision_gate.sql`. Existing extractions default to blocked
+until their server-owned calibration decision is evaluated.
+
+### Deterministic underwriting policy
+
+The server joins the explicit customer roster, versioned Airwallex underwriting
+profile, complete Salesforce snapshot, and AI evidence result for each daily
+precheck. Salesforce owns account, contract, KYB, credit-review, approved-cap,
+and prior-default facts. The Airwallex profile owns derived cash-flow,
+concentration, balance, account-standing, and internal-ledger repayment
+features. AI extraction proposes typed claims from bounded Salesforce evidence;
+it cannot assign ratings, tiers, credit lines, bridge amounts, or transfer
+commands. A valid `no_signal` result can pass the evidence-readiness gate.
+
+The deterministic server policy owns ratings, tier, line, request outcome, and
+review requirements. The bridge ledger owns deployable capacity, reservations,
+open-bridge exposure, and its transactional outbox. Only an auto-approved
+request or a human approval that is rechecked against current inputs can enter
+the reservation transaction. An authenticated server-side caller submits only
+a stored `requestId` to the decision endpoint using
+`POLICY_DECISION_READ_TOKEN`. No browser proxy is configured. The browser
+cannot submit trusted request details or create a provider command. Daily and
+request evaluations retain policy and source-version references for audit.
+
+Operators can inspect and approve pending human-review decisions with the
+server CLI. Approval rechecks current policy and exact request terms, and can
+fail closed when inputs or capacity have changed:
+
+```bash
+POLICY_APPROVAL_ENABLED=true npm run policy:approval -- list
+POLICY_APPROVAL_ENABLED=true npm run policy:approval -- inspect --decision-id 'DECISION_ID'
+POLICY_APPROVAL_ENABLED=true npm run policy:approval -- approve --decision-id 'DECISION_ID' --actor 'OPERATOR' --reason 'REASON'
+```
+
+Production decisioning stays disabled until Airwallex permissions, reports,
+pagination, and account reads are verified; a trusted expected-deposit-date
+source is mapped; industry, fraud, prior-default, and signal mappings are
+approved and versioned; Jev signal definitions are settled and qualified; and
+production authentication and authorization protect review and approval
+operations. Unknown, stale, incomplete, unmapped, or unresolved inputs block
+the affected customer while other customers continue.
 
 ### Kit 5 scenarios
 

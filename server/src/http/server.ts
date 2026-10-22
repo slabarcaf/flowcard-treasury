@@ -6,14 +6,61 @@ import type { WebhookInboxWorker } from "../webhooks/worker.js";
 import { handleAirwallexWebhook } from "./routes/airwallex-webhook.js";
 import { handleCustomerSnapshot, requestAuthorization } from "./routes/customer-snapshot.js";
 import { handleLedgerProjection } from "./routes/ledger-projection.js";
+import { handleBridgeDecision } from "./routes/bridge-decision.js";
+import type { TrustedBridgeDecisionResult } from "./routes/bridge-decision.js";
+import { handleRemoteAuthorization, type RemoteAuthorizationDispatchConfirmer, type RemoteAuthorizationNonceClaimer, type RemoteAuthorizationResolver } from "./routes/remote-authorization.js";
+import { timingSafeEqual } from "node:crypto";
 
-export function createHttpServer(config: ServerConfig, pool?: DatabasePool, webhookWorker?: WebhookInboxWorker): Server {
-  return createServer(createRequestHandler(config, pool, webhookWorker));
+export function createHttpServer(
+  config: ServerConfig,
+  pool?: DatabasePool,
+  webhookWorker?: WebhookInboxWorker,
+  resolveBridgeDecision?: (requestId: string) => Promise<TrustedBridgeDecisionResult>,
+  resolveRemoteAuthorization?: RemoteAuthorizationResolver,
+  claimRemoteAuthorizationNonce?: RemoteAuthorizationNonceClaimer,
+  confirmRemoteAuthorizationDispatch?: RemoteAuthorizationDispatchConfirmer,
+): Server {
+  return createServer(createRequestHandler(config, pool, webhookWorker, resolveBridgeDecision, resolveRemoteAuthorization, claimRemoteAuthorizationNonce, confirmRemoteAuthorizationDispatch));
 }
 
 /** Exposed so route wiring can be tested directly without opening a TCP listener. */
-export function createRequestHandler(config: ServerConfig, pool?: DatabasePool, webhookWorker?: WebhookInboxWorker): RequestListener {
+export function createRequestHandler(
+  config: ServerConfig,
+  pool?: DatabasePool,
+  webhookWorker?: WebhookInboxWorker,
+  resolveBridgeDecision?: (requestId: string) => Promise<TrustedBridgeDecisionResult>,
+  resolveRemoteAuthorization?: RemoteAuthorizationResolver,
+  claimRemoteAuthorizationNonce?: RemoteAuthorizationNonceClaimer,
+  confirmRemoteAuthorizationDispatch?: RemoteAuthorizationDispatchConfirmer,
+): RequestListener {
   return (request, response) => {
+    if (request.method === "POST" && request.url === "/api/remote-authorization") {
+      void handleRemoteAuthorization(request, response, {
+        sharedSecret: config.airwallexRemoteAuthorizationSecret,
+        resolve: resolveRemoteAuthorization,
+        claimNonce: claimRemoteAuthorizationNonce,
+        confirmDispatch: confirmRemoteAuthorizationDispatch,
+      });
+      return;
+    }
+    if (request.method === "POST" && request.url === "/api/bridge-decisions" && pool) {
+      if (!config.policyDecisionReadToken) {
+        response.writeHead(503, { "content-type": "application/json", "cache-control": "no-store" });
+        response.end(JSON.stringify({ error: "policy_decision_read_unavailable" }));
+        return;
+      }
+      const authorization = request.headers.authorization;
+      const token = typeof authorization === "string" && authorization.startsWith("Bearer ")
+        ? authorization.slice("Bearer ".length)
+        : "";
+      if (!sameSecret(token, config.policyDecisionReadToken)) {
+        response.writeHead(401, { "content-type": "application/json", "cache-control": "no-store" });
+        response.end(JSON.stringify({ error: "unauthorized" }));
+        return;
+      }
+      void handleBridgeDecision(request, response, resolveBridgeDecision);
+      return;
+    }
     if (request.method === "POST" && request.url === "/webhooks/airwallex" && pool) {
       void handleAirwallexWebhook(request, response, { pool, secret: config.airwallexWebhookSecret, onReceived: () => webhookWorker?.nudge() });
       return;
@@ -40,6 +87,12 @@ export function createRequestHandler(config: ServerConfig, pool?: DatabasePool, 
     }
     handleRequest(request, response);
   };
+}
+
+function sameSecret(provided: string, expected: string): boolean {
+  const providedBytes = Buffer.from(provided, "utf8");
+  const expectedBytes = Buffer.from(expected, "utf8");
+  return providedBytes.length === expectedBytes.length && timingSafeEqual(providedBytes, expectedBytes);
 }
 
 export function handleRequest(request: IncomingMessage, response: ServerResponse): void {

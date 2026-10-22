@@ -1,0 +1,155 @@
+import { describe, expect, it, vi } from "vitest";
+import transactions from "../../../server/src/underwriting/fixtures/transactions.json" with { type: "json" };
+import balances from "../../../server/src/underwriting/fixtures/balances.json" with { type: "json" };
+import { loadAirwallexProfileSources, withBoundedRetries } from "../../../server/src/underwriting/airwallex-source.js";
+import { HttpAirwallexUnderwritingGateway, type AirwallexUnderwritingGateway } from "../../../server/src/airwallex/client.js";
+
+function fakeGateway(overrides: Partial<AirwallexUnderwritingGateway> = {}): AirwallexUnderwritingGateway {
+  return {
+    createPlatformReport: vi.fn(async () => ({ reportId: "report-1" })),
+    getPlatformReport: vi.fn(async () => ({ status: "completed", downloadUrl: "https://temporary.invalid/report" })),
+    downloadPlatformReport: vi.fn(async () => transactions),
+    getConnectedAccount: vi.fn(async () => ({ status: "ACTIVE" })),
+    getOpenRfis: vi.fn(async () => ({ items: [], hasMore: false })),
+    getBalanceHistory: vi.fn(async (_accountId, _fromDate, _toDate, page) => page === 0 ? { items: balances.slice(0, 2), hasMore: true } : { items: balances.slice(2), hasMore: false }),
+    ...overrides,
+  };
+}
+
+describe("Airwallex underwriting source", () => {
+  it("uses whole-book reports, filters to roster IDs, pages 7-day history and downloads completed reports immediately", async () => {
+    const gateway = fakeGateway();
+    const start = new Date("2026-07-24T00:00:00Z");
+    const end = new Date("2026-10-22T00:00:00Z");
+    const data = await loadAirwallexProfileSources(gateway, [{ customerId: "c1", accountId: "acct-roster-1" }], start, end);
+    expect(data.transactions).toHaveLength(3);
+    expect(data.transactions.every((row) => row.accountId === "acct-roster-1")).toBe(true);
+    expect(data.transactions[0]).toMatchObject({ amountCents: 1_200_000, currency: "USD", kind: "credit", sourceType: "bank_transfer" });
+    expect(gateway.createPlatformReport).toHaveBeenCalledWith({ type: "TRANSACTION_RECON_REPORT", fromDate: "2026-07-24", toDate: "2026-10-22" });
+    expect(gateway.downloadPlatformReport).toHaveBeenCalledWith("https://temporary.invalid/report");
+    expect(gateway.getBalanceHistory).toHaveBeenCalled();
+    for (const call of vi.mocked(gateway.getBalanceHistory).mock.calls) {
+      expect(Date.parse(call[2]) - Date.parse(call[1])).toBeLessThanOrEqual(6 * 86_400_000);
+    }
+    expect(data.queryPages.balances).toBeGreaterThan(2);
+    expect(data.standings.get("c1")).toEqual({ status: "active", openRfi: false });
+  });
+
+  it("retries bounded failures and stops after the configured number of attempts", async () => {
+    let attempts = 0;
+    await expect(withBoundedRetries(async () => { attempts++; if (attempts < 3) throw new Error("transient"); return "ok"; })).resolves.toBe("ok");
+    expect(attempts).toBe(3);
+    attempts = 0;
+    await expect(withBoundedRetries(async () => { attempts++; throw new Error("permanent"); }, 2)).rejects.toThrow("permanent");
+    expect(attempts).toBe(2);
+  });
+
+  it("fails closed on malformed matching rows and failed or incomplete reports without exposing URLs", async () => {
+    const badRow = fakeGateway({ downloadPlatformReport: vi.fn(async () => [{ account_id: "acct-roster-1" }]) });
+    await expect(loadAirwallexProfileSources(badRow, [{ customerId: "c1", accountId: "acct-roster-1" }], new Date("2026-07-24Z"), new Date("2026-10-22Z"))).rejects.toThrow(/incomplete row/);
+    const failed = fakeGateway({ getPlatformReport: vi.fn(async () => ({ status: "failed" })) });
+    await expect(loadAirwallexProfileSources(failed, [{ customerId: "c1", accountId: "acct-roster-1" }], new Date("2026-07-24Z"), new Date("2026-10-22Z"))).rejects.toThrow("report failed");
+    const slow = fakeGateway({ getPlatformReport: vi.fn(async () => ({ status: "pending" })) });
+    await expect(loadAirwallexProfileSources(slow, [{ customerId: "c1", accountId: "acct-roster-1" }], new Date("2026-07-24Z"), new Date("2026-10-22Z"))).rejects.toThrow(/bounded poll/);
+  });
+
+  it("does not retry malformed data and rejects pagination that cannot progress", async () => {
+    const gateway = fakeGateway({ getBalanceHistory: vi.fn(async () => ({ items: [null], hasMore: false })) });
+    const failedAccount = await loadAirwallexProfileSources(gateway, [{ customerId: "c1", accountId: "acct-roster-1" }], new Date("2026-07-24Z"), new Date("2026-10-22Z"));
+    expect(failedAccount.sourceFailures.get("c1")).toMatch(/malformed row/);
+    const stuck = fakeGateway({ getBalanceHistory: vi.fn(async () => ({ items: [], hasMore: true })) });
+    const stuckAccount = await loadAirwallexProfileSources(stuck, [{ customerId: "c1", accountId: "acct-roster-1" }], new Date("2026-07-24Z"), new Date("2026-10-22Z"));
+    expect(stuckAccount.sourceFailures.get("c1")).toMatch(/supported page range/);
+  });
+
+  it("retains a failure marker for one account while processing the next account", async () => {
+    const gateway = fakeGateway({
+      getConnectedAccount: vi.fn(async (accountId) => {
+        if (accountId === "acct-fails") throw new Error("account read unavailable");
+        return { status: "ACTIVE" };
+      }),
+    });
+    const data = await loadAirwallexProfileSources(gateway, [
+      { customerId: "c1", accountId: "acct-fails" }, { customerId: "c2", accountId: "acct-roster-1" },
+    ], new Date("2026-07-24Z"), new Date("2026-10-22Z"));
+    expect(data.sourceFailures.get("c1")).toMatch(/account read unavailable/);
+    expect(data.standings.get("c2")).toEqual({ status: "active", openRfi: false });
+  });
+
+  it("sends per-account REST reads with x-on-behalf-of and keeps report URLs out of errors", async () => {
+    const calls: Array<{ url: string; headers: Headers }> = [];
+    const fetcher: typeof fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      const headers = new Headers(init?.headers);
+      calls.push({ url, headers });
+      if (url.endsWith("/api/v1/authentication/login")) return new Response(JSON.stringify({ token: "fake-token", expires_in: 3600 }), { status: 200 });
+      if (url.includes("/api/v1/accounts/")) return new Response(JSON.stringify({ status: "ACTIVE" }), { status: 200 });
+      if (url.includes("/api/v1/rfis")) return new Response(JSON.stringify({ items: [], has_more: false }), { status: 200 });
+      if (url.includes("/api/v1/balances/history")) return new Response(JSON.stringify({ items: [], has_more: false }), { status: 200 });
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    const gateway = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture", fetcher });
+    await gateway.getConnectedAccount("acct-1");
+    await gateway.getOpenRfis("acct-1", 0);
+    await gateway.getBalanceHistory("acct-1", "2026-10-01", "2026-10-07", 0);
+    const scoped = calls.filter((call) => call.url.includes("/api/v1/accounts/") || call.url.includes("/api/v1/rfis") || call.url.includes("/api/v1/balances/history"));
+    expect(scoped).toHaveLength(3);
+    expect(scoped.every((call) => call.headers.get("x-on-behalf-of") === "acct-1")).toBe(true);
+  });
+
+  it("rejects unsafe report download URLs and malformed RFI pagination", async () => {
+    const gateway = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture",
+      resolveHost: async () => ["8.8.8.8"], fetcher: vi.fn(async () => new Response("account_id,transaction_id,settled_at,status,settlement_amount,net_amount,currency,type,financial_transaction_type\n", { status: 200 })) });
+    await expect(gateway.downloadPlatformReport("http://reports.example/report")).rejects.toThrow(/allowed HTTPS/);
+    await expect(gateway.downloadPlatformReport("not a URL")).rejects.toThrow("URL is invalid");
+    await expect(gateway.downloadPlatformReport("https://127.0.0.1/report")).rejects.toThrow(/allowed HTTPS/);
+    await expect(gateway.downloadPlatformReport("https://reports.example/report")).rejects.toThrow(/allowed HTTPS/);
+    await expect(gateway.downloadPlatformReport("https://reports.airwallex.com/report")).resolves.toEqual([]);
+
+    const malformed: typeof fetch = vi.fn(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/authentication/login")) return new Response(JSON.stringify({ token: "fake-token", expires_in: 3600 }));
+      return new Response(JSON.stringify({ items: [] }));
+    });
+    const rfiGateway = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture", fetcher: malformed });
+    await expect(rfiGateway.getOpenRfis("acct-1", 0)).rejects.toThrow("invalid page");
+  });
+
+  it("rejects report download hosts that resolve to local addresses", async () => {
+    const gateway = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture",
+      resolveHost: async () => ["10.0.0.8"], fetcher: vi.fn(async () => new Response("[]", { status: 200 })) });
+    await expect(gateway.downloadPlatformReport("https://reports.airwallex.com/report")).rejects.toThrow(/private or local/);
+  });
+
+  it("parses the documented CSV report from the provider storage host and rejects malformed rows", async () => {
+    const fetcher: typeof fetch = vi.fn(async () => new Response(
+      'account_id,transaction_id,settled_at,status,settlement_amount,net_amount,currency,type,financial_transaction_type,description\r\n' +
+      'acct-1,txn-1,2026-10-01T00:00:00Z,SETTLED,12.50,12.00,USD,TRANSFER,BANK_TRANSFER,"Payroll, October\ncycle"\r\n',
+      { status: 200 },
+    ));
+    const gateway = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture",
+      resolveHost: async () => ["8.8.8.8"], fetcher });
+    await expect(gateway.downloadPlatformReport("https://storage.googleapis.com/reports/report?signature=fixture")).resolves.toEqual([{
+      account_id: "acct-1", transaction_id: "txn-1", settled_at: "2026-10-01T00:00:00Z", status: "SETTLED",
+      settlement_amount: "12.50", net_amount: "12.00", currency: "USD", type: "TRANSFER",
+      financial_transaction_type: "BANK_TRANSFER", description: "Payroll, October\ncycle",
+    }]);
+    const malformed = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture",
+      resolveHost: async () => ["8.8.8.8"], fetcher: vi.fn(async () => new Response("account_id,transaction_id\nacct-1\n", { status: 200 })) });
+    await expect(malformed.downloadPlatformReport("https://storage.googleapis.com/reports/report")).rejects.toThrow(/malformed CSV row/);
+  });
+
+  it("creates a CSV transaction report using the documented platform report fields", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const fetcher: typeof fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as unknown : null;
+      calls.push({ url, body });
+      if (url.endsWith("/api/v1/authentication/login")) return new Response(JSON.stringify({ token: "fake-token", expires_in: 3600 }), { status: 200 });
+      return new Response(JSON.stringify({ report_id: "report-1" }), { status: 200 });
+    });
+    const gateway = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture", fetcher });
+    await expect(gateway.createPlatformReport({ type: "TRANSACTION_RECON_REPORT", fromDate: "2026-10-01", toDate: "2026-10-22" })).resolves.toEqual({ reportId: "report-1" });
+    expect(calls.at(-1)?.body).toEqual({ file_format: "CSV", type: "TRANSACTION_RECON_REPORT", from_created_at: "2026-10-01T00:00:00+0000", to_created_at: "2026-10-22T00:00:00+0000" });
+  });
+});
