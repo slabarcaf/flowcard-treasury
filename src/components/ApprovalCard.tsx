@@ -30,7 +30,7 @@ export function ApprovalCard({ visible, terms, awaitingApproval, onApprove }: Pr
         )}
       </div>
 
-      <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm mb-5">
+      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm mb-5">
         <span className="text-gray-500">Amount</span>
         <span className="font-mono text-gray-900 font-semibold text-lg">
           {fmt(t.amount)} {t.currency}

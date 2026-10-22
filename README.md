@@ -24,7 +24,7 @@ npm run dev        # http://localhost:5173
 | Command           | What it does                                  |
 | ----------------- | --------------------------------------------- |
 | `npm run dev`     | Dev server with hot reload                    |
-| `npm test`        | Policy + Kit 5 engine tests (Vitest, 64 tests)|
+| `npm test`        | Policy + Kit 5 engine tests (Vitest, 65 tests)|
 | `npm run build`   | Type-check + production build into `dist/`    |
 | `npm run lint`    | Lint with oxlint                              |
 | `npm run preview` | Serve the production build locally            |
@@ -66,9 +66,10 @@ GD's original version (5% floor, rows decided on click) was removed from the UI 
 | **Tight capital → human** | Two identical Tier A requests ($3,000 each) with $6,500 deployable. The first auto-funds and drops capital into *Critical*, where Tier A needs a person, so the second goes to a credit officer. |
 
 While a scenario plays, declines arrive about every 1.5 seconds. It stops when it needs you:
-**Re-evaluate** (Salesforce note), **Continue** after an auto-approval (a green callout shows
-what was funded), **Approve Bridge** (credit officer) or **Simulate Collection** (a repayment
-on a later day).
+**Re-evaluate** (Salesforce note), **Continue** after the re-evaluation (a callout shows what
+the note changed: signals, tier, credit line and door before → after, and why the decision is
+now a no), **Continue** after an auto-approval (a green callout shows what was funded),
+**Approve Bridge** (credit officer) or **Simulate Collection** (a repayment on a later day).
 
 On screen:
 - **Top left:** the demo date, large, with *Funding day* (day 0) or *Collection day · +N days*.

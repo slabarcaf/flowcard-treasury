@@ -24,7 +24,7 @@ function playAll(s: Kit5State, onEach?: (s: Kit5State) => void): Kit5State {
   for (let guard = 0; guard < 50; guard++) {
     if (s.pause?.kind === 'crm') s = reEvaluateCrm(revealCrm(s));
     else if (s.pause?.kind === 'human') s = approve(s, s.pause.requestId);
-    else if (s.pause?.kind === 'ack') s = acknowledge(s);
+    else if (s.pause?.kind === 'ack' || s.pause?.kind === 'crm-result') s = acknowledge(s);
     else if (nextEvent(s)) s = step(s);
     else return s;
     onEach?.(s);
@@ -97,9 +97,35 @@ describe('Original scenario', () => {
     expect(status(s, 'txn_bloom_payroll_001')).toBe('Declined');
   });
 
+  it('holds on the CRM result so the change can be explained', () => {
+    let s = reEvaluateCrm(revealCrm(step(start(initialKit5State(scenario('original'))))));
+    expect(s.pause?.kind).toBe('crm-result');
+    if (s.pause?.kind !== 'crm-result') throw new Error('expected crm-result pause');
+    expect(s.pause.change).toMatchObject({
+      customerName: 'Bloom & Co.',
+      tierFrom: 'A',
+      tierTo: 'C',
+      lineFrom: 10_000,
+      lineTo: 4_000,
+      doorFrom: 'auto',
+      doorTo: 'closed',
+      bandLabel: 'Less',
+      outcomeBefore: 'approved automatically',
+      status: 'Declined',
+    });
+    expect(s.pause.change.signals).toEqual([
+      { label: 'Inflow reliability', from: 'green', to: 'yellow' },
+      { label: 'Inflow concentration', from: 'green', to: 'yellow' },
+    ]);
+    expect(s.pause.change.reasons).toHaveLength(2);
+    expect(step(s)).toBe(s); // Atlas waits until Continue
+    s = step(acknowledge(s));
+    expect(s.queue.map((q) => q.customerName)).toEqual(['Bloom & Co.', 'Atlas SaaS']);
+  });
+
   it('sends Nova to a credit officer (Tier B at Less)', () => {
     let s = start(initialKit5State(scenario('original')));
-    s = reEvaluateCrm(revealCrm(step(s))); // Bloom
+    s = acknowledge(reEvaluateCrm(revealCrm(step(s)))); // Bloom, then the CRM result callout
     s = step(s); // Atlas
     expect(s.pause).toEqual({ kind: 'ack', requestId: 'txn_atlas_supplier_001' });
     expect(step(s)).toBe(s); // waits for the presenter
