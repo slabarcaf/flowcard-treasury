@@ -51,8 +51,13 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
   beforeAll(async () => {
     if (!databaseUrl) return;
     const parsed = new URL(databaseUrl);
-    if (!parsed.pathname.toLowerCase().includes("test") || !["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)) {
-      throw new Error("POLICY_ACCEPTANCE_DATABASE_URL must target a localhost database whose name includes 'test'");
+    const databaseName = decodeURIComponent(parsed.pathname.slice(1));
+    const allowedDatabase = process.env.POLICY_ACCEPTANCE_ALLOW_DATABASE;
+    const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+    const hasTestName = databaseName.toLowerCase().includes("test");
+    const explicitlyAllowed = allowedDatabase !== undefined && allowedDatabase === databaseName;
+    if (!isLocalhost || (!hasTestName && !explicitlyAllowed)) {
+      throw new Error("POLICY_ACCEPTANCE_DATABASE_URL must target localhost and use a database name containing 'test' or exactly matching POLICY_ACCEPTANCE_ALLOW_DATABASE");
     }
     pool = await createDatabasePool({ databaseUrl });
     const schema = await pool.query<{ exists: string | null }>(
