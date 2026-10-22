@@ -155,7 +155,7 @@ reconciliation, mapping checks, and the production browser access gate.
 ### Run the local server
 
 Use Node 20.19+ or 22.12+ and a PostgreSQL database. The server does not run
-SQL migrations automatically. Apply all twelve migrations in order from the
+SQL migrations automatically. Apply all thirteen migrations in order from the
 repository root before using the policy APIs or operator approval CLI:
 
 ```bash

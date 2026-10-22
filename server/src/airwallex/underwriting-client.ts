@@ -186,4 +186,3 @@ function stringField(data: Record<string, unknown>, ...keys: string[]): string |
   for (const key of keys) if (typeof data[key] === "string" && (data[key] as string).trim()) return (data[key] as string).trim();
   return null;
 }
-
