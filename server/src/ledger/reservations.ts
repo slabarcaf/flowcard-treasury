@@ -75,6 +75,20 @@ export async function reserveBridge(
     if (customerSnapshot.snapshot?.sourceMode !== runtimeSnapshotMode) {
       throw new Error(`Customer Salesforce snapshot source does not match runtime mode ${runtimeSnapshotMode}`);
     }
+    const evidenceGate = await client.query<{ decision_allowed: boolean }>(
+      `SELECT extraction.decision_allowed
+         FROM ai_evidence_extractions AS extraction
+        WHERE extraction.customer_id = $1
+          AND extraction.snapshot_id = $2
+        ORDER BY extraction.created_at DESC, extraction.extraction_id DESC
+        LIMIT 1`,
+      [input.customerId, customerSnapshot.snapshot!.snapshotId],
+    );
+    const latestEvidence = evidenceGate.rows[0];
+    if (!latestEvidence) throw new Error("Customer AI evidence decision gate is unresolved");
+    if (!latestEvidence.decision_allowed) {
+      throw new Error("Customer AI evidence decision gate is unresolved");
+    }
     const deployableCents = Number(facility.deployable_cents);
     if (!Number.isSafeInteger(deployableCents) || deployableCents < 0) {
       throw new Error("USD facility projection has an invalid deployable balance");

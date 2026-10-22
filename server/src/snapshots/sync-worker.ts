@@ -27,6 +27,8 @@ export interface SnapshotSyncWorkerOptions {
   runId?: () => string;
   publish?: typeof publishSnapshot;
   recordFailure?: typeof recordFailedSnapshotAttempt;
+  /** Called only after this customer's complete snapshot was published. */
+  onPublished?: (customer: CustomerRosterEntry) => Promise<void>;
 }
 
 export interface CustomerSyncResult {
@@ -96,6 +98,12 @@ export class SnapshotSyncWorker {
         payload: built.payload,
       };
       await this.publish(this.options.pool, candidate);
+      try {
+        await this.options.onPublished?.(customer);
+      } catch (error) {
+        // Extraction errors must not invalidate a successfully published daily snapshot.
+        console.error(`Post-publication processing failed for ${customer.customerId}`, error);
+      }
       return { customerId: customer.customerId, status: "published" };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Salesforce snapshot sync failed";

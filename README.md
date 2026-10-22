@@ -178,6 +178,62 @@ does not send that token, and the app has no trusted same-origin server proxy.
 Production browser reads therefore remain fail-closed. Never place the token in
 a `VITE_` variable or expose it to the browser.
 
+### AI evidence extraction
+
+The server processes evidence only from a completed daily Salesforce snapshot.
+Demo mode uses deterministic synthetic fixtures and does not call a model.
+Extraction results and review history are append-only in PostgreSQL. The
+versioned result contains a status, customer and snapshot IDs, typed signals,
+unmapped claims, and model metadata. Each signal retains its value,
+counterparty, exact quotes and source references, raw and calibrated scores,
+alternatives, and selection rationale. Metadata identifies the model, prompt,
+catalog, output schema, packet builder, and calibration versions. The active
+proposed catalog is `proposed-v1`; it is not approved for production use.
+
+`no_signal` is a successful empty result. `success` contains validated signal
+claims. `review_required` and `unmapped` block new decisions for that customer
+until a reviewer resolves the result. `failed` and oversized packets also block
+that customer. The latest extraction's gate result is persisted, and bridge
+reservation checks it inside the reservation transaction. A reviewer
+disposition releases a `review_required` or `unmapped` result; failed
+extractions and unqualified signals stay blocked until a later run resolves
+the gate. Other customers continue. A valid signal reaches deterministic
+policy only after its signal type independently qualifies: the one-sided exact
+95% precision lower bound must be at least 95% on eligible rolling 90-day
+labels. Each type starts review-only and returns to review-only when evidence
+is insufficient or misses the bound. Calibration-fit examples are separate
+from held-out qualification and audit examples.
+
+The fixture server defaults to `AI_EVIDENCE_MODE=fixture`. The production
+configuration loader fails closed unless the provider and data-handling terms
+are approved and server-side `AI_EVIDENCE_PROVIDER_API_KEY` and
+`AI_EVIDENCE_MODEL_ID` are set. A live production provider is not wired into
+the runner. Do not send Salesforce text to a provider before those gates and
+the signal catalog, Salesforce fields, and values are confirmed. Model
+credentials must remain server-side. The demo runner is enabled only alongside
+`SALESFORCE_SNAPSHOT_MODE=demo`; it processes the published synthetic snapshot.
+
+The operator review CLI requires `DATABASE_URL` and
+`AI_EVIDENCE_REVIEW_ENABLED=true`. It supports `list`, `inspect`, `confirm`,
+`correct`, and `clear` and records reviewer identity and disposition without
+calling policy or provider write operations. For example:
+
+```bash
+AI_EVIDENCE_REVIEW_ENABLED=true npm run ai-evidence:review -- list
+npm run ai-evidence:review -- inspect --extraction-id <uuid>
+npm run ai-evidence:review -- confirm --extraction-id <uuid> --reviewer-id <operator>
+npm run ai-evidence:review -- correct --extraction-id <uuid> \
+  --reviewer-id <operator> --signal-json '<validated-signal-json>'
+npm run ai-evidence:review -- clear --extraction-id <uuid> \
+  --reviewer-id <operator> --reason <reason>
+```
+
+Apply migration `004_ai_evidence.sql` after the snapshot migrations before
+running the CLI or evidence runner. See the
+[AI evidence implementation plan](/docs/plans/completed/20261022-ai-evidence-pipeline-implementation-plan.md)
+for the contracts, validation rules, test coverage, and remaining production
+gates.
+
 ### Kit 5 scenarios
 
 | Scenario | What it shows |

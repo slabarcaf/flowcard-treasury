@@ -209,6 +209,35 @@ export const AI_EXTRACTED_SIGNALS = [
   },
 ];
 
+// Deterministic synthetic-only scenarios for the demo evidence panel.
+export const AI_EVIDENCE_DEMO_FIXTURES = {
+  no_signal: {
+    status: 'no_signal', message: 'No qualifying signal found; deterministic profile data remains available.', signals: [], unmapped: [],
+  },
+  unmapped: {
+    status: 'unmapped', message: 'Blocked pending reviewer resolution: an out-of-catalog signal was detected.', signals: [],
+    unmapped: [{ type: 'supplier_cash_request', value: 'requested early payment', evidence: '“asked whether payment could be advanced”', sourceReference: 'Case 500-NOVA-12' }],
+  },
+  conflicts: {
+    status: 'review_required', message: 'Blocked pending reviewer resolution: conflicting claims remain active.', unmapped: [],
+    signals: [{ signal: 'expected_inflow_delay', value: 'payment delayed 14 days', evidence: '“payment will arrive two weeks late”', sourceReference: 'Case 500-ATLAS-08', counterparty: 'Northstar Supply', confidenceStatus: 'review', alternatives: ['“payment is due as scheduled” (Call 00T-ATLAS-31)'] }],
+  },
+  multi_signal: {
+    status: 'success', message: 'Signals are shown as evidence only; deterministic policy retains decision authority.', unmapped: [],
+    signals: [
+      { signal: 'client_payment_dispute', value: 'disputed invoice', evidence: '“Northstar is disputing the March invoice”', sourceReference: 'Case 500-BLOOM-03', counterparty: 'Northstar', confidenceStatus: 'review', alternatives: [] },
+      { signal: 'client_revenue_share', value: '65%', evidence: '“Northstar represents 65% of monthly revenue”', sourceReference: 'Call 00T-BLOOM-44', counterparty: 'Northstar', confidenceStatus: 'review', alternatives: [] },
+    ],
+  },
+  correction: {
+    status: 'success', message: 'Reviewer correction is recorded for the next daily run; original evidence is retained.', unmapped: [],
+    signals: [{ signal: 'expected_inflow_delay', value: '5 days', evidence: '“expect the transfer within five days”', sourceReference: 'Call 00T-NOVA-09', counterparty: 'Acme Retail', confidenceStatus: 'review', alternatives: ['Original model value: 15 days'] }],
+  },
+  failure: {
+    status: 'failed', message: 'Blocked pending successful extraction; no stale result is reused.', signals: [], unmapped: [],
+  },
+} as const;
+
 // ---------------------------------------------------------------------------
 // Agent rationales (AI-generated text from the doc)
 // ---------------------------------------------------------------------------
