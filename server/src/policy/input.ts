@@ -46,7 +46,8 @@ export function joinPolicyInputs(input: {
   });
   const baseline = profile ? ratingsFromProfile(profile.data) : null;
   let signals: Signals | null = null;
-  if (gate.blockers.length === 0 && input.evidence) {
+  const calculationAllowed = gate.blockers.every(({ code }) => code === "CREDIT_REVIEW_WATCH");
+  if (calculationAllowed && input.evidence) {
     const policyInput = baseline
       ? buildPolicyInput(baseline, input.evidence, input.qualifications, input.signalMappings)
       : null;

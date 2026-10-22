@@ -440,19 +440,19 @@ provider operation unless all checks still pass.
 - Create: `tests/server/policy/repository.test.ts`
 - Create: `tests/server/policy/runner.test.ts`
 
-- [ ] Add append-only daily evaluation records keyed idempotently by customer,
+- [x] Add append-only daily evaluation records keyed idempotently by customer,
   profile, Salesforce snapshot, evidence run, and policy version.
-- [ ] Apply deterministic ratings, tiers, no-go checks, starter rules, and
+- [x] Apply deterministic ratings, tiers, no-go checks, starter rules, and
   credit-line caps from the shared policy core.
-- [ ] Store input version IDs, computed ratings and line, outcome, stable
+- [x] Store input version IDs, computed ratings and line, outcome, stable
   reason codes, and evaluation time without duplicating raw source text.
-- [ ] Run once each day after that customer's required snapshots and evidence
+- [x] Run once each day after that customer's required snapshots and evidence
   result are complete; do not calculate against partial inputs.
-- [ ] Continue the batch when a single customer's evaluation is blocked or
+- [x] Continue the batch when a single customer's evaluation is blocked or
   fails.
-- [ ] Test idempotency, immutable history, policy-version changes, customer
+- [x] Test idempotency, immutable history, policy-version changes, customer
   isolation, and source-version references.
-- [ ] Run focused precheck tests before Task 6.
+- [x] Run focused precheck tests before Task 6.
 
 ### Task 6: Evaluate each bridge request deterministically
 

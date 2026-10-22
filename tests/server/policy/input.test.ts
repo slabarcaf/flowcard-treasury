@@ -90,4 +90,15 @@ describe("policy input join", () => {
     expect(JSON.stringify(mapped)).not.toContain("private rationale");
     expect(JSON.stringify(mapped)).not.toContain("Private Client");
   });
+
+  it("calculates a watched customer line while retaining the required human review", () => {
+    const watched = structuredClone(snapshot);
+    watched.snapshot!.data!.mappingVerified = true;
+    watched.snapshot!.data!.account.creditReviewStatus.value = "watch";
+    const result = joinPolicyInputs({ roster, profile, snapshot: watched, evidence,
+      qualifications: {}, noGoMappings: verifiedMappings });
+    expect(result.humanApprovalRequired).toBe(true);
+    expect(result.blockers).toContainEqual({ code: "CREDIT_REVIEW_WATCH" });
+    expect(result.signals).toEqual({ inflowReliability: "green", inflowConcentration: "green", cashBuffer: "green", trackRecord: "green" });
+  });
 });
