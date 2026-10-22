@@ -86,6 +86,17 @@ describe('Original scenario', () => {
     );
   });
 
+  it('flags Bloom with an orange CRM box until re-evaluation', () => {
+    let s = step(start(initialKit5State(scenario('original'))));
+    const flag = (x: Kit5State) => x.customerDetails.txn_bloom_payroll_001.precheck.filter((p) => p.status === 'flag');
+    expect(flag(s).map((p) => p.label)).toEqual(['Agent found something in CRM.']);
+    s = revealCrm(s);
+    expect(flag(s)).toHaveLength(1);
+    s = reEvaluateCrm(s);
+    expect(flag(s)).toHaveLength(0);
+    expect(status(s, 'txn_bloom_payroll_001')).toBe('Declined');
+  });
+
   it('sends Nova to a credit officer (Tier B at Less)', () => {
     let s = start(initialKit5State(scenario('original')));
     s = reEvaluateCrm(revealCrm(step(s))); // Bloom
