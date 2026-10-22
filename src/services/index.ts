@@ -10,7 +10,13 @@ export type {
   CrmNote,
   AgentSignalExtraction,
   AgentAllocationProposal,
+  BridgeLedgerStatus,
+  BridgeLedgerProjection,
+  FacilityLedgerProjection,
+  LedgerProjectionResponse,
 } from './types.js';
+
+export { BridgeApiClient } from './http/BridgeApiClient.js';
 
 // Default to mock implementations
 export { mockAirwallexClient } from './mock/AirwallexClient.js';
