@@ -187,6 +187,7 @@ describe("bridge collection fees", () => {
 
 function gateway(availableCents: number): AirwallexGateway {
   return {
+    listConnectedAccounts: async () => [],
     createTransfer: async () => { throw new Error("not used"); },
     createCharge: async () => { throw new Error("not used"); },
     getTransferByRequestId: async () => null,

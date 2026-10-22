@@ -418,14 +418,21 @@ mapping remain invalid and cannot pass the new-bridge gate.
 - Create: server/src/reconciliation/customer-roster.ts
 - Create: tests/server/customer-roster-reconciliation.test.ts
 
-- [ ] Use the existing Airwallex server client to list connected accounts with
+- [x] Use the existing Airwallex server client to list connected accounts with
   source-appropriate pagination.
-- [ ] Compare Airwallex IDs with active and deactivated roster entries.
-- [ ] Emit a report for missing, extra, duplicate, or status-mismatched IDs.
-- [ ] Never auto-enroll, auto-deactivate, or match by company name or email.
-- [ ] Keep reconciliation state separate from Salesforce query completeness.
-- [ ] Test reconciliation output and verify it never mutates the roster.
-- [ ] Run focused reconciliation tests before Task 9.
+- [x] Compare Airwallex IDs with active and deactivated roster entries.
+- [x] Emit a report for missing, extra, duplicate, or status-mismatched IDs.
+- [x] Never auto-enroll, auto-deactivate, or match by company name or email.
+- [x] Keep reconciliation state separate from Salesforce query completeness.
+- [x] Test reconciliation output and verify it never mutates the roster.
+- [x] Run focused reconciliation tests before Task 9.
+
+Implementation note: the existing server gateway requests `GET /api/v1/accounts`
+with the documented `page_num` pagination and maximum `page_size` of 500, and
+fails closed on malformed or incomplete pagination. The reconciliation report
+compares only stable connected-account IDs and treats provider `ACTIVE` as
+active for status comparison. It is an in-memory read-only report with no
+Salesforce completeness state and does not write to the roster.
 
 #### Task 9 (TASK-009): Wire snapshot source selection into the service layer
 

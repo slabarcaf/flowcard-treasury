@@ -18,7 +18,13 @@ export interface ProviderOperationResponse {
   duplicate?: boolean;
 }
 
+export interface ProviderConnectedAccount {
+  id: string;
+  status: string;
+}
+
 export interface AirwallexGateway {
+  listConnectedAccounts(): Promise<ProviderConnectedAccount[]>;
   createTransfer(request: ProviderOperationRequest): Promise<ProviderOperationResponse>;
   createCharge(request: ProviderOperationRequest): Promise<ProviderOperationResponse>;
   getTransferByRequestId(requestId: string): Promise<ProviderOperationResponse | null>;
@@ -44,6 +50,40 @@ export class HttpAirwallexGateway implements AirwallexGateway {
   private tokenExpiresAt = 0;
 
   constructor(private readonly options: { baseUrl: string; clientId: string; apiKey: string; fetcher?: typeof fetch }) {}
+
+  async listConnectedAccounts(): Promise<ProviderConnectedAccount[]> {
+    const pageSize = 500;
+    const accounts: ProviderConnectedAccount[] = [];
+    let pageNum = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const result = await this.get<unknown>(`/api/v1/accounts?page_num=${pageNum}&page_size=${pageSize}`);
+      if (!isConnectedAccountPage(result)) {
+        throw new Error("Airwallex connected-account list returned an invalid page");
+      }
+      for (const item of result.items) {
+        if (typeof item !== "object" || item === null) {
+          throw new Error("Airwallex connected-account list returned a malformed account item");
+        }
+        const account = item as Record<string, unknown>;
+        const id = typeof account.id === "string" ? account.id.trim() : "";
+        const status = typeof account.status === "string" ? account.status.trim() : "";
+        if (!id || !status) {
+          throw new Error("Airwallex connected-account list returned an item without an ID or status");
+        }
+        accounts.push({ id, status });
+      }
+      hasMore = result.has_more;
+      if (hasMore && result.items.length === 0) {
+        throw new Error("Airwallex connected-account pagination returned an empty page with more results");
+      }
+      pageNum++;
+      if (!Number.isSafeInteger(pageNum)) {
+        throw new Error("Airwallex connected-account pagination exceeded the supported page range");
+      }
+    }
+    return accounts;
+  }
 
   createTransfer(request: ProviderOperationRequest) { return this.postOperation("/api/v1/connected_account_transfers/create", request); }
   createCharge(request: ProviderOperationRequest) { return this.postOperation("/api/v1/charges/create", request); }
@@ -111,6 +151,17 @@ export class HttpAirwallexGateway implements AirwallexGateway {
     this.tokenExpiresAt = data.expires_at ? Date.parse(data.expires_at) : Date.now() + (data.expires_in ?? 1800) * 1000;
     return data.token;
   }
+}
+
+interface ConnectedAccountPage {
+  has_more: boolean;
+  items: unknown[];
+}
+
+function isConnectedAccountPage(value: unknown): value is ConnectedAccountPage {
+  if (typeof value !== "object" || value === null) return false;
+  const page = value as Record<string, unknown>;
+  return typeof page.has_more === "boolean" && Array.isArray(page.items);
 }
 
 export class ProviderHttpError extends Error {
