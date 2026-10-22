@@ -11,7 +11,7 @@ import { publishCustomerSnapshot } from "../../../server/src/snapshots/publisher
 import { publishCustomerProfile } from "../../../server/src/underwriting/publisher.js";
 import { UNDERWRITING_FEATURE_VERSION, UNDERWRITING_PROFILE_SCHEMA_VERSION, type UnderwritingProfileCandidate } from "../../../server/src/underwriting/types.js";
 import { runDailyPolicyPrechecks } from "../../../server/src/policy/runner.js";
-import { createRemoteAuthorizationResolver } from "../../../server/src/policy/remote-authorization.js";
+import { createRemoteAuthorizationNonceClaimer, createRemoteAuthorizationResolver } from "../../../server/src/policy/remote-authorization.js";
 import type { NoGoMappingReadiness } from "../../../server/src/policy/gates.js";
 import type { SalesforceCustomerSnapshot } from "../../../server/src/salesforce/types.js";
 import { getDemoSalesforceSnapshot } from "../../../server/src/salesforce/fixture-source.js";
@@ -26,6 +26,7 @@ const migrationFiles = [
   "004_ai_evidence.sql", "005_underwriting_profiles.sql", "006_policy_evaluations.sql",
   "007_policy_request_evaluations.sql", "008_remote_authorization.sql", "009_policy_request_ledger_sequence.sql",
   "010_remote_authorization_nonce_fingerprint.sql",
+  "011_remote_authorization_nonce_claims.sql",
 ];
 const now = new Date();
 const nowIso = now.toISOString();
@@ -62,7 +63,7 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
       }
     }
     await pool.query(await readFile(new URL(`../../../server/src/db/migrations/${migrationFiles.at(-1)}`, import.meta.url), "utf8"));
-    await pool.query(`TRUNCATE TABLE customer_roster, bridge_cases, ledger_events, provider_operations,
+    await pool.query(`TRUNCATE TABLE customer_roster, remote_authorization_nonce_claims, bridge_cases, ledger_events, provider_operations,
       outbox_commands, webhook_inbox, provider_observations, facility_projections, facility_configs CASCADE`);
     await pool.query(`INSERT INTO facility_configs (id, version, currency, facility_amount_cents, reserve_floor_bps)
       VALUES ('acceptance-usd', 1, 'USD', 5000000, 2000)`);
@@ -143,7 +144,18 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
     };
     const fakeGateway = { getBalance: async () => ({ availableCents: 0, currency: "USD" as const }) } as unknown as AirwallexGateway;
     const resolve = createRemoteAuthorizationResolver({ pool, gateway: fakeGateway, repaymentTerm: "asap", now: () => now });
+    const claimNonce = createRemoteAuthorizationNonceClaimer(pool);
     const nonce = `${now.getTime()}.synthetic-acceptance-nonce`;
+    const unsupportedRequest = { ...request, cardTransactionEventId: randomUUID(), transactionCategory: "CASH_DISBURSEMENT" };
+    expect(await claimNonce(unsupportedRequest, `${now.getTime()}.unsupported-acceptance-nonce`, now)).toBe("claimed");
+    expect(await claimNonce(unsupportedRequest, `${now.getTime()}.unsupported-acceptance-nonce`, now)).toBe("exact_retry");
+    expect(await claimNonce({ ...unsupportedRequest, cardTransactionEventId: randomUUID(), transactionAmount: 999 },
+      `${now.getTime()}.unsupported-acceptance-nonce`, now)).toBe("replay_mismatch");
+    const storedClaim = await pool.query<{ nonce_fingerprint: string; nonce: string | null }>(
+      `SELECT nonce_fingerprint, to_jsonb(remote_authorization_nonce_claims)->>'nonce' AS nonce
+         FROM remote_authorization_nonce_claims WHERE card_transaction_event_id = $1`,
+      [unsupportedRequest.cardTransactionEventId]);
+    expect(storedClaim.rows[0]).toMatchObject({ nonce_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/), nonce: null });
     const outcome = await resolve(request, nonce, new AbortController().signal);
     expect(outcome).toEqual({ responseStatus: "AUTHORIZED", statusReason: "auto_approved" });
 

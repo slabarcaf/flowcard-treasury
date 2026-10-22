@@ -16,6 +16,7 @@ import { runPolicyApprovalCli } from "./policy/approval-cli.js";
 import {
   createRemoteAuthorizationApprovalRevalidator,
   createRemoteAuthorizationResolver,
+  createRemoteAuthorizationNonceClaimer,
   resolveStoredRemoteAuthorizationDecision,
 } from "./policy/remote-authorization.js";
 import { runDailyPolicyPrechecks } from "./policy/runner.js";
@@ -126,12 +127,14 @@ const remoteAuthorizationResolver = createRemoteAuthorizationResolver({
   gateway,
   repaymentTerm: config.remoteAuthorizationRepaymentTerm,
 });
+const remoteAuthorizationNonceClaimer = createRemoteAuthorizationNonceClaimer(pool);
 const server = createHttpServer(
   config,
   pool,
   webhookWorker,
   (requestId) => resolveStoredRemoteAuthorizationDecision(pool, requestId),
   remoteAuthorizationResolver,
+  remoteAuthorizationNonceClaimer,
 );
 server.listen(config.port, "0.0.0.0", () => {
   console.log(`Bridge ledger server listening on port ${config.port}`);

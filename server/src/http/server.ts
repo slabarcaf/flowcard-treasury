@@ -8,7 +8,7 @@ import { handleCustomerSnapshot, requestAuthorization } from "./routes/customer-
 import { handleLedgerProjection } from "./routes/ledger-projection.js";
 import { handleBridgeDecision } from "./routes/bridge-decision.js";
 import type { TrustedBridgeDecisionResult } from "./routes/bridge-decision.js";
-import { handleRemoteAuthorization, type RemoteAuthorizationResolver } from "./routes/remote-authorization.js";
+import { handleRemoteAuthorization, type RemoteAuthorizationNonceClaimer, type RemoteAuthorizationResolver } from "./routes/remote-authorization.js";
 import { timingSafeEqual } from "node:crypto";
 
 export function createHttpServer(
@@ -17,8 +17,9 @@ export function createHttpServer(
   webhookWorker?: WebhookInboxWorker,
   resolveBridgeDecision?: (requestId: string) => Promise<TrustedBridgeDecisionResult>,
   resolveRemoteAuthorization?: RemoteAuthorizationResolver,
+  claimRemoteAuthorizationNonce?: RemoteAuthorizationNonceClaimer,
 ): Server {
-  return createServer(createRequestHandler(config, pool, webhookWorker, resolveBridgeDecision, resolveRemoteAuthorization));
+  return createServer(createRequestHandler(config, pool, webhookWorker, resolveBridgeDecision, resolveRemoteAuthorization, claimRemoteAuthorizationNonce));
 }
 
 /** Exposed so route wiring can be tested directly without opening a TCP listener. */
@@ -28,12 +29,14 @@ export function createRequestHandler(
   webhookWorker?: WebhookInboxWorker,
   resolveBridgeDecision?: (requestId: string) => Promise<TrustedBridgeDecisionResult>,
   resolveRemoteAuthorization?: RemoteAuthorizationResolver,
+  claimRemoteAuthorizationNonce?: RemoteAuthorizationNonceClaimer,
 ): RequestListener {
   return (request, response) => {
     if (request.method === "POST" && request.url === "/api/remote-authorization") {
       void handleRemoteAuthorization(request, response, {
         sharedSecret: config.airwallexRemoteAuthorizationSecret,
         resolve: resolveRemoteAuthorization,
+        claimNonce: claimRemoteAuthorizationNonce,
       });
       return;
     }

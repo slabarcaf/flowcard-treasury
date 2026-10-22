@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 const MAX_BODY_BYTES = 16_384;
@@ -32,6 +32,12 @@ export type RemoteAuthorizationResolver = (
   signal: AbortSignal,
 ) => Promise<RemoteAuthorizationDecision>;
 
+export type RemoteAuthorizationNonceClaimer = (
+  input: AirwallexRemoteAuthorizationV2,
+  nonce: string,
+  receivedAt: Date,
+) => Promise<"claimed" | "exact_retry" | "replay_mismatch">;
+
 /** Airwallex remote authorization v2 endpoint. Unknown and unsafe requests decline. */
 export async function handleRemoteAuthorization(
   request: IncomingMessage,
@@ -39,6 +45,7 @@ export async function handleRemoteAuthorization(
   options: {
     sharedSecret?: string;
     resolve?: RemoteAuthorizationResolver;
+    claimNonce?: RemoteAuthorizationNonceClaimer;
     now?: Date;
     maxAgeMs?: number;
     resolutionBudgetMs?: number;
@@ -60,8 +67,25 @@ export async function handleRemoteAuthorization(
     send(response, 200, providerResponse(parsed.cardTransactionEventId, "DECLINED", "remote_authorization_not_configured"));
     return;
   }
-  if (!isAuthentic(request, options.sharedSecret, options.now ?? new Date(), options.maxAgeMs ?? DEFAULT_MAX_AGE_MS)) {
+  const receivedAt = options.now ?? new Date();
+  if (!isAuthentic(request, options.sharedSecret, receivedAt, options.maxAgeMs ?? DEFAULT_MAX_AGE_MS)) {
     send(response, 200, providerResponse(parsed.cardTransactionEventId, "DECLINED", "invalid_request_signature"));
+    return;
+  }
+  const nonce = header(request, "x-nonce")!;
+  if (!options.claimNonce) {
+    send(response, 200, providerResponse(parsed.cardTransactionEventId, "DECLINED", "nonce_claim_unavailable"));
+    return;
+  }
+  let nonceClaim: "claimed" | "exact_retry" | "replay_mismatch";
+  try {
+    nonceClaim = await options.claimNonce(parsed, nonce, receivedAt);
+  } catch {
+    send(response, 200, providerResponse(parsed.cardTransactionEventId, "DECLINED", "nonce_claim_unavailable"));
+    return;
+  }
+  if (nonceClaim === "replay_mismatch") {
+    send(response, 200, providerResponse(parsed.cardTransactionEventId, "DECLINED", "request_replay_mismatch"));
     return;
   }
   if (parsed.transactionType !== "AUTHORIZATION" || parsed.transactionCategory !== "PURCHASE" ||
@@ -76,7 +100,7 @@ export async function handleRemoteAuthorization(
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       result = await Promise.race([
-        options.resolve(parsed, header(request, "x-nonce")!, controller.signal),
+        options.resolve(parsed, nonce, controller.signal),
         new Promise<never>((_, reject) => {
           timeout = setTimeout(() => {
             controller.abort(new Error("remote authorization deadline exceeded"));
@@ -91,6 +115,23 @@ export async function handleRemoteAuthorization(
     }
   }
   send(response, 200, providerResponse(parsed.cardTransactionEventId, result.responseStatus, result.statusReason));
+}
+
+export function fingerprintRemoteAuthorizationRequest(request: AirwallexRemoteAuthorizationV2): string {
+  const canonical = JSON.stringify([
+    request.version,
+    request.accountId,
+    request.cardId,
+    request.cardTransactionEventId,
+    request.cardTransactionId,
+    request.cardTransactionLifecycleId,
+    request.transactionType,
+    request.transactionCategory,
+    request.transactionAmount,
+    request.transactionCurrency,
+    request.merchantCategoryCode,
+  ]);
+  return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
 export function authenticateAirwallexNonce(

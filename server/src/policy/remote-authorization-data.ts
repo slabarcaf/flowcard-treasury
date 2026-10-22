@@ -3,6 +3,7 @@ import type {
   AirwallexRemoteAuthorizationV2,
   RemoteAuthorizationDecision,
 } from "../http/routes/remote-authorization.js";
+import { fingerprintRemoteAuthorizationRequest } from "../http/routes/remote-authorization.js";
 import type { DatabasePool } from "../db/pool.js";
 import { getCurrentUnderwritingProfile } from "../underwriting/repository.js";
 import { getCustomerSnapshotReadModel } from "../snapshots/freshness.js";
@@ -166,7 +167,7 @@ export async function claimRequest(
   receivedAt: Date,
 ): Promise<{ customerId: string | null; responseStatus: "AUTHORIZED" | "DECLINED" | null; statusReason: string | null }> {
   const nonceFingerprint = createHash("sha256").update(nonce, "utf8").digest("hex");
-  const requestFingerprint = fingerprintRequest(request);
+  const requestFingerprint = fingerprintRemoteAuthorizationRequest(request);
   const binding = await pool.query<{ customer_id: string }>(
     `SELECT roster.customer_id
        FROM customer_roster AS roster
@@ -238,23 +239,6 @@ export async function claimRequest(
     responseStatus: finalRow?.response_status ?? "DECLINED",
     statusReason: finalRow?.status_reason ?? "request_in_progress_or_incomplete",
   };
-}
-
-function fingerprintRequest(request: AirwallexRemoteAuthorizationV2): string {
-  const canonical = JSON.stringify([
-    request.version,
-    request.accountId,
-    request.cardId,
-    request.cardTransactionEventId,
-    request.cardTransactionId,
-    request.cardTransactionLifecycleId,
-    request.transactionType,
-    request.transactionCategory,
-    request.transactionAmount,
-    request.transactionCurrency,
-    request.merchantCategoryCode,
-  ]);
-  return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
 export async function completeRequest(
