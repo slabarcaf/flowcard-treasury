@@ -392,15 +392,21 @@ staleness and the per-customer decision gate from that latest failed attempt.
 - Modify: server/src/http/server.ts
 - Create: tests/server/customer-snapshot-api.test.ts
 
-- [ ] Separate latest sync-attempt status from the published snapshot status.
-- [ ] Return snapshot version, freshness, age, source mode, and canonical
+- [x] Separate latest sync-attempt status from the published snapshot status.
+- [x] Return snapshot version, freshness, age, source mode, and canonical
   allowlisted data from a read-only endpoint.
-- [ ] Mark the snapshot stale immediately after an exhausted required-query
+- [x] Mark the snapshot stale immediately after an exhausted required-query
   failure and after 24 hours without a new complete version.
-- [ ] Gate new bridge commands on active roster status and fresh valid
+- [x] Gate new bridge commands on active roster status and fresh valid
   snapshot; leave existing bridge servicing unaffected.
-- [ ] Test fresh, missing, stale, invalid, and deactivated customer states.
-- [ ] Run focused snapshot API tests before Task 8.
+- [x] Test fresh, missing, stale, invalid, and deactivated customer states.
+- [x] Run focused snapshot API tests before Task 8.
+
+Implementation note: the API returns demo fixture snapshots without credentials.
+Production MCP snapshot responses require the configured
+`SALESFORCE_SNAPSHOT_READ_TOKEN` bearer token; missing or incorrect credentials
+do not expose production snapshot data. Production snapshots with unverified
+mapping remain invalid and cannot pass the new-bridge gate.
 
 ### Phase 4: Reconciliation and consumer integration
 

@@ -4,6 +4,7 @@ import type { ServerConfig } from "../config.js";
 import type { DatabasePool } from "../db/pool.js";
 import type { WebhookInboxWorker } from "../webhooks/worker.js";
 import { handleAirwallexWebhook } from "./routes/airwallex-webhook.js";
+import { handleCustomerSnapshot, requestAuthorization } from "./routes/customer-snapshot.js";
 import { handleLedgerProjection } from "./routes/ledger-projection.js";
 
 export function createHttpServer(config: ServerConfig, pool?: DatabasePool, webhookWorker?: WebhookInboxWorker): Server {
@@ -20,6 +21,21 @@ export function createRequestHandler(config: ServerConfig, pool?: DatabasePool, 
     if (request.method === "GET" && request.url === "/api/ledger" && pool) {
       void handleLedgerProjection(response, pool);
       return;
+    }
+    if (request.method === "GET" && pool) {
+      const match = /^\/api\/customers\/([^/]+)\/snapshot(?:\?.*)?$/.exec(request.url ?? "");
+      if (match) {
+        let customerId: string;
+        try {
+          customerId = decodeURIComponent(match[1]!);
+        } catch {
+          response.writeHead(400, { "content-type": "application/json", "cache-control": "no-store" });
+          response.end(JSON.stringify({ error: "invalid_customer_id" }));
+          return;
+        }
+        void handleCustomerSnapshot(response, pool, customerId, requestAuthorization(request), config.salesforceSnapshotReadToken);
+        return;
+      }
     }
     handleRequest(request, response);
   };

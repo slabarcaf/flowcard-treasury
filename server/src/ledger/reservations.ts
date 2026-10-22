@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabasePool } from "../db/pool.js";
 import { appendLedgerEvent, type LedgerEventType } from "./events.js";
 import { rebuildLedgerProjections } from "./projector.js";
+import { getCustomerSnapshotReadModel } from "../snapshots/freshness.js";
 
 export type RepaymentTerm = "15_days" | "30_days" | "fixed_date" | "asap";
 
@@ -60,12 +61,12 @@ export async function reserveBridge(
       `SELECT id FROM facility_holds WHERE is_active LIMIT 1`,
     );
     if (hold.rowCount) throw new Error("USD facility is on hold pending provider reconciliation");
-    const enrollment = await client.query<{ is_active: boolean }>(
-      `SELECT is_active FROM customer_roster WHERE customer_id = $1`,
-      [input.customerId],
-    );
-    if (!enrollment.rows[0]?.is_active) {
+    const customerSnapshot = await getCustomerSnapshotReadModel(client, input.customerId, new Date(), true);
+    if (!customerSnapshot.active) {
       throw new Error("Customer is not actively enrolled in the bridge program");
+    }
+    if (customerSnapshot.freshness !== "fresh") {
+      throw new Error(`Customer Salesforce snapshot is ${customerSnapshot.freshness}`);
     }
     const deployableCents = Number(facility.deployable_cents);
     if (!Number.isSafeInteger(deployableCents) || deployableCents < 0) {

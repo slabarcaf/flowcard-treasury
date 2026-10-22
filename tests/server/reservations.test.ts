@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { DatabaseClient, DatabasePool, QueryResult } from "../../server/src/db/pool.js";
 import { reserveBridge } from "../../server/src/ledger/reservations.js";
+import { getDemoSalesforceSnapshot } from "../../server/src/salesforce/fixture-source.js";
+import type { SalesforceCustomerSnapshot } from "../../server/src/salesforce/types.js";
 
 interface FakeState {
   deployable: number;
   activeHold: boolean;
   customerActive: boolean;
+  snapshotFreshness: "fresh" | "missing" | "stale" | "invalid";
   bridges: Array<{ id: string; customer_id: string; amount_cents: number; repayment_term?: string; repayment_due_at?: Date | null }>;
   events: Array<Record<string, unknown>>;
   outbox: unknown[];
@@ -17,6 +20,7 @@ class ReservationPool implements DatabasePool {
     deployable: 1_500_000,
     activeHold: false,
     customerActive: true,
+    snapshotFreshness: "fresh",
     bridges: [],
     events: [{
       id: 1,
@@ -69,8 +73,26 @@ class ReservationPool implements DatabasePool {
         if (text.includes("FROM facility_holds")) {
           return { rows: this.state.activeHold ? [{ id: "1" }] : [], rowCount: this.state.activeHold ? 1 : 0 } as QueryResult<Row>;
         }
-        if (text.includes("FROM customer_roster")) {
-          return { rows: this.state.customerActive ? [{ is_active: true }] : [{ is_active: false }], rowCount: 1 } as QueryResult<Row>;
+        if (text.includes("FROM customer_roster AS roster")) {
+          const snapshot = this.state.snapshotFreshness === "missing" ? null : reservationSnapshot(this.state.snapshotFreshness);
+          return {
+            rows: [{
+              is_active: this.state.customerActive,
+              snapshot_id: snapshot ? "snapshot-1" : null,
+              version: snapshot ? 1 : null,
+              source_mode: snapshot ? "demo" : null,
+              schema_version: snapshot ? 1 : null,
+              mapping_version: snapshot ? snapshot.mappingVersion : null,
+              run_id: snapshot ? "run-1" : null,
+              captured_at: new Date(Date.now() - 60_000),
+              published_at: new Date(Date.now() - 59_000),
+              canonical_payload: snapshot,
+              attempt_run_id: this.state.snapshotFreshness === "stale" ? "failed-run" : "run-1",
+              attempt_status: this.state.snapshotFreshness === "stale" ? "failed" : "succeeded",
+              attempt_finished_at: new Date(),
+            }],
+            rowCount: 1,
+          } as QueryResult<Row>;
         }
         if (text.includes("INSERT INTO bridge_cases")) {
           const [id, customerId, amountCents, repaymentTerm, repaymentDueAt] = values as [string, string, number, string, Date | null];
@@ -249,4 +271,25 @@ describe("USD facility reservations", () => {
     expect(pool.state.bridges).toHaveLength(0);
     expect(pool.state.events).toHaveLength(1);
   });
+
+  it.each(["missing", "stale", "invalid"] as const)("blocks new bridge reservations for a %s snapshot", async (snapshotFreshness) => {
+    const pool = new ReservationPool();
+    pool.state.snapshotFreshness = snapshotFreshness;
+
+    await expect(reserveBridge(pool, {
+      bridgeId: "00000000-0000-4000-8000-000000000061",
+      customerId: "customer-1",
+      amountCents: 250_000,
+      repaymentTerm: "asap",
+    })).rejects.toThrow(`Salesforce snapshot is ${snapshotFreshness}`);
+    expect(pool.state.bridges).toHaveLength(0);
+    expect(pool.state.events).toHaveLength(1);
+    expect(pool.state.outbox).toHaveLength(0);
+  });
 });
+
+function reservationSnapshot(freshness: FakeState["snapshotFreshness"]): SalesforceCustomerSnapshot {
+  const snapshot = structuredClone(getDemoSalesforceSnapshot("acct_bloom001")!);
+  if (freshness === "invalid") snapshot.account.approvedBridgeCap.value = null;
+  return snapshot;
+}

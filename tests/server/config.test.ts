@@ -25,6 +25,11 @@ describe("server configuration", () => {
       airwallexWebhookSecret: validEnv.AIRWALLEX_WEBHOOK_SECRET,
     });
   });
+
+  it("loads the optional Salesforce snapshot read token", () => {
+    expect(loadConfig({ ...validEnv, SALESFORCE_SNAPSHOT_READ_TOKEN: "  read-secret  " }).salesforceSnapshotReadToken)
+      .toBe("read-secret");
+  });
 });
 
 describe("health route", () => {
