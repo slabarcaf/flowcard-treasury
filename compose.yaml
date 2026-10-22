@@ -8,6 +8,7 @@ services:
     volumes:
       - ledger-data:/var/lib/postgresql/data
       - ./server/src/db/migrations/001_bridge_ledger.sql:/docker-entrypoint-initdb.d/001_bridge_ledger.sql:ro
+      - ./server/src/db/migrations/002_customer_roster.sql:/docker-entrypoint-initdb.d/002_customer_roster.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U flowcard -d flowcard_treasury"]
       interval: 3s

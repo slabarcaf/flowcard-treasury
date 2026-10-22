@@ -7,6 +7,7 @@
     "dev": "vite",
     "server:build": "tsc -p server/tsconfig.json",
     "server:start": "npm run server:build && node dist/server/src/main.js",
+    "roster:cli": "npm run server:build && node dist/server/src/roster/cli.js",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",

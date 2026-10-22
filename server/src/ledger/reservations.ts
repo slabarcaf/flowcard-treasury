@@ -60,6 +60,13 @@ export async function reserveBridge(
       `SELECT id FROM facility_holds WHERE is_active LIMIT 1`,
     );
     if (hold.rowCount) throw new Error("USD facility is on hold pending provider reconciliation");
+    const enrollment = await client.query<{ is_active: boolean }>(
+      `SELECT is_active FROM customer_roster WHERE customer_id = $1`,
+      [input.customerId],
+    );
+    if (!enrollment.rows[0]?.is_active) {
+      throw new Error("Customer is not actively enrolled in the bridge program");
+    }
     const deployableCents = Number(facility.deployable_cents);
     if (!Number.isSafeInteger(deployableCents) || deployableCents < 0) {
       throw new Error("USD facility projection has an invalid deployable balance");

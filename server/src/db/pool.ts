@@ -22,7 +22,7 @@ export interface DatabasePool {
   end(): Promise<void>;
 }
 
-export async function createDatabasePool(config: ServerConfig): Promise<DatabasePool> {
+export async function createDatabasePool(config: Pick<ServerConfig, "databaseUrl">): Promise<DatabasePool> {
   const { Pool } = await import("pg");
   return new Pool({ connectionString: config.databaseUrl }) as DatabasePool;
 }

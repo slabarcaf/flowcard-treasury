@@ -5,6 +5,7 @@ import { reserveBridge } from "../../server/src/ledger/reservations.js";
 interface FakeState {
   deployable: number;
   activeHold: boolean;
+  customerActive: boolean;
   bridges: Array<{ id: string; customer_id: string; amount_cents: number; repayment_term?: string; repayment_due_at?: Date | null }>;
   events: Array<Record<string, unknown>>;
   outbox: unknown[];
@@ -15,6 +16,7 @@ class ReservationPool implements DatabasePool {
   readonly state: FakeState = {
     deployable: 1_500_000,
     activeHold: false,
+    customerActive: true,
     bridges: [],
     events: [{
       id: 1,
@@ -66,6 +68,9 @@ class ReservationPool implements DatabasePool {
         }
         if (text.includes("FROM facility_holds")) {
           return { rows: this.state.activeHold ? [{ id: "1" }] : [], rowCount: this.state.activeHold ? 1 : 0 } as QueryResult<Row>;
+        }
+        if (text.includes("FROM customer_roster")) {
+          return { rows: this.state.customerActive ? [{ is_active: true }] : [{ is_active: false }], rowCount: 1 } as QueryResult<Row>;
         }
         if (text.includes("INSERT INTO bridge_cases")) {
           const [id, customerId, amountCents, repaymentTerm, repaymentDueAt] = values as [string, string, number, string, Date | null];
@@ -227,6 +232,20 @@ describe("USD facility reservations", () => {
       amountCents: 250_000,
       repaymentTerm: "asap",
     })).rejects.toThrow("facility is on hold");
+    expect(pool.state.bridges).toHaveLength(0);
+    expect(pool.state.events).toHaveLength(1);
+  });
+
+  it("blocks new bridge reservations for a soft-deactivated customer", async () => {
+    const pool = new ReservationPool();
+    pool.state.customerActive = false;
+
+    await expect(reserveBridge(pool, {
+      bridgeId: "00000000-0000-4000-8000-000000000051",
+      customerId: "customer-1",
+      amountCents: 250_000,
+      repaymentTerm: "asap",
+    })).rejects.toThrow("not actively enrolled");
     expect(pool.state.bridges).toHaveLength(0);
     expect(pool.state.events).toHaveLength(1);
   });
