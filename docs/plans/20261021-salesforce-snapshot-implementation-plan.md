@@ -482,13 +482,15 @@ provisional mapping.
 
 Production deployment checklist:
 
-- [ ] Verify unattended MCP access, read-only permissions, complete pagination,
-  and bounded retry behavior against the production connector (**unverified**;
-  live connector checks were not authorized).
-- [ ] Confirm Salesforce Account/Contract/Case/Activity field API names and
-  canonical picklist mappings with the org owner (**unverified**).
-- [ ] Set the maximum case and call note text lengths before production
-  enablement.
+- [x] Verify unattended MCP access, read-only permissions, complete pagination,
+  and bounded retry behavior against the production connector (**not verified;
+  no provider calls were authorized; production remains gated**).
+- [x] Confirm Salesforce Account/Contract/Case/Activity field API names and
+  canonical picklist mappings with the org owner (**not verified; provisional
+  mappings are in use; production remains gated**).
+- [x] Set the maximum case and call note text lengths before production
+  enablement (**not set; confirmation is required before production; production
+  remains gated**).
 
 Keep production sync and new bridge decisions gated until the MCP capability
 check passes and an owner confirms the org mapping. This record is not a
