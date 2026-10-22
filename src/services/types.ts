@@ -65,6 +65,7 @@ export interface CrmNote {
   author: string;
   timestamp: string;
   text: string;
+  sourceRecordId?: string;
 }
 
 // ---------------------------------------------------------------------------

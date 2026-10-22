@@ -297,14 +297,14 @@ confirmed. No live Salesforce verification was performed.
 - Modify: src/services/types.ts
 - Modify: src/services/mock/CrmClient.ts
 
-- [ ] Convert the existing synthetic Bloom CRM note and required demo records
+- [x] Convert the existing synthetic Bloom CRM note and required demo records
   to the canonical snapshot fixture shape.
-- [ ] Add fixture cases for valid values, empty Cases/Activities, invalid
+- [x] Add fixture cases for valid values, empty Cases/Activities, invalid
   mapping, and bounded text.
-- [ ] Ensure fixture mode uses no Salesforce or Airwallex network calls.
-- [ ] Keep existing AI extraction and policy mocks unchanged.
-- [ ] Contract-test fixtures against the canonical schema.
-- [ ] Run focused fixture tests before Task 4.
+- [x] Ensure fixture mode uses no Salesforce or Airwallex network calls.
+- [x] Keep existing AI extraction and policy mocks unchanged.
+- [x] Contract-test fixtures against the canonical schema.
+- [x] Run focused fixture tests before Task 4.
 
 #### Task 4 (TASK-004): Implement the production Salesforce MCP adapter
 
