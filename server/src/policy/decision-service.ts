@@ -73,8 +73,17 @@ export interface EvaluateBridgeRequestInput {
   request: BridgeRequest;
   state: RequestPolicyState;
   readCurrentBalance: (accountId: string, currency: "USD") => Promise<CurrentBalance>;
+  /** Exact operator authorization, supplied only during a locked re-evaluation. */
+  humanApproval?: HumanApprovalAuthorization;
   now?: Date;
   balanceTimeoutMs?: number;
+}
+
+export interface HumanApprovalAuthorization {
+  requestId: string;
+  amountCents: number;
+  actorId: string;
+  reason: string;
 }
 
 /**
@@ -188,9 +197,21 @@ export async function evaluateBridgeRequest(input: EvaluateBridgeRequestInput): 
     return decision(context, "declined", ["INSUFFICIENT_DEPLOYABLE_CAPITAL"], "Deployable facility capacity cannot cover the full shortfall.");
   }
   if (state.precheck.humanApprovalRequired || dollarDecision.door === "human") {
+    if (matchesHumanApproval(input.humanApproval, request.requestId, shortfallCents)) {
+      return decision({ ...context, amountCents: shortfallCents }, "auto_approved", ["AUTO_APPROVED"], "The exact human-approved terms pass current policy and capital checks.");
+    }
     return decision({ ...context, amountCents: shortfallCents }, "human_review", ["HUMAN_REVIEW_REQUIRED"], "The full shortfall meets policy limits and requires human approval.");
   }
   return decision({ ...context, amountCents: shortfallCents }, "auto_approved", ["AUTO_APPROVED"], "The full shortfall meets the current policy and capital door.");
+}
+
+function matchesHumanApproval(
+  approval: HumanApprovalAuthorization | undefined,
+  requestId: string,
+  amountCents: number,
+): boolean {
+  return Boolean(approval && approval.requestId === requestId && approval.amountCents === amountCents &&
+    approval.actorId.trim() && approval.reason.trim());
 }
 
 function validLedgerState(state: RequestPolicyState): boolean {

@@ -486,19 +486,19 @@ provider operation unless all checks still pass.
 - Modify: `server/src/policy/repository.ts`
 - Create: `tests/server/policy/reservation.test.ts`
 
-- [ ] Recheck snapshot/evidence readiness, open-bridge uniqueness, door,
+- [x] Recheck snapshot/evidence readiness, open-bridge uniqueness, door,
   credit-line exposure, and facility capacity under the ledger transaction.
-- [ ] Store the policy evaluation and facility reservation in the same
+- [x] Store the policy evaluation and facility reservation in the same
   transaction before creating the existing outbox command.
-- [ ] Enqueue a transfer only for an auto-approved decision or a currently
+- [x] Enqueue a transfer only for an auto-approved decision or a currently
   revalidated human approval.
-- [ ] Create no reservation or outbox command for blocked, declined, or
+- [x] Create no reservation or outbox command for blocked, declined, or
   pending human-review outcomes.
-- [ ] Make concurrent requests serialize against the facility lock and return
+- [x] Make concurrent requests serialize against the facility lock and return
   deterministic outcomes without exceeding deployable capital.
-- [ ] Test rollback, idempotent retries, concurrent requests, and human
+- [x] Test rollback, idempotent retries, concurrent requests, and human
   approval after input versions change.
-- [ ] Run focused transaction tests before Task 8.
+- [x] Run focused transaction tests before Task 8.
 
 ### Task 8: Add policy APIs and operator approval
 

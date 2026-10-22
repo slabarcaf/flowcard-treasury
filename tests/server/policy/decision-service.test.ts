@@ -34,9 +34,11 @@ const evaluate = (overrides: {
   state?: Partial<RequestPolicyState>;
   readCurrentBalance?: typeof balance;
   balanceTimeoutMs?: number;
+  humanApproval?: { requestId: string; amountCents: number; actorId: string; reason: string };
 } = {}) => evaluateBridgeRequest({
   request: request(overrides.request), state: state(overrides.state),
   readCurrentBalance: overrides.readCurrentBalance ?? balance,
+  humanApproval: overrides.humanApproval,
   balanceTimeoutMs: overrides.balanceTimeoutMs,
   now,
 });
@@ -113,6 +115,32 @@ describe("request-time policy decision service", () => {
   it("returns human review for a watched precheck without reserving funds", async () => {
     const result = await evaluate({ state: { precheck: { ...state().precheck!, humanApprovalRequired: true } } });
     expect(result).toMatchObject({ outcome: "human_review", amountCents: 40_000, reasonCodes: ["HUMAN_REVIEW_REQUIRED"] });
+  });
+
+  it("approves an exact human authorization only after re-evaluating current terms", async () => {
+    const approval = { requestId: "request-1", amountCents: 40_000, actorId: "operator-1", reason: "Verified current evidence" };
+    const reviewed = await evaluate({
+      state: { precheck: { ...state().precheck!, humanApprovalRequired: true } },
+    });
+    expect(reviewed.outcome).toBe("human_review");
+
+    const approved = await evaluate({
+      state: { precheck: { ...state().precheck!, humanApprovalRequired: true } },
+      humanApproval: approval,
+    });
+    expect(approved).toMatchObject({ outcome: "auto_approved", amountCents: 40_000 });
+
+    const changedAmount = await evaluate({
+      state: { precheck: { ...state().precheck!, humanApprovalRequired: true } },
+      humanApproval: { ...approval, amountCents: 39_999 },
+    });
+    expect(changedAmount.outcome).toBe("human_review");
+
+    const changedInputs = await evaluate({
+      state: { precheck: { ...state().precheck!, humanApprovalRequired: true, outcome: "blocked" } },
+      humanApproval: approval,
+    });
+    expect(changedInputs).toMatchObject({ outcome: "blocked", reasonCodes: ["PRECHECK_BLOCKED"] });
   });
 
   it.each([
