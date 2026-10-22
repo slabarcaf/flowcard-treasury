@@ -56,6 +56,19 @@ describe("Airwallex remote authorization v2 route", () => {
     expect(authenticateAirwallexNonce(nonce, "bad", secret, now)).toBe(false);
   });
 
+  it("declines a stale signed nonce before policy evaluation", async () => {
+    const staleTime = new Date(now.getTime() - 30_001);
+    const resolve = vi.fn();
+    const result = await invoke(signedRequest(staleTime), { sharedSecret: secret, resolve, now });
+    expect(result.status).toBe(200);
+    expect(result.json).toEqual({
+      card_transaction_event_id: eventId,
+      response_status: "DECLINED",
+      status_reason: "invalid_request_signature",
+    });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
   it("fails closed if the shared secret is missing", async () => {
     const result = await invoke(signedRequest(now), { now });
     expect(result.status).toBe(200);

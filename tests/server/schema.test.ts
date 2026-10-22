@@ -18,6 +18,10 @@ const remoteAuthorizationMigrationUrl = new URL(
   "../../server/src/db/migrations/008_remote_authorization.sql",
   import.meta.url,
 );
+const remoteAuthorizationFingerprintMigrationUrl = new URL(
+  "../../server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql",
+  import.meta.url,
+);
 
 describe("bridge ledger schema", () => {
   it("defines the required tables and enforces core constraints", async () => {
@@ -93,10 +97,15 @@ describe("bridge ledger schema", () => {
 
   it("stores only allowlisted remote authorization facts and audited card bindings", async () => {
     const sql = await readFile(remoteAuthorizationMigrationUrl, "utf8");
+    const fingerprintSql = await readFile(remoteAuthorizationFingerprintMigrationUrl, "utf8");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS issuing_card_bindings");
     expect(sql).toContain("issuing_card_binding_audit_immutable");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS remote_authorization_requests");
-    expect(sql).toContain("nonce text NOT NULL UNIQUE");
+    expect(fingerprintSql).toContain("nonce_fingerprint text");
+    expect(fingerprintSql).toContain("request_fingerprint text");
+    expect(fingerprintSql).toContain("digest(nonce, 'sha256')");
+    expect(fingerprintSql).toContain("DROP COLUMN IF EXISTS nonce");
+    expect(fingerprintSql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS remote_authorization_nonce_fingerprint_unique");
     expect(sql).toContain("card_transaction_event_id text PRIMARY KEY");
     expect(sql).toContain("merchant_category_code text NOT NULL");
     expect(sql).not.toContain("raw_body");

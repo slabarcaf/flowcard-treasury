@@ -25,6 +25,7 @@ const migrationFiles = [
   "001_bridge_ledger.sql", "002_customer_roster.sql", "003_salesforce_snapshots.sql",
   "004_ai_evidence.sql", "005_underwriting_profiles.sql", "006_policy_evaluations.sql",
   "007_policy_request_evaluations.sql", "008_remote_authorization.sql", "009_policy_request_ledger_sequence.sql",
+  "010_remote_authorization_nonce_fingerprint.sql",
 ];
 const now = new Date();
 const nowIso = now.toISOString();
@@ -142,8 +143,24 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
     };
     const fakeGateway = { getBalance: async () => ({ availableCents: 0, currency: "USD" as const }) } as unknown as AirwallexGateway;
     const resolve = createRemoteAuthorizationResolver({ pool, gateway: fakeGateway, repaymentTerm: "asap", now: () => now });
-    const outcome = await resolve(request, `${now.getTime()}.synthetic-acceptance-nonce`, new AbortController().signal);
+    const nonce = `${now.getTime()}.synthetic-acceptance-nonce`;
+    const outcome = await resolve(request, nonce, new AbortController().signal);
     expect(outcome).toEqual({ responseStatus: "AUTHORIZED", statusReason: "auto_approved" });
+
+    const exactRetry = await resolve(request, nonce, new AbortController().signal);
+    expect(exactRetry).toEqual(outcome);
+    const alteredLifecycle = await resolve({ ...request, cardTransactionLifecycleId: randomUUID() }, nonce,
+      new AbortController().signal);
+    expect(alteredLifecycle).toEqual({ responseStatus: "DECLINED", statusReason: "request_replay_mismatch" });
+    const alteredEvent = await resolve({ ...request, cardTransactionEventId: randomUUID() }, nonce,
+      new AbortController().signal);
+    expect(alteredEvent).toEqual({ responseStatus: "DECLINED", statusReason: "request_replay_mismatch" });
+
+    const storedNonce = await pool.query<{ nonce_fingerprint: string; nonce: string | null }>(
+      `SELECT nonce_fingerprint, to_jsonb(remote_authorization_requests)->>'nonce' AS nonce
+         FROM remote_authorization_requests WHERE card_transaction_event_id = $1`,
+      [request.cardTransactionEventId]);
+    expect(storedNonce.rows[0]).toMatchObject({ nonce_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/), nonce: null });
 
     const persisted = await pool.query<{ outcome: string; evaluation_id: string; request_id: string; ledger_sequence: string }>(
       `SELECT outcome, evaluation_id, request_id, ledger_sequence::text AS ledger_sequence

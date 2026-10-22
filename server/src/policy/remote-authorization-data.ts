@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import type { AirwallexRemoteAuthorizationV2 } from "../http/routes/remote-authorization.js";
+import type {
+  AirwallexRemoteAuthorizationV2,
+  RemoteAuthorizationDecision,
+} from "../http/routes/remote-authorization.js";
 import type { DatabasePool } from "../db/pool.js";
 import { getCurrentUnderwritingProfile } from "../underwriting/repository.js";
 import { getCustomerSnapshotReadModel } from "../snapshots/freshness.js";
@@ -162,6 +165,8 @@ export async function claimRequest(
   nonce: string,
   receivedAt: Date,
 ): Promise<{ customerId: string | null; responseStatus: "AUTHORIZED" | "DECLINED" | null; statusReason: string | null }> {
+  const nonceFingerprint = createHash("sha256").update(nonce, "utf8").digest("hex");
+  const requestFingerprint = fingerprintRequest(request);
   const binding = await pool.query<{ customer_id: string }>(
     `SELECT roster.customer_id
        FROM customer_roster AS roster
@@ -174,31 +179,38 @@ export async function claimRequest(
   if (!customerId) return { customerId: null, responseStatus: null, statusReason: null };
   const inserted = await pool.query(
     `INSERT INTO remote_authorization_requests (
-       card_transaction_event_id, nonce, card_transaction_id, card_transaction_lifecycle_id,
+       card_transaction_event_id, nonce_fingerprint, request_fingerprint,
+       card_transaction_id, card_transaction_lifecycle_id,
        account_id, card_id, customer_id, amount_cents, currency, transaction_type,
        transaction_category, merchant_category_code, request_received_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      ON CONFLICT DO NOTHING RETURNING card_transaction_event_id`,
-    [request.cardTransactionEventId, nonce, request.cardTransactionId, request.cardTransactionLifecycleId,
+    [request.cardTransactionEventId, nonceFingerprint, requestFingerprint,
+      request.cardTransactionId, request.cardTransactionLifecycleId,
       request.accountId, request.cardId, customerId, Math.round(request.transactionAmount * 100),
       request.transactionCurrency, request.transactionType, request.transactionCategory,
       request.merchantCategoryCode, receivedAt],
   );
   if (inserted.rowCount === 1) return { customerId, responseStatus: null, statusReason: null };
   const prior = await pool.query<{
-    customer_id: string; card_transaction_id: string; account_id: string; card_id: string;
+    customer_id: string; request_fingerprint: string | null; card_transaction_id: string;
+    card_transaction_lifecycle_id: string; account_id: string; card_id: string;
     amount_cents: number | string; currency: string; transaction_type: string;
     transaction_category: string; merchant_category_code: string;
     response_status: "AUTHORIZED" | "DECLINED" | null; status_reason: string | null;
   }>(
-    `SELECT customer_id, card_transaction_id, account_id, card_id, amount_cents, currency,
+    `SELECT customer_id, request_fingerprint, card_transaction_id,
+            card_transaction_lifecycle_id, account_id, card_id, amount_cents, currency,
             transaction_type, transaction_category, merchant_category_code,
             response_status, status_reason
        FROM remote_authorization_requests WHERE card_transaction_event_id = $1`,
     [request.cardTransactionEventId],
   );
   const row = prior.rows[0];
-  if (!row || row.customer_id !== customerId || row.card_transaction_id !== request.cardTransactionId ||
+  if (!row || row.customer_id !== customerId ||
+      (row.request_fingerprint !== null && row.request_fingerprint !== requestFingerprint) ||
+      row.card_transaction_id !== request.cardTransactionId ||
+      row.card_transaction_lifecycle_id !== request.cardTransactionLifecycleId ||
       row.account_id !== request.accountId || row.card_id !== request.cardId ||
       Number(row.amount_cents) !== Math.round(request.transactionAmount * 100) || row.currency !== request.transactionCurrency ||
       row.transaction_type !== request.transactionType || row.transaction_category !== request.transactionCategory ||
@@ -226,6 +238,23 @@ export async function claimRequest(
     responseStatus: finalRow?.response_status ?? "DECLINED",
     statusReason: finalRow?.status_reason ?? "request_in_progress_or_incomplete",
   };
+}
+
+function fingerprintRequest(request: AirwallexRemoteAuthorizationV2): string {
+  const canonical = JSON.stringify([
+    request.version,
+    request.accountId,
+    request.cardId,
+    request.cardTransactionEventId,
+    request.cardTransactionId,
+    request.cardTransactionLifecycleId,
+    request.transactionType,
+    request.transactionCategory,
+    request.transactionAmount,
+    request.transactionCurrency,
+    request.merchantCategoryCode,
+  ]);
+  return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
 export async function completeRequest(
