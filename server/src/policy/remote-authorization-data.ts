@@ -168,6 +168,9 @@ export async function claimRequest(
 ): Promise<{ customerId: string | null; decisionId: string | null; responseStatus: "AUTHORIZED" | "DECLINED" | null; statusReason: string | null }> {
   const nonceFingerprint = createHash("sha256").update(nonce, "utf8").digest("hex");
   const requestFingerprint = fingerprintRemoteAuthorizationRequest(request);
+  const prior = await findRemoteAuthorizationRequest(pool, request.cardTransactionEventId);
+  if (prior) return resolveExistingRemoteAuthorization(pool, prior, request, requestFingerprint);
+
   const binding = await pool.query<{ customer_id: string }>(
     `SELECT roster.customer_id
        FROM customer_roster AS roster
@@ -177,7 +180,15 @@ export async function claimRequest(
     [request.accountId, request.cardId],
   );
   const customerId = binding.rows[0]?.customer_id ?? null;
-  if (!customerId) return { customerId: null, decisionId: null, responseStatus: null, statusReason: null };
+  if (!customerId) {
+    // A concurrent matching request can commit while the binding check runs.
+    // Recheck the provider event before allowing the caller to complete it as
+    // unbound, since completeRequest preserves and returns an earlier status.
+    const concurrent = await findRemoteAuthorizationRequest(pool, request.cardTransactionEventId);
+    return concurrent
+      ? resolveExistingRemoteAuthorization(pool, concurrent, request, requestFingerprint)
+      : { customerId: null, decisionId: null, responseStatus: "DECLINED", statusReason: "card_not_enrolled" };
+  }
   const inserted = await pool.query<{ decision_id: string }>(
     `INSERT INTO remote_authorization_requests (
        card_transaction_event_id, nonce_fingerprint, request_fingerprint,
@@ -193,23 +204,51 @@ export async function claimRequest(
       request.merchantCategoryCode, receivedAt],
   );
   if (inserted.rowCount === 1) return { customerId, decisionId: inserted.rows[0]!.decision_id, responseStatus: null, statusReason: null };
-  const prior = await pool.query<{
-    customer_id: string; request_fingerprint: string | null; card_transaction_id: string;
-    card_transaction_lifecycle_id: string; account_id: string; card_id: string;
-    amount_cents: number | string; currency: string; transaction_type: string;
-    transaction_category: string; merchant_category_code: string;
-    decision_id: string; response_status: "AUTHORIZED" | "DECLINED" | null; status_reason: string | null;
-  }>(
+  const conflict = await findRemoteAuthorizationRequest(pool, request.cardTransactionEventId);
+  return conflict
+    ? resolveExistingRemoteAuthorization(pool, conflict, request, requestFingerprint)
+    : { customerId: null, decisionId: null, responseStatus: "DECLINED", statusReason: "request_replay_mismatch" };
+}
+
+interface ExistingRemoteAuthorizationRequest {
+  customer_id: string;
+  request_fingerprint: string | null;
+  card_transaction_id: string;
+  card_transaction_lifecycle_id: string;
+  account_id: string;
+  card_id: string;
+  amount_cents: number | string;
+  currency: string;
+  transaction_type: string;
+  transaction_category: string;
+  merchant_category_code: string;
+  decision_id: string;
+  response_status: "AUTHORIZED" | "DECLINED" | null;
+  status_reason: string | null;
+}
+
+async function findRemoteAuthorizationRequest(
+  pool: DatabasePool,
+  eventId: string,
+): Promise<ExistingRemoteAuthorizationRequest | null> {
+  const result = await pool.query<ExistingRemoteAuthorizationRequest>(
     `SELECT customer_id, request_fingerprint, card_transaction_id,
             card_transaction_lifecycle_id, account_id, card_id, amount_cents, currency,
             transaction_type, transaction_category, merchant_category_code,
             decision_id, response_status, status_reason
        FROM remote_authorization_requests WHERE card_transaction_event_id = $1`,
-    [request.cardTransactionEventId],
+    [eventId],
   );
-  const row = prior.rows[0];
-  if (!row || row.customer_id !== customerId ||
-      (row.request_fingerprint !== null && row.request_fingerprint !== requestFingerprint) ||
+  return result.rows[0] ?? null;
+}
+
+async function resolveExistingRemoteAuthorization(
+  pool: DatabasePool,
+  row: ExistingRemoteAuthorizationRequest,
+  request: AirwallexRemoteAuthorizationV2,
+  requestFingerprint: string,
+): Promise<{ customerId: string | null; decisionId: string | null; responseStatus: "AUTHORIZED" | "DECLINED"; statusReason: string }> {
+  if ((row.request_fingerprint !== null && row.request_fingerprint !== requestFingerprint) ||
       row.card_transaction_id !== request.cardTransactionId ||
       row.card_transaction_lifecycle_id !== request.cardTransactionLifecycleId ||
       row.account_id !== request.accountId || row.card_id !== request.cardId ||
@@ -218,27 +257,37 @@ export async function claimRequest(
       row.merchant_category_code !== request.merchantCategoryCode) {
     return { customerId: null, decisionId: null, responseStatus: "DECLINED", statusReason: "request_replay_mismatch" };
   }
-  if (!row.response_status) {
-    const declined = await pool.query(
-      `UPDATE remote_authorization_requests
-          SET response_status = 'DECLINED', status_reason = 'request_in_progress_or_incomplete'
-        WHERE card_transaction_event_id = $1 AND response_status IS NULL`,
-      [request.cardTransactionEventId],
-    );
-    if (declined.rowCount === 1) {
-      return { customerId, decisionId: row.decision_id, responseStatus: "DECLINED", statusReason: "request_in_progress_or_incomplete" };
-    }
+  if (row.response_status) {
+    return {
+      customerId: row.customer_id,
+      decisionId: row.decision_id,
+      responseStatus: row.response_status,
+      statusReason: row.status_reason ?? "request_replayed",
+    };
+  }
+  const declined = await pool.query(
+    `UPDATE remote_authorization_requests
+        SET response_status = 'DECLINED', status_reason = 'request_in_progress_or_incomplete'
+      WHERE card_transaction_event_id = $1 AND response_status IS NULL`,
+    [request.cardTransactionEventId],
+  );
+  if (declined.rowCount === 1) {
+    return {
+      customerId: row.customer_id,
+      decisionId: row.decision_id,
+      responseStatus: "DECLINED",
+      statusReason: "request_in_progress_or_incomplete",
+    };
   }
   const final = await pool.query<{ response_status: "AUTHORIZED" | "DECLINED" | null; status_reason: string | null }>(
     `SELECT response_status, status_reason FROM remote_authorization_requests WHERE card_transaction_event_id = $1`,
     [request.cardTransactionEventId],
   );
-  const finalRow = final.rows[0];
   return {
-    customerId,
+    customerId: row.customer_id,
     decisionId: row.decision_id,
-    responseStatus: finalRow?.response_status ?? "DECLINED",
-    statusReason: finalRow?.status_reason ?? "request_in_progress_or_incomplete",
+    responseStatus: final.rows[0]?.response_status ?? "DECLINED",
+    statusReason: final.rows[0]?.status_reason ?? "request_in_progress_or_incomplete",
   };
 }
 

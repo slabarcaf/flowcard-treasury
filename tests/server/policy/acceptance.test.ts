@@ -167,6 +167,24 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
     expect(storedClaim.rows[0]).toMatchObject({ nonce_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/), nonce: null });
     const outcome = await resolve(request, nonce, new AbortController().signal);
     expect(outcome).toEqual({ responseStatus: "AUTHORIZED", statusReason: "auto_approved" });
+
+    for (const [suffix, changes] of [
+      ["replay-unbound-card", { cardId: "card-unbound-to-roster" }],
+      ["replay-unbound-account", { accountId: "acct-unbound-to-roster" }],
+    ] as const) {
+      const altered = { ...request, ...changes };
+      const alteredNonce = `${now.getTime()}.${suffix}`;
+      expect(await claimNonce(altered, alteredNonce, now)).toBe("claimed");
+      expect(await resolve(altered, alteredNonce, new AbortController().signal)).toEqual({
+        responseStatus: "DECLINED", statusReason: "request_replay_mismatch",
+      });
+    }
+    const storedAfterMismatches = await pool.query<{ response_status: string }>(
+      `SELECT response_status FROM remote_authorization_requests WHERE card_transaction_event_id = $1`,
+      [request.cardTransactionEventId],
+    );
+    expect(storedAfterMismatches.rows).toEqual([{ response_status: "AUTHORIZED" }]);
+
     const blockedOutbox = await pool.query<{ dispatch_ready: boolean }>("SELECT dispatch_ready FROM outbox_commands");
     expect(blockedOutbox.rows).toEqual([{ dispatch_ready: false }]);
     const blockedGateway = {
