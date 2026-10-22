@@ -111,6 +111,7 @@ class PolicyReservationPool implements DatabasePool {
             evaluation_id: row[1], request_id: row[2], customer_id: row[3], outcome: row[4], amount_cents: row[5],
             credit_line_cents: row[6], tier: row[7], capital_band: row[8], door: row[9],
             reason_codes: JSON.parse(String(row[10])), rationale: row[11], actor_id: row[12], approval_reason: row[13],
+            ledger_sequence: row[14],
           }]) : empty<Row>();
         }
         if (text.includes("INSERT INTO policy_evaluations")) {

@@ -45,6 +45,8 @@ export interface RequestDecision {
   door: Door | null;
   reasonCodes: RequestDecisionCode[];
   rationale: string;
+  /** Highest committed ledger event ID visible to this decision, when available. */
+  ledgerSequence?: string;
 }
 
 export interface RequestPolicyState {
@@ -62,6 +64,8 @@ export interface RequestPolicyState {
   deployableCents: number;
   /** Internal account mapping. Never taken from the request payload. */
   accountId: string;
+  /** Highest ledger event ID visible to the state read. */
+  ledgerSequence?: string;
 }
 
 export interface CurrentBalance {
@@ -98,6 +102,7 @@ export async function evaluateBridgeRequest(input: EvaluateBridgeRequestInput): 
     amountCents: 0,
     creditLineCents: state.precheck?.creditLineCents ?? 0,
     tier: state.precheck?.tier ?? "none" as const,
+    ...(state.ledgerSequence === undefined ? {} : { ledgerSequence: state.ledgerSequence }),
     capitalBand: null,
     door: null,
   };

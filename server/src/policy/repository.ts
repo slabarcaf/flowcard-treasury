@@ -23,6 +23,7 @@ export interface StoredRequestDecision {
   };
   actorId?: string;
   reason?: string;
+  ledgerSequence: string;
   evaluatedAt: Date;
 }
 
@@ -35,15 +36,15 @@ export async function persistRequestDecision(
     `INSERT INTO policy_request_evaluations (
        decision_id, evaluation_id, request_id, customer_id, outcome,
        amount_cents, credit_line_cents, tier, capital_band, door,
-       reason_codes, rationale, actor_id, approval_reason, evaluated_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15)
+       reason_codes, rationale, actor_id, approval_reason, ledger_sequence, evaluated_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16)
      ON CONFLICT (decision_id) DO NOTHING`,
     [evaluation.decisionId, evaluation.evaluationId, evaluation.requestId,
       evaluation.decision.customerId, evaluation.decision.outcome,
       evaluation.decision.amountCents, evaluation.decision.creditLineCents, evaluation.decision.tier,
       evaluation.decision.capitalBand, evaluation.decision.door,
       JSON.stringify(evaluation.decision.reasonCodes), evaluation.decision.rationale,
-      evaluation.actorId ?? null, evaluation.reason ?? null, evaluation.evaluatedAt],
+      evaluation.actorId ?? null, evaluation.reason ?? null, evaluation.ledgerSequence, evaluation.evaluatedAt],
   );
   const stored = await client.query<{
     evaluation_id: string;
@@ -59,10 +60,11 @@ export async function persistRequestDecision(
     rationale: string;
     actor_id: string | null;
     approval_reason: string | null;
+    ledger_sequence: string | number;
   }>(
     `SELECT evaluation_id, request_id, customer_id, outcome, amount_cents,
             credit_line_cents, tier, capital_band, door, reason_codes,
-            rationale, actor_id, approval_reason
+            rationale, actor_id, approval_reason, ledger_sequence
        FROM policy_request_evaluations WHERE decision_id = $1`,
     [evaluation.decisionId],
   );
@@ -75,7 +77,7 @@ export async function persistRequestDecision(
       row.door !== evaluation.decision.door ||
       JSON.stringify(row.reason_codes) !== JSON.stringify(evaluation.decision.reasonCodes) ||
       row.rationale !== evaluation.decision.rationale || row.actor_id !== (evaluation.actorId ?? null) ||
-      row.approval_reason !== (evaluation.reason ?? null)) {
+      row.approval_reason !== (evaluation.reason ?? null) || String(row.ledger_sequence) !== evaluation.ledgerSequence) {
     throw new Error("Request decision ID was already used for different immutable policy results");
   }
 }

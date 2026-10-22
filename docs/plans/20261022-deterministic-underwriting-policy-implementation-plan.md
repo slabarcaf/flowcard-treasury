@@ -578,20 +578,21 @@ addition because the documented provider request is the trusted request source.
 - Create: `tests/server/policy/acceptance.test.ts`
 - Modify: this implementation plan
 
-- [ ] Test an eligible customer from roster through profile, Salesforce
+- [x] Test an eligible customer from roster through profile, Salesforce
   snapshot, qualified evidence, precheck, request decision, and ledger
   reservation using fixtures and a test database.
-- [ ] Test a blocked customer at each missing, stale, unqualified, review, and
+- [x] Test a blocked customer at each missing, stale, unqualified, review, and
   no-go gate while confirming other customers continue.
-- [ ] Verify the decision log references every input version and rule version.
-- [ ] Verify no model or browser path can set ratings, tiers, lines, amounts,
+- [x] Verify the decision log references every input version and rule version.
+- [x] Verify no model or browser path can set ratings, tiers, lines, amounts,
   or transfer commands.
-- [ ] Run `npm test`, `npm run lint`, and `npm run build`; do not contact
+- [x] Run `npm test`, `npm run lint`, and `npm run build`; do not contact
   live providers or deploy.
-- [ ] Document which sources own risk data, policy decisions, and bridge
+- [x] Document which sources own risk data, policy decisions, and bridge
   execution, including the external gates for production use.
-- [ ] Mark implementation tasks complete and move this plan to
-  `docs/plans/completed/` when implementation is complete.
+- [x] Mark implementation tasks complete and move this plan to
+  `docs/plans/completed/` when implementation is complete. The exec workflow
+  moves it after reviews.
 
 ## Post-completion gates
 

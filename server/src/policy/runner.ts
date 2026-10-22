@@ -54,8 +54,9 @@ export async function runDailyPolicyPrechecks(input: {
         roster, profile: profileRead, snapshot: snapshotRead, evidence,
         qualifications: input.qualifications, noGoMappings: input.mappings, now,
       });
-      const repayment = await input.pool.query<{ fully_repaid_on_time: string | number }>(
-        `SELECT count(*)::int AS fully_repaid_on_time
+      const repayment = await input.pool.query<{ fully_repaid_on_time: string | number; ledger_sequence: string | number }>(
+        `SELECT count(*)::int AS fully_repaid_on_time,
+                (SELECT COALESCE(MAX(id), 0) FROM ledger_events WHERE currency = 'USD') AS ledger_sequence
            FROM (
              SELECT bridge.id, bridge.repayment_due_at,
                     MAX(event.occurred_at) FILTER (WHERE event.event_type = 'principal_repaid') AS repaid_at
@@ -70,12 +71,17 @@ export async function runDailyPolicyPrechecks(input: {
       const decision = computeDailyPrecheck({
         policyInput, profile: profileRead.profile.data, evidenceRunId: evidenceRow.extraction_id,
         rosterUpdatedAt: roster.updatedAt, facility: input.facility, mappings: input.mappings,
-        fullyRepaidOnTimeBridges: Number(repayment.rows[0]?.fully_repaid_on_time ?? 0), evaluatedAt: now,
+          fullyRepaidOnTimeBridges: Number(repayment.rows[0]?.fully_repaid_on_time ?? 0), evaluatedAt: now,
         inputVersions: {
           rosterUpdatedAt: roster.updatedAt.toISOString(),
           profileId: profileRead.profile.profileId,
           profileVersion: profileRead.profile.version,
           profileFeatureVersion: profileRead.profile.featureVersion,
+          profileAccountSourceVersion: profileRead.profile.sourceVersions.account,
+          profileBalancesSourceVersion: profileRead.profile.sourceVersions.balances,
+          profileTransactionsSourceVersion: profileRead.profile.sourceVersions.transactions,
+          profileExpectedInflowsSourceVersion: profileRead.profile.sourceVersions.expected_inflows,
+          profileRepaymentsSourceVersion: profileRead.profile.sourceVersions.repayments,
           salesforceSnapshotId: snapshotRead.snapshot.snapshotId,
           salesforceSnapshotVersion: snapshotRead.snapshot.version,
           salesforceMappingVersion: snapshotRead.snapshot.mappingVersion,
@@ -83,6 +89,7 @@ export async function runDailyPolicyPrechecks(input: {
           evidenceConfigurationVersion: evidenceRow.configuration_version,
           evidenceCatalogVersion: evidence.model.catalogVersion,
           evidenceSchemaVersion: evidence.schemaVersion,
+          ledgerSequence: String(repayment.rows[0]?.ledger_sequence ?? 0),
         },
       });
       const evaluationId = await persistDailyPrecheck(input.pool, { ...decision, rosterUpdatedAt: roster.updatedAt });

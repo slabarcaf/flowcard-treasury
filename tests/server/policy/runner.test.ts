@@ -56,7 +56,7 @@ class FakePool implements DatabasePool {
       }] as Row[], rowCount: 1 };
     }
     if (sql.includes("FROM ai_evidence_extractions")) return { rows: [{ extraction_id: evidenceId, configuration_version: "config-v1", output: evidence }] as Row[], rowCount: 1 };
-    if (sql.includes("FROM bridge_cases bridge")) return { rows: [{ fully_repaid_on_time: 0 }] as Row[], rowCount: 1 };
+    if (sql.includes("FROM bridge_cases bridge")) return { rows: [{ fully_repaid_on_time: 0, ledger_sequence: 1 }] as Row[], rowCount: 1 };
     if (sql.includes("INSERT INTO policy_evaluations")) {
       this.writes = [...this.writes, values];
       return { rows: [], rowCount: 1 };

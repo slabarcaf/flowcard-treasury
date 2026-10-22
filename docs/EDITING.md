@@ -127,10 +127,12 @@ deterministic local mock; setting `VITE_BRIDGE_API_URL` to the server origin
 displays the ledger projection beside that scenario. Leaving it unset keeps Kit
 5 on mock data without a server projection.
 
-The browser funding command remains unavailable until the policy module can
-submit a trusted server-side approval. Do not treat a browser decision or the
-Kit 5 UI as authority to fund a bridge. The server does not expose a funding
-route for the browser.
+The policy service accepts only trusted stored request IDs from its internal
+decision route. It joins roster, Salesforce, underwriting-profile, and evidence
+versions on the server, then asks the ledger to reserve capacity and enqueue a
+transfer in one transaction. The browser cannot submit ratings, tiers, credit
+lines, approvals, bridge amounts, or transfer commands. Keep demo scenario
+decisions in the frontend and treat them as presentation-only.
 
 ### Salesforce customer snapshots
 
@@ -152,14 +154,20 @@ reconciliation, mapping checks, and the production browser access gate.
 
 ### Run the local server
 
-Use Node 20.19+ or 22.12+ and a PostgreSQL database. The repository contains
-three SQL migrations; the server does not run them automatically. Apply them
-in order from the repository root:
+Use Node 20.19+ or 22.12+ and a PostgreSQL database. The server does not run
+SQL migrations automatically. Apply all nine migrations in order from the
+repository root before using the policy APIs or operator approval CLI:
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_underwriting_profiles.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/006_policy_evaluations.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/007_policy_request_evaluations.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/008_remote_authorization.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_request_ledger_sequence.sql
 ```
 
 The server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,
@@ -207,6 +215,31 @@ transaction declines. The receiver verifies signatures against the raw request
 body and stores each provider event ID once.
 Use a sandbox webhook subscription and sandbox credentials for authorized
 sandbox exercises.
+
+### Deterministic underwriting policy
+
+Salesforce owns the mapped customer, contract, KYB, credit-review, approved-cap,
+and prior-default fields. The Airwallex underwriting profile owns derived
+settled-inflow, expected-date reliability, payer-concentration, low-balance,
+connected-account, RFI, spend-eligibility, and ledger-based repayment facts.
+AI evidence extraction proposes typed, source-referenced claims; qualification
+and a versioned approved mapping are required before a claim can affect a
+rating. A successful `no_signal` result is distinct from failed or unresolved
+evidence and can pass the readiness gate.
+
+The deterministic server policy owns ratings, tiers, credit lines, request
+outcomes, and human-review requirements. The ledger owns facility capacity,
+reservations, bridge exposure, and provider-operation outbox commands. Human
+approval records an operator and reason, then rechecks exact terms and current
+input versions before reservation. No model output or browser state can
+authorize funding.
+
+Production decisions remain blocked until provider permissions and data
+coverage are verified, expected deposit dates have a trusted source, no-go and
+signal mappings are approved and versioned, Jev's signal definitions are
+settled and qualified, and production authentication and authorization protect
+operator actions. Preserve customer-level fail-closed behavior when a source is
+missing, stale, incomplete, unmapped, or awaiting review.
 
 ### V1 ledger and repayment behavior
 

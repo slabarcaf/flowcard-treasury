@@ -67,8 +67,8 @@ The same-repository TypeScript server stores the USD bridge ledger in PostgreSQL
 and processes Airwallex operations through an outbox. It exposes a read-only
 `GET /api/ledger` projection and the `POST /webhooks/airwallex` receiver. Kit 5
 may read the projection by setting `VITE_BRIDGE_API_URL`; its scenario
-behavior remains the deterministic local mock. No browser funding command is
-available until the policy module can submit a trusted server-side approval.
+behavior remains the deterministic local mock. The browser cannot authorize a
+bridge or create a transfer command.
 
 ### Start the server locally
 
@@ -79,6 +79,12 @@ local database, then apply the schema and demo facility seed:
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_underwriting_profiles.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/006_policy_evaluations.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/007_policy_request_evaluations.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/008_remote_authorization.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_request_ledger_sequence.sql
 ```
 
 Set these server environment variables before starting the service:
@@ -229,6 +235,34 @@ running the CLI or evidence runner. See the
 [AI evidence implementation plan](/docs/plans/20261022-ai-evidence-pipeline-implementation-plan.md)
 for the contracts, validation rules, test coverage, and remaining production
 gates.
+
+### Deterministic underwriting policy
+
+The server joins the explicit customer roster, versioned Airwallex underwriting
+profile, complete Salesforce snapshot, and AI evidence result for each daily
+precheck. Salesforce owns account, contract, KYB, credit-review, approved-cap,
+and prior-default facts. The Airwallex profile owns derived cash-flow,
+concentration, balance, account-standing, and internal-ledger repayment
+features. AI extraction proposes typed claims from bounded Salesforce evidence;
+it cannot assign ratings, tiers, credit lines, bridge amounts, or transfer
+commands. A valid `no_signal` result can pass the evidence-readiness gate.
+
+The deterministic server policy owns ratings, tier, line, request outcome, and
+review requirements. The bridge ledger owns deployable capacity, reservations,
+open-bridge exposure, and its transactional outbox. Only an auto-approved
+request or a human approval that is rechecked against current inputs can enter
+the reservation transaction. A browser request can identify a trusted stored
+request, but cannot supply its policy result or create a provider command.
+Daily and request evaluations retain policy and source-version references for
+audit.
+
+Production decisioning stays disabled until Airwallex permissions, reports,
+pagination, and account reads are verified; a trusted expected-deposit-date
+source is mapped; industry, fraud, prior-default, and signal mappings are
+approved and versioned; Jev signal definitions are settled and qualified; and
+production authentication and authorization protect review and approval
+operations. Unknown, stale, incomplete, unmapped, or unresolved inputs block
+the affected customer while other customers continue.
 
 ### Kit 5 scenarios
 

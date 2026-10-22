@@ -43,7 +43,7 @@ export async function resolveStoredRemoteAuthorizationDecision(
   requestId: string,
 ): Promise<TrustedBridgeDecisionResult> {
   const result = await pool.query<{
-    evaluation_id: string; request_id: string; customer_id: string;
+    evaluation_id: string; request_id: string; customer_id: string; ledger_sequence: number | string;
     outcome: TrustedBridgeDecisionResult["outcome"];
     amount_cents: number | string; credit_line_cents: number | string;
     reason_codes: string[]; evaluated_at: Date; policy_version: string;
@@ -54,7 +54,7 @@ export async function resolveStoredRemoteAuthorizationDecision(
             decision.outcome, decision.amount_cents, decision.credit_line_cents,
             decision.reason_codes, evaluation.evaluated_at, evaluation.policy_version,
             evaluation.profile_id, evaluation.snapshot_id, evaluation.evidence_run_id,
-            evaluation.input_versions
+            evaluation.input_versions, decision.ledger_sequence
        FROM policy_request_evaluations AS decision
        JOIN remote_authorization_requests AS request
          ON request.card_transaction_event_id = decision.request_id
@@ -91,12 +91,18 @@ export async function resolveStoredRemoteAuthorizationDecision(
       rosterUpdatedAt: row.input_versions.rosterUpdatedAt ?? null,
       profileVersion: row.input_versions.profileVersion ?? null,
       profileFeatureVersion: row.input_versions.profileFeatureVersion ?? null,
+      profileAccountSourceVersion: row.input_versions.profileAccountSourceVersion ?? null,
+      profileBalancesSourceVersion: row.input_versions.profileBalancesSourceVersion ?? null,
+      profileTransactionsSourceVersion: row.input_versions.profileTransactionsSourceVersion ?? null,
+      profileExpectedInflowsSourceVersion: row.input_versions.profileExpectedInflowsSourceVersion ?? null,
+      profileRepaymentsSourceVersion: row.input_versions.profileRepaymentsSourceVersion ?? null,
       salesforceSnapshotId: row.input_versions.salesforceSnapshotId ?? null,
       salesforceSnapshotVersion: row.input_versions.salesforceSnapshotVersion ?? null,
       salesforceMappingVersion: row.input_versions.salesforceMappingVersion ?? null,
       evidenceConfigurationVersion: row.input_versions.evidenceConfigurationVersion ?? null,
       evidenceCatalogVersion: row.input_versions.evidenceCatalogVersion ?? null,
       evidenceSchemaVersion: row.input_versions.evidenceSchemaVersion ?? null,
+      ledgerSequence: String(row.ledger_sequence),
     },
   };
 }
@@ -352,8 +358,9 @@ async function loadPolicyState(
     pool.query<{ airwallex_connected_account_id: string }>(
       `SELECT airwallex_connected_account_id FROM customer_roster
         WHERE customer_id = $1 AND is_active`, [current.customerId]),
-    pool.query<{ facility_amount_cents: number | string; reserve_floor_cents: number | string; deployable_cents: number | string }>(
-      `SELECT facility_amount_cents, reserve_floor_cents, deployable_cents
+    pool.query<{ facility_amount_cents: number | string; reserve_floor_cents: number | string; deployable_cents: number | string; ledger_sequence: number | string }>(
+      `SELECT facility_amount_cents, reserve_floor_cents, deployable_cents,
+              (SELECT COALESCE(MAX(id), 0) FROM ledger_events WHERE currency = 'USD') AS ledger_sequence
          FROM facility_projections WHERE currency = 'USD'`),
     pool.query<{ open_count: number; outstanding_cents: number | string; due_at: Date | null }>(
       `SELECT count(*)::int AS open_count,
@@ -387,6 +394,7 @@ async function loadPolicyState(
     reserveFloorCents,
     deployableCents,
     accountId,
+    ledgerSequence: String(facilityRow.ledger_sequence),
   };
 }
 
@@ -493,11 +501,15 @@ async function persistDecision(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const position = await client.query<{ ledger_sequence: number | string }>(
+      "SELECT COALESCE(MAX(id), 0) AS ledger_sequence FROM ledger_events WHERE currency = 'USD'",
+    );
     await persistRequestDecision(client, {
       decisionId: eventId,
       evaluationId,
       requestId: eventId,
       decision,
+      ledgerSequence: decision.ledgerSequence ?? String(position.rows[0]?.ledger_sequence ?? 0),
       evaluatedAt: new Date(),
     });
     await client.query("COMMIT");

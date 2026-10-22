@@ -77,6 +77,10 @@ export async function reservePolicyBridge(
     if (!Number.isSafeInteger(deployableCents) || deployableCents < 0) {
       throw new Error("USD facility projection has an invalid deployable balance");
     }
+    const ledgerPosition = await client.query<{ ledger_sequence: number | string }>(
+      "SELECT COALESCE(MAX(id), 0) AS ledger_sequence FROM ledger_events WHERE currency = 'USD'",
+    );
+    const ledgerSequence = String(ledgerPosition.rows[0]?.ledger_sequence ?? 0);
     const existing = await client.query<{
       customer_id: string;
       amount_cents: string | number;
@@ -107,9 +111,10 @@ export async function reservePolicyBridge(
         door: RequestDecision["door"];
         reason_codes: RequestDecision["reasonCodes"];
         rationale: string;
+        ledger_sequence: number | string;
       }>(
-        `SELECT request_id, customer_id, outcome, amount_cents, credit_line_cents,
-                tier, capital_band, door, reason_codes, rationale
+         `SELECT request_id, customer_id, outcome, amount_cents, credit_line_cents,
+                tier, capital_band, door, reason_codes, rationale, ledger_sequence
            FROM policy_request_evaluations WHERE decision_id = $1`,
         [input.decisionId],
       );
@@ -130,6 +135,7 @@ export async function reservePolicyBridge(
           door: saved.door,
           reasonCodes: saved.reason_codes,
           rationale: saved.rationale,
+          ledgerSequence: String(saved.ledger_sequence),
         },
         reservation: {
           bridgeId: input.bridgeId,
@@ -170,7 +176,7 @@ export async function reservePolicyBridge(
       [input.customerId],
     );
 
-    const { decision, precheck } = await input.revalidate({
+    const { decision: evaluatedDecision, precheck } = await input.revalidate({
       client,
       requestId: input.requestId,
       customerId: input.customerId,
@@ -182,6 +188,10 @@ export async function reservePolicyBridge(
       openBridgeCount: openBridge.rowCount ?? 0,
       approval: input.humanApproval,
     });
+    const decision: RequestDecision = {
+      ...evaluatedDecision,
+      ledgerSequence: evaluatedDecision.ledgerSequence ?? ledgerSequence,
+    };
     assertActive(input.signal);
     if (precheck.customerId !== input.customerId || precheck.snapshotId !== snapshot.snapshot.snapshotId ||
         precheck.evidenceRunId !== currentEvidence.extraction_id) {
@@ -198,6 +208,7 @@ export async function reservePolicyBridge(
       decision,
       actorId: input.humanApproval?.actorId,
       reason: input.humanApproval?.reason,
+      ledgerSequence: decision.ledgerSequence,
       evaluatedAt: new Date(),
     });
     if (decision.outcome !== "auto_approved") {
