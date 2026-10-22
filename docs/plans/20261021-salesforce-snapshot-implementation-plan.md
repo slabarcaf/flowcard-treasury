@@ -269,18 +269,23 @@ platform-scoped enumeration and pagination.
 - Create: server/src/salesforce/validate.ts
 - Create: tests/server/salesforce-mapping.test.ts
 
-- [ ] Define the versioned internal Account, Contract, Case, and call-Activity
+- [x] Define the versioned internal Account, Contract, Case, and call-Activity
   schema from the approved allowlist.
-- [ ] Map actual org API names and picklist values to canonical types without
-  leaking provider field names into consumers.
-- [ ] Preserve Salesforce source IDs, source timestamps, mapping version, and
+- [x] Map proposed API names and provisional picklist values to canonical types
+  without leaking provider field names into consumers.
+- [x] Preserve Salesforce source IDs, source timestamps, mapping version, and
   null values.
-- [ ] Reject a null approved bridge cap, missing required field, or
+- [x] Reject a null approved bridge cap, missing required field, or
   unrecognized picklist value.
-- [ ] Add configuration for the maximum permitted Case and Activity text
+- [x] Add configuration for the maximum permitted Case and Activity text
   length; require a value before production enablement.
-- [ ] Test every mapping and validation failure, including schema drift.
-- [ ] Run focused mapping tests before Task 3.
+- [x] Test every mapping and validation failure, including schema drift.
+- [x] Run focused mapping tests before Task 3.
+
+Implementation note: `salesforce-proposed-v1` uses the documented proposed
+field names and provisional picklist values. It is explicitly unverified and
+production readiness fails closed until the org mappings and text limits are
+confirmed. No live Salesforce verification was performed.
 
 #### Task 3 (TASK-003): Add synthetic demo snapshot fixtures
 
