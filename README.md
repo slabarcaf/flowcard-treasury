@@ -31,8 +31,10 @@ npm run dev        # http://localhost:5173
 
 ### Update the live demo
 
-The demo is deployed from this folder with the Vercel CLI (account `slabarcaf`). Pushing to
-GitHub does **not** redeploy it. After merging changes:
+The demo is on Vercel (account `slabarcaf`, project `flowcard-treasury`), which is linked to
+this GitHub repo: pushing a branch creates a preview deploy, and merges to `main` should update
+production. If https://flowcard-treasury.vercel.app doesn't show a merged change after a minute,
+deploy it by hand from this folder:
 
 ```bash
 vercel deploy --prod
