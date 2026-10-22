@@ -7,7 +7,6 @@ export interface SalesforceMcpConfig {
   maxAttempts: number;
   retryDelayMs: number;
 }
-
 const MAX_MCP_ATTEMPTS = 10;
 const MAX_RETRY_DELAY_MS = 60_000;
 
@@ -51,4 +50,3 @@ function parsePositiveInteger(value: string | undefined, defaultValue: number, n
   }
   return parsed;
 }
-
