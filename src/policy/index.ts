@@ -1,6 +1,6 @@
-export * from './types.js';
-export { hasNoGo, assignTier } from './tiers.js';
-export { computeCreditLine } from './creditLine.js';
+export * from '../../shared/policy/types.js';
+export { hasNoGo, assignTier, evaluateTier } from '../../shared/policy/tiers.js';
+export { computeCreditLine, starterMultiplier } from '../../shared/policy/creditLine.js';
 export {
   lendable,
   reserveFloor,
@@ -9,7 +9,7 @@ export {
   toBand,
   getDoor,
   BAND_LABELS,
-} from './facility.js';
-export { checkBridge } from './bridge.js';
-export type { BridgeCheckParams } from './bridge.js';
+} from '../../shared/policy/facility.js';
+export { checkBridge } from '../../shared/policy/bridge.js';
+export type { BridgeCheckParams } from '../../shared/policy/bridge.js';
 export { bridgeFee, bridgeFeeVariable } from './fees.js';
