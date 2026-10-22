@@ -173,6 +173,9 @@ ngrok tunnel forwards to port `8000`, so use this port for the webhook-capable
 local server:
 
 ```bash
+set -a
+source ../../.env
+set +a
 PORT=8000 npm run server:start
 ```
 

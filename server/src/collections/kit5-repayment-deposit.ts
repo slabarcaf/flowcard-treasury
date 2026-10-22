@@ -236,18 +236,24 @@ async function recoverKit5DepositFromInbox(
   operation: DepositOperation,
 ): Promise<void> {
   const events = await pool.query<{ provider_event_id: string }>(
-    `SELECT provider_event_id FROM webhook_inbox
-      WHERE event_type = 'deposit.settled'
-        AND convert_from(raw_body, 'UTF8')::jsonb #>> '{data,object,account_id}' = $1
-        AND COALESCE(
-          convert_from(raw_body, 'UTF8')::jsonb #>> '{data,object,global_account_id}',
-          convert_from(raw_body, 'UTF8')::jsonb #>> '{data,object,source,global_account_id}'
-        ) = $2
+    `WITH payloads AS (
+       SELECT provider_event_id, received_at, convert_from(raw_body, 'UTF8')::jsonb AS payload
+         FROM webhook_inbox
+        WHERE event_type = 'deposit.settled'
+     ), deposits AS (
+       SELECT provider_event_id, received_at,
+              COALESCE(payload #> '{data,object}', payload -> 'data') AS deposit,
+              COALESCE(payload ->> 'accountId', payload ->> 'account_id', payload #>> '{data,account_id}') AS account_id
+         FROM payloads
+     )
+     SELECT provider_event_id FROM deposits
+      WHERE COALESCE(account_id, deposit ->> 'account_id') = $1
+        AND COALESCE(deposit ->> 'global_account_id', deposit #>> '{source,global_account_id}') = $2
         AND (
-          convert_from(raw_body, 'UTF8')::jsonb #>> '{data,object,id}' = $3
-          OR convert_from(raw_body, 'UTF8')::jsonb #>> '{data,object,deposit_id}' = $3
-          OR convert_from(raw_body, 'UTF8')::jsonb #>> '{data,object,statement_ref}' = $4
-          OR convert_from(raw_body, 'UTF8')::jsonb #>> '{data,object,reference}' = $4
+          deposit ->> 'id' = $3
+          OR deposit ->> 'deposit_id' = $3
+          OR deposit ->> 'statement_ref' = $4
+          OR deposit ->> 'reference' = $4
         )
       ORDER BY received_at, provider_event_id`,
     [operation.account_id, operation.global_account_id, operation.provider_deposit_id ?? "", operation.statement_ref]);
@@ -373,8 +379,8 @@ function mapResult(
   collection: Kit5RepaymentCollectionSummary | null,
 ): Kit5RepaymentDepositResult {
   return { status: operation.status, depositId: operation.provider_deposit_id,
-    providerStatus: typeof operation.provider_result?.status === "string"
+    providerStatus: operation.status === "settled" ? "SETTLED" : typeof operation.provider_result?.status === "string"
       ? operation.provider_result.status
-      : operation.status === "settled" ? "SETTLED" : null,
+      : null,
     bridgeId: operation.bridge_id, statementRef: operation.statement_ref, error: operation.error, collection };
 }

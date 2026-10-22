@@ -103,6 +103,8 @@ describe("Kit 5 Nova repayment deposit", () => {
       statementRef: db.operation!.statement_ref, settledAt: new Date("2026-10-22T12:01:00Z"),
     });
     expect(replay).toEqual(settled);
+    const refreshed = await createKit5RepaymentDeposit(db.pool, gateway(vi.fn(async () => providerResponse())), input);
+    expect(refreshed).toMatchObject({ status: "settled", providerStatus: "SETTLED" });
   });
 
   it("fails closed without a server-resolved Global Account mapping", async () => {
@@ -125,7 +127,7 @@ describe("Kit 5 Nova repayment deposit", () => {
 
 function providerResponse(): GlobalAccountDepositSimulationResponse {
   return { id: "dep-nova-1", amountCents: 800_000, currency: "USD", depositType: "CREDIT",
-    feeAmountCents: 0, status: "settled", createTime: "2026-10-22T12:00:00Z" };
+    feeAmountCents: 0, status: "pending", createTime: "2026-10-22T12:00:00Z" };
 }
 
 function gateway(create: ReturnType<typeof vi.fn>): AirwallexGateway {

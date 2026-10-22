@@ -50,6 +50,15 @@ or logged:
 Variable presence does not verify authentication, key scopes, product
 enablement, customer mappings, webhook delivery, or provider success. Do not
 copy credentials into this worktree, tests, browser code, or source control.
+Node does not load `.env` automatically. From this develop worktree, export the
+ignored main-checkout file into the server process without copying its values:
+
+```bash
+set -a
+source ../../.env
+set +a
+PORT=8000 npm run server:start
+```
 
 The authenticated operator approval route also requires server-only
 `KIT5_OPERATOR_ID`. Evidence review requires server-only
@@ -105,6 +114,9 @@ these settings:
 Verify from Airwallex that the Global Account belongs to Nova and is USD before
 setting these values. Keep them in the server environment. The route does not
 accept them from the browser and has no fallback to an inventory account.
+Set `REMOTE_AUTH_REPAYMENT_TERM=asap` for this demo. The $8,000 repayment
+deposit is triggered immediately after the bridge settles; a `15_days` or
+`30_days` term correctly leaves that deposit unapplied until its due date.
 
 ## Final sandbox acceptance
 

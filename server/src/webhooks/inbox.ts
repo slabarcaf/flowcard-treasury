@@ -3,7 +3,9 @@ import type { DatabasePool } from "../db/pool.js";
 export interface AirwallexWebhookEvent {
   id: string;
   name: string;
-  data?: { object?: Record<string, unknown> };
+  accountId?: string;
+  account_id?: string;
+  data?: Record<string, unknown>;
   created_at?: string;
 }
 

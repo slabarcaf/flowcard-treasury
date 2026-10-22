@@ -22,14 +22,15 @@ export async function processWebhookEvent(pool: DatabasePool, gateway: Airwallex
   if (!row) throw new Error("Webhook event was not found in the inbox");
   if (row.processed_at) return false;
   const event = JSON.parse(row.raw_body.toString("utf8")) as AirwallexWebhookEvent;
-  const object = event.data?.object ?? {};
+  const eventData = recordValue(event.data);
+  const object = recordValue(eventData?.object) ?? eventData ?? {};
   const requestId = stringValue(object.request_id);
   const objectId = stringValue(object.id ?? object.transfer_id ?? object.charge_id);
   const kind = operationKind(row.event_type);
 
   if (row.event_type === "deposit.settled") {
     const depositId = stringValue(object.id ?? object.deposit_id);
-    const accountId = stringValue(object.account_id);
+    const accountId = stringValue(object.account_id ?? event.accountId ?? event.account_id);
     if (depositId && accountId) {
       const mappedCustomerId = await resolveInternalCustomerId(pool, accountId);
       const deposit = await gateway.getDeposit(depositId, accountId);
@@ -198,6 +199,12 @@ async function resolveInternalCustomerId(pool: Pick<DatabasePool, "query">, acco
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.length ? value : null;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function operationKind(eventType: string): "transfer" | "charge" | null {
