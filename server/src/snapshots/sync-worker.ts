@@ -78,7 +78,7 @@ export class SnapshotSyncWorker {
       const source = await this.options.source.fetchCustomer(customer);
       const built = source.kind === "fixture"
         ? fixtureCandidateParts(source.payload)
-        : buildMcpCandidateParts(source.queries, this.options.textLimits, this.now());
+        : buildMcpCandidateParts(source.queries, customer.salesforceAccountId, this.options.textLimits, this.now());
       Object.assign(completion, built.queryCompletion);
       Object.assign(counts, built.recordCounts);
 
@@ -153,9 +153,15 @@ function fixtureCandidateParts(payload: SalesforceCustomerSnapshot) {
 
 function buildMcpCandidateParts(
   queries: SalesforceMcpQueryResults,
+  expectedAccountId: string,
   textLimits: TextLengthConfig,
   now: Date,
 ) {
+  assertRecordReference(queries.account.records, "Id", expectedAccountId, "Account");
+  assertRecordReference(queries.contract.records, "AccountId", expectedAccountId, "Contract");
+  assertRecordReference(queries.case.records, "AccountId", expectedAccountId, "Case");
+  assertRecordReference(queries.activity.records, "WhatId", expectedAccountId, "Task");
+
   const accountRecords = mapRecordsInBatches(queries.account.records, mapAccountRecord);
   const contractRecords = mapRecordsInBatches(queries.contract.records, mapContractRecord);
   if (accountRecords.length !== 1) throw new Error(`Expected one Salesforce Account record, received ${accountRecords.length}`);
@@ -199,6 +205,19 @@ function buildMcpCandidateParts(
     queryCompletion,
     recordCounts,
   };
+}
+
+function assertRecordReference(
+  records: readonly Record<string, unknown>[],
+  field: "Id" | "AccountId" | "WhatId",
+  expectedAccountId: string,
+  objectName: string,
+): void {
+  for (const record of records) {
+    if (record[field] !== expectedAccountId) {
+      throw new Error(`Salesforce ${objectName} record ${String(record.Id ?? "<unknown>")} has unexpected ${field}; expected roster Account ${expectedAccountId}`);
+    }
+  }
 }
 
 function selectContract(contracts: ReturnType<typeof mapContractRecord>[]): ReturnType<typeof mapContractRecord> {

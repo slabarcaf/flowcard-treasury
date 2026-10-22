@@ -17,7 +17,7 @@ describe("Salesforce daily snapshot worker", () => {
     const payloads: unknown[] = [];
     const source = sourceFor(async (customer) => {
       if (customer.customerId !== "active-1") throw new Error("inactive customer must not be queried");
-      return { kind: "mcp", queries: queryResults({ cases: Array.from({ length: 1_001 }, (_, index) => caseRecord(index)) }) };
+      return { kind: "mcp", queries: queryResults({ accountId: "sf-active-1", cases: Array.from({ length: 1_001 }, (_, index) => caseRecord(index, "sf-active-1")) }) };
     });
     const worker = new SnapshotSyncWorker({
       pool,
@@ -45,7 +45,7 @@ describe("Salesforce daily snapshot worker", () => {
     let published: { payload: { cases: unknown[]; callActivities: unknown[] }; queryCompletion: { case: { complete: boolean }; activity: { complete: boolean } } } | undefined;
     const worker = new SnapshotSyncWorker({
       pool: rosterPool([roster("empty")]),
-      source: sourceFor(async () => ({ kind: "mcp", queries: queryResults() })),
+      source: sourceFor(async () => ({ kind: "mcp", queries: queryResults({ accountId: "sf-empty" }) })),
       textLimits,
       now: () => now,
       publish: async (_pool, candidate) => { published = candidate; return {} as never; },
@@ -60,11 +60,39 @@ describe("Salesforce daily snapshot worker", () => {
     expect(published?.queryCompletion.activity.complete).toBe(true);
   });
 
+  it.each([
+    ["Account Id", (queries: SalesforceMcpQueryResults) => { queries.account.records[0]!.Id = "sf-other"; }],
+    ["Contract AccountId", (queries: SalesforceMcpQueryResults) => { queries.contract.records[0]!.AccountId = "sf-other"; }],
+    ["Case AccountId", (queries: SalesforceMcpQueryResults) => { queries.case.records.push({ Id: "case-other", AccountId: "sf-other" }); }],
+    ["Task WhatId", (queries: SalesforceMcpQueryResults) => { queries.activity.records.push({ Id: "task-other", WhatId: "sf-other" }); }],
+  ])("rejects MCP %s values that do not match the roster Account", async (_label, corrupt) => {
+    const queries = queryResults({ accountId: "sf-mismatch" });
+    corrupt(queries);
+    const published: string[] = [];
+    const failures: string[] = [];
+    const worker = new SnapshotSyncWorker({
+      pool: rosterPool([roster("mismatch")]),
+      source: sourceFor(async () => ({ kind: "mcp", queries })),
+      textLimits,
+      now: () => now,
+      publish: async (_pool, candidate) => { published.push(candidate.customerId); return {} as never; },
+      recordFailure: async (_pool, attempt) => { failures.push(attempt.errorMessage); },
+    });
+
+    const result = await worker.run();
+
+    expect(result.customers[0]?.status).toBe("failed");
+    expect(result.customers[0]?.error).toContain("unexpected");
+    expect(failures).toHaveLength(1);
+    expect(published).toEqual([]);
+  });
+
   it("retains only risk-relevant Cases that remain open or are escalated", async () => {
     let published: { payload: { cases: { recordId: string }[] }; recordCounts: { case: number } } | undefined;
     const fields = SALESFORCE_FIELDS.case;
     const makeCase = (id: string, status: string, risk: string | null, escalated: boolean) => ({
       Id: id,
+      AccountId: "sf-risk-cases",
       LastModifiedDate: now.toISOString(),
       [fields.status]: status,
       [fields.priority]: "Medium",
@@ -77,7 +105,7 @@ describe("Salesforce daily snapshot worker", () => {
     });
     const worker = new SnapshotSyncWorker({
       pool: rosterPool([roster("risk-cases")]),
-      source: sourceFor(async () => ({ kind: "mcp", queries: queryResults({ cases: [
+      source: sourceFor(async () => ({ kind: "mcp", queries: queryResults({ accountId: "sf-risk-cases", cases: [
         makeCase("open-risk", "Working", "Repayment", false),
         makeCase("closed-risk", "Closed", "Repayment", false),
         makeCase("escalated-risk", "Closed", "Security", true),
@@ -104,7 +132,7 @@ describe("Salesforce daily snapshot worker", () => {
       source: sourceFor(async (customer) => {
         fetched.push(customer.customerId);
         if (customer.customerId === "broken") throw new Error("activity page failed after pagination retries");
-        return { kind: "mcp", queries: queryResults() };
+        return { kind: "mcp", queries: queryResults({ accountId: "sf-healthy" }) };
       }),
       textLimits,
       now: () => now,
@@ -125,6 +153,7 @@ describe("Salesforce daily snapshot worker", () => {
     let published: { payload: { callActivities: { recordId: string }[] }; recordCounts: { activity: number } } | undefined;
     const activities = Array.from({ length: 8 }, (_, index) => ({
       Id: `call-${index}`,
+      WhatId: "sf-activity",
       LastModifiedDate: now.toISOString(),
       ActivityDate: new Date(now.getTime() - index * 24 * 60 * 60 * 1000).toISOString(),
       Call_Outcome__c: "Connected",
@@ -132,6 +161,7 @@ describe("Salesforce daily snapshot worker", () => {
     }));
     activities.push({
       Id: "call-old",
+      WhatId: "sf-activity",
       LastModifiedDate: now.toISOString(),
       ActivityDate: "2026-07-22T12:00:00.000Z",
       Call_Outcome__c: "Connected",
@@ -139,7 +169,7 @@ describe("Salesforce daily snapshot worker", () => {
     });
     const worker = new SnapshotSyncWorker({
       pool: rosterPool([roster("activity")]),
-      source: sourceFor(async () => ({ kind: "mcp", queries: queryResults({ activities }) })),
+      source: sourceFor(async () => ({ kind: "mcp", queries: queryResults({ accountId: "sf-activity", activities }) })),
       textLimits,
       now: () => now,
       publish: async (_pool, candidate) => { published = candidate; return {} as never; },
@@ -279,19 +309,20 @@ function rosterPool(customers: CustomerRosterEntry[]): DatabasePool & { sql: str
   };
 }
 
-function queryResults(options: { cases?: Record<string, unknown>[]; activities?: Record<string, unknown>[] } = {}): SalesforceMcpQueryResults {
+function queryResults(options: { accountId?: string; cases?: Record<string, unknown>[]; activities?: Record<string, unknown>[] } = {}): SalesforceMcpQueryResults {
+  const accountId = options.accountId ?? "sf-account";
   return {
-    account: { records: [accountRecord()], complete: true, pages: 1 },
-    contract: { records: [contractRecord()], complete: true, pages: 1 },
+    account: { records: [accountRecord(accountId)], complete: true, pages: 1 },
+    contract: { records: [contractRecord(accountId)], complete: true, pages: 1 },
     case: { records: options.cases ?? [], complete: true, pages: 2 },
     activity: { records: options.activities ?? [], complete: true, pages: 1 },
   };
 }
 
-function accountRecord(): Record<string, unknown> {
+function accountRecord(accountId: string): Record<string, unknown> {
   const fields = SALESFORCE_FIELDS.account;
   return {
-    Id: "sf-account",
+    Id: accountId,
     [fields.updatedAt]: now.toISOString(),
     [fields.customerStatus]: "Active",
     [fields.kybStatus]: "Verified",
@@ -302,20 +333,22 @@ function accountRecord(): Record<string, unknown> {
   };
 }
 
-function contractRecord(): Record<string, unknown> {
+function contractRecord(accountId: string): Record<string, unknown> {
   const fields = SALESFORCE_FIELDS.contract;
   return {
     Id: "sf-contract",
+    AccountId: accountId,
     [fields.updatedAt]: now.toISOString(),
     [fields.status]: "Activated",
     [fields.endDate]: "2027-10-21",
   };
 }
 
-function caseRecord(index: number): Record<string, unknown> {
+function caseRecord(index: number, accountId: string): Record<string, unknown> {
   const fields = SALESFORCE_FIELDS.case;
   return {
     Id: `sf-case-${index}`,
+    AccountId: accountId,
     [fields.updatedAt]: now.toISOString(),
     [fields.status]: "Working",
     [fields.priority]: "Medium",

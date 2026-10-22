@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DatabaseClient, DatabasePool, QueryResult } from "../../server/src/db/pool.js";
 import { reserveBridge } from "../../server/src/ledger/reservations.js";
 import { getDemoSalesforceSnapshot } from "../../server/src/salesforce/fixture-source.js";
@@ -155,6 +155,9 @@ class ReservationPool implements DatabasePool {
 }
 
 describe("USD facility reservations", () => {
+  beforeEach(() => vi.stubEnv("SALESFORCE_SNAPSHOT_MODE", "demo"));
+  afterEach(() => vi.unstubAllEnvs());
+
   it("writes the reservation, provider operation, event, and outbox in one locked transaction", async () => {
     const pool = new ReservationPool();
     const result = await reserveBridge(pool, {
@@ -285,6 +288,28 @@ describe("USD facility reservations", () => {
     expect(pool.state.bridges).toHaveLength(0);
     expect(pool.state.events).toHaveLength(1);
     expect(pool.state.outbox).toHaveLength(0);
+  });
+
+  it("blocks a fresh demo snapshot when the runtime is configured for production MCP", async () => {
+    vi.stubEnv("SALESFORCE_SNAPSHOT_MODE", "production_mcp");
+
+    await expect(reserveBridge(new ReservationPool(), {
+      bridgeId: "00000000-0000-4000-8000-000000000071",
+      customerId: "customer-1",
+      amountCents: 250_000,
+      repaymentTerm: "asap",
+    })).rejects.toThrow("snapshot source does not match runtime mode production_mcp");
+  });
+
+  it("fails closed when the runtime snapshot mode is missing", async () => {
+    vi.stubEnv("SALESFORCE_SNAPSHOT_MODE", "");
+
+    await expect(reserveBridge(new ReservationPool(), {
+      bridgeId: "00000000-0000-4000-8000-000000000072",
+      customerId: "customer-1",
+      amountCents: 250_000,
+      repaymentTerm: "asap",
+    })).rejects.toThrow("Salesforce snapshot mode is not configured");
   });
 });
 

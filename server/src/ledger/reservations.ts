@@ -68,6 +68,13 @@ export async function reserveBridge(
     if (customerSnapshot.freshness !== "fresh") {
       throw new Error(`Customer Salesforce snapshot is ${customerSnapshot.freshness}`);
     }
+    const runtimeSnapshotMode = process.env.SALESFORCE_SNAPSHOT_MODE?.trim();
+    if (runtimeSnapshotMode !== "demo" && runtimeSnapshotMode !== "production_mcp") {
+      throw new Error("Salesforce snapshot mode is not configured; bridge reservations are disabled");
+    }
+    if (customerSnapshot.snapshot?.sourceMode !== runtimeSnapshotMode) {
+      throw new Error(`Customer Salesforce snapshot source does not match runtime mode ${runtimeSnapshotMode}`);
+    }
     const deployableCents = Number(facility.deployable_cents);
     if (!Number.isSafeInteger(deployableCents) || deployableCents < 0) {
       throw new Error("USD facility projection has an invalid deployable balance");
