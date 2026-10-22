@@ -262,17 +262,17 @@ demo frontend. A protected production review UI requires a separate auth scope.
 - Create: `server/src/ai-evidence/dedupe.ts`
 - Create: `tests/server/ai-evidence/packet.test.ts`
 
-- [ ] Build one packet from a completed, fresh, canonical customer snapshot.
-- [ ] Include only snapshot-approved Case and call-Activity fields and bounded
+- [x] Build one packet from a completed, fresh, canonical customer snapshot.
+- [x] Include only snapshot-approved Case and call-Activity fields and bounded
   text; exclude attachments and email threads.
-- [ ] Canonicalize every model-visible field with stable key and value order.
-- [ ] Use SHA-256 to index same-customer, same-source-type duplicate candidates;
+- [x] Canonicalize every model-visible field with stable key and value order.
+- [x] Use SHA-256 to index same-customer, same-source-type duplicate candidates;
   verify canonical equality before collapsing and preserve every source ID.
-- [ ] Apply the provider-configured size cap without truncation. Mark an
+- [x] Apply the provider-configured size cap without truncation. Mark an
   oversized packet failed for that customer.
-- [ ] Test exact duplicates, differing dates/categories, cross-customer records,
+- [x] Test exact duplicates, differing dates/categories, cross-customer records,
   provenance retention, deterministic ordering, and oversized packets.
-- [ ] Run focused tests before Task 3.
+- [x] Run focused tests before Task 3.
 
 ### Task 3: Add fixture and production model provider interfaces
 
