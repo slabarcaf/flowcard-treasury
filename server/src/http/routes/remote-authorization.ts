@@ -121,10 +121,11 @@ export async function handleRemoteAuthorization(
       if (timeout !== undefined) clearTimeout(timeout);
     }
   }
-  send(response, 200, providerResponse(parsed.cardTransactionEventId, result.responseStatus, result.statusReason));
-  // The outbox stays unclaimable until after the selected provider response has
-  // been written. A late or timed-out resolver can therefore never release it.
-  if (result.responseStatus === "AUTHORIZED" && options.confirmDispatch && dispatchSignal && !dispatchSignal.aborted) {
+  const responseFinished = await sendAndWaitForFinish(response, 200,
+    providerResponse(parsed.cardTransactionEventId, result.responseStatus, result.statusReason));
+  // A queued transfer becomes dispatchable only after Node reports that the
+  // provider response finished. Premature close/error leaves the gate closed.
+  if (responseFinished && result.responseStatus === "AUTHORIZED" && options.confirmDispatch && dispatchSignal && !dispatchSignal.aborted) {
     try {
       const confirmed = await options.confirmDispatch(parsed, dispatchSignal);
       if (!confirmed) console.error("Remote authorization response was sent but its transfer outbox gate was not released");
@@ -261,4 +262,34 @@ function send(response: ServerResponse, status: number, body: Record<string, unk
   if (response.headersSent) return;
   response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });
   response.end(JSON.stringify(body));
+}
+
+function sendAndWaitForFinish(
+  response: ServerResponse,
+  status: number,
+  body: Record<string, unknown>,
+): Promise<boolean> {
+  if (response.headersSent) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      response.off("finish", onFinish);
+      response.off("close", onClose);
+      response.off("error", onError);
+    };
+    const settle = (finished: boolean) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(finished);
+    };
+    const onFinish = () => settle(true);
+    const onClose = () => settle(false);
+    const onError = () => settle(false);
+    response.once("finish", onFinish);
+    response.once("close", onClose);
+    response.once("error", onError);
+    send(response, status, body);
+    if (response.writableFinished) settle(true);
+  });
 }

@@ -3,7 +3,7 @@ import type { DatabasePool } from "../db/pool.js";
 import { reservePolicyBridge, type RepaymentTerm } from "../ledger/reservations.js";
 import type { AirwallexRemoteAuthorizationV2 } from "../http/routes/remote-authorization.js";
 import { evaluateBridgeRequest } from "./decision-service.js";
-import { loadPolicyState, loadRequestFacts, stableApprovalId, stableBridgeId, toBridgeRequest } from "./remote-authorization-data.js";
+import { confirmApprovedPolicyDispatch, loadPolicyState, loadRequestFacts, stableApprovalId, stableBridgeId, toBridgeRequest } from "./remote-authorization-data.js";
 
 /** Exact-term operator approval always re-reads trusted request and current policy inputs. */
 export function createRemoteAuthorizationApprovalRevalidator(input: {
@@ -65,10 +65,11 @@ export function createRemoteAuthorizationApprovalRevalidator(input: {
     if (decision.outcome !== "auto_approved" || decision.amountCents !== approval.amountCents) {
       return { outcome: decision.outcome, amountCents: decision.amountCents, reserved: false };
     }
+    const approvalDecisionId = stableApprovalId(approval.requestId, approval.actorId, approval.reason);
     const result = await reservePolicyBridge(input.pool, {
       bridgeId: stableBridgeId(approval.requestId), customerId: approval.customerId,
       amountCents: approval.amountCents, repaymentTerm: input.repaymentTerm,
-      decisionId: stableApprovalId(approval.requestId, approval.actorId, approval.reason),
+      decisionId: approvalDecisionId,
       requestId: approval.requestId, currentBalance, humanApproval,
       revalidate: async (context) => {
         const latest = await loadRequestFacts(context.client, approval.customerId, request, new Date());
@@ -84,6 +85,9 @@ export function createRemoteAuthorizationApprovalRevalidator(input: {
         return { decision: lockedDecision, precheck: latest.precheck };
       },
     });
+    if (result.reservation && !await confirmApprovedPolicyDispatch(input.pool, approval.requestId, approvalDecisionId)) {
+      throw new Error("Approved bridge reservation could not be released to the transfer outbox");
+    }
     return {
       outcome: result.decision.outcome,
       amountCents: result.decision.amountCents,
@@ -91,4 +95,3 @@ export function createRemoteAuthorizationApprovalRevalidator(input: {
     };
   };
 }
-

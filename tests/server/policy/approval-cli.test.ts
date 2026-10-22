@@ -4,7 +4,7 @@ import { runPolicyApprovalCli } from "../../../server/src/policy/approval-cli.js
 
 const pending = {
   decisionId: "decision-1", evaluationId: "evaluation-1", requestId: "request-1", customerId: "customer-1",
-  outcome: "human_review", amountCents: 12_300, evaluatedAt: new Date("2026-10-22T12:00:00Z"),
+  outcome: "human_review", amountCents: "12300" as unknown as number, evaluatedAt: new Date("2026-10-22T12:00:00Z"),
 };
 
 function pool(): DatabasePool {
@@ -44,7 +44,7 @@ describe("policy approval CLI", () => {
     await runPolicyApprovalCli(pool(),
       ["approve", "--decision-id", "decision-1", "--actor", "operator-1", "--reason", "reviewed"],
       { POLICY_APPROVAL_ENABLED: "true" }, (text) => output.push(text), revalidate);
-    expect(revalidate).toHaveBeenCalledWith({ ...pending, actorId: "operator-1", reason: "reviewed" });
+    expect(revalidate).toHaveBeenCalledWith({ ...pending, amountCents: 12_300, actorId: "operator-1", reason: "reviewed" });
     expect(output.join("")).toContain('"reserved":true');
   });
 

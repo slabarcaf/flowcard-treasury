@@ -84,7 +84,9 @@ export async function runPolicyApprovalCli(
   const actorId = required(options, "--actor");
   const reason = required(options, "--reason");
   if (!revalidateAndReserve) throw new Error("trusted exact-term approval revalidator is unavailable");
-  const current = await revalidateAndReserve({ ...pending, actorId, reason });
+  const amountCents = Number(pending.amountCents);
+  if (!Number.isSafeInteger(amountCents) || amountCents <= 0) throw new Error("stored approval amount is invalid");
+  const current = await revalidateAndReserve({ ...pending, amountCents, actorId, reason });
   if (current.outcome !== "auto_approved" || current.amountCents !== Number(pending.amountCents) || !current.reserved) {
     throw new Error("current policy did not reserve the exact approved terms");
   }

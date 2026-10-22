@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -25,15 +26,19 @@ const payload = {
   merchant: { category_code: "5411", name: "not persisted" },
 };
 
-function response() {
-  return {
+function response(options: { autoFinish?: boolean } = {}) {
+  const emitter = new EventEmitter();
+  return Object.assign(emitter, {
     status: 0,
     headers: {} as Record<string, string>,
     body: "",
     headersSent: false,
     writeHead(status: number, headers: Record<string, string>) { this.status = status; this.headers = headers; this.headersSent = true; },
-    end(body: string) { this.body = body; },
-  };
+    end(body: string) {
+      this.body = body;
+      if (options.autoFinish !== false) queueMicrotask(() => this.emit("finish"));
+    },
+  });
 }
 
 function signedRequest(now: Date, value: unknown = payload, nonceSuffix = "fixture-nonce") {
@@ -208,5 +213,35 @@ describe("Airwallex remote authorization v2 route", () => {
     expect(confirmDispatch).toHaveBeenCalledTimes(1);
     releaseCommit(true);
     await handling;
+  });
+
+  it("waits for response finish before releasing the dispatch gate", async () => {
+    const result = response({ autoFinish: false });
+    const confirmDispatch = vi.fn(async () => true);
+    const handling = handleRemoteAuthorization(signedRequest(now), result as unknown as ServerResponse, {
+      sharedSecret: secret,
+      resolve: async () => ({ responseStatus: "AUTHORIZED", statusReason: "policy_approved" }),
+      claimNonce: nonceClaimer(), confirmDispatch, now,
+    });
+    await new Promise((done) => setTimeout(done, 0));
+    expect(JSON.parse(result.body)).toMatchObject({ response_status: "AUTHORIZED" });
+    expect(confirmDispatch).not.toHaveBeenCalled();
+    result.emit("finish");
+    await handling;
+    expect(confirmDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["close", "error"] as const)("keeps dispatch closed when response %s occurs before finish", async (event) => {
+    const result = response({ autoFinish: false });
+    const confirmDispatch = vi.fn(async () => true);
+    const handling = handleRemoteAuthorization(signedRequest(now), result as unknown as ServerResponse, {
+      sharedSecret: secret,
+      resolve: async () => ({ responseStatus: "AUTHORIZED", statusReason: "policy_approved" }),
+      claimNonce: nonceClaimer(), confirmDispatch, now,
+    });
+    await new Promise((done) => setTimeout(done, 0));
+    result.emit(event);
+    await handling;
+    expect(confirmDispatch).not.toHaveBeenCalled();
   });
 });

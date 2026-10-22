@@ -12,7 +12,8 @@ import { publishCustomerSnapshot } from "../../../server/src/snapshots/publisher
 import { publishCustomerProfile } from "../../../server/src/underwriting/publisher.js";
 import { UNDERWRITING_FEATURE_VERSION, UNDERWRITING_PROFILE_SCHEMA_VERSION, type UnderwritingProfileCandidate } from "../../../server/src/underwriting/types.js";
 import { runDailyPolicyPrechecks } from "../../../server/src/policy/runner.js";
-import { confirmRemoteAuthorizationDispatch, createRemoteAuthorizationNonceClaimer, createRemoteAuthorizationResolver } from "../../../server/src/policy/remote-authorization.js";
+import { confirmRemoteAuthorizationDispatch, createRemoteAuthorizationApprovalRevalidator, createRemoteAuthorizationNonceClaimer, createRemoteAuthorizationResolver } from "../../../server/src/policy/remote-authorization.js";
+import { runPolicyApprovalCli } from "../../../server/src/policy/approval-cli.js";
 import type { NoGoMappingReadiness } from "../../../server/src/policy/gates.js";
 import type { SalesforceCustomerSnapshot } from "../../../server/src/salesforce/types.js";
 import { getDemoSalesforceSnapshot } from "../../../server/src/salesforce/fixture-source.js";
@@ -211,6 +212,61 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
     expect(outbox.rows).toEqual([{ command_type: "create_bridge_transfer", payload: expect.objectContaining({ amountCents: 10000 }), dispatch_ready: true }]);
   });
 
+  it("releases a human-approved transfer only after the exact approval reservation commits", async () => {
+    viDemoMode();
+    const fixture = await seedCustomer(pool, { profile: true, snapshot: true, evidence: "no_signal", creditReview: "watch" });
+    const approvalCard = `card-${randomUUID()}`;
+    await bindIssuingCard(pool, {
+      customerId: fixture.customerId, cardId: approvalCard, accountId: `awx-${fixture.customerId}`,
+      actor: "acceptance-test", reason: "synthetic human-review fixture",
+    });
+    const prechecks = await runDailyPolicyPrechecks({
+      pool, facility: { facilitySize: 50_000, reserveFloorPct: 20, maxPerCustomerPct: 0.2,
+        feeRatePer30Days: 0.015, minHistoryDays: 90 },
+      mappings: verifiedMappings, qualifications: {}, now, customerIds: [fixture.customerId],
+    });
+    expect(prechecks).toEqual([expect.objectContaining({ status: "evaluated", outcome: "ready" })]);
+
+    const request: AirwallexRemoteAuthorizationV2 = {
+      version: 2, accountId: `awx-${fixture.customerId}`, cardId: approvalCard,
+      cardTransactionEventId: `evt_human_${randomUUID()}`, cardTransactionId: randomUUID(),
+      cardTransactionLifecycleId: randomUUID(), transactionType: "AUTHORIZATION",
+      transactionCategory: "PURCHASE", transactionAmount: 30, transactionCurrency: "USD",
+      merchantCategoryCode: "5411",
+    };
+    const fakeGateway = { getBalance: async () => ({ availableCents: 0, currency: "USD" as const }) } as unknown as AirwallexGateway;
+    const resolve = createRemoteAuthorizationResolver({ pool, gateway: fakeGateway, repaymentTerm: "asap", now: () => now });
+    const initial = await resolve(request, `${now.getTime()}.human-review`, new AbortController().signal);
+    expect(initial).toMatchObject({ responseStatus: "DECLINED", statusReason: "human_review_required" });
+    const storedDecision = await pool.query<{ decision_id: string }>(
+      `SELECT decision_id FROM policy_request_evaluations WHERE request_id = $1 AND outcome = 'human_review'`,
+      [request.cardTransactionEventId],
+    );
+    expect(storedDecision.rows).toHaveLength(1);
+    const approvalRevalidator = createRemoteAuthorizationApprovalRevalidator({ pool, gateway: fakeGateway, repaymentTerm: "asap" });
+    const output: string[] = [];
+    await runPolicyApprovalCli(pool, ["approve", "--decision-id", storedDecision.rows[0]!.decision_id,
+      "--actor", "credit-officer", "--reason", "approved after exact-term review"],
+    { POLICY_APPROVAL_ENABLED: "true" }, (text) => output.push(text), approvalRevalidator);
+    expect(output.join("")).toContain('"reserved":true');
+
+    const dispatchable = await pool.query<{ dispatch_ready: boolean; amount_cents: number | string }>(
+      `SELECT outbox.dispatch_ready, operation.amount_cents
+         FROM outbox_commands AS outbox
+         JOIN provider_operations AS operation ON operation.id = outbox.provider_operation_id
+        WHERE operation.authorization_request_id = $1`, [request.cardTransactionEventId],
+    );
+    expect(dispatchable.rows).toEqual([{ dispatch_ready: true, amount_cents: expect.anything() }]);
+    const provider = {
+      getTransferByRequestId: vi.fn(async () => null),
+      getChargeByRequestId: vi.fn(async () => null),
+      createTransfer: vi.fn(async (input: { requestId: string }) => ({ id: "transfer-human", requestId: input.requestId, status: "pending" as const })),
+      createCharge: vi.fn(),
+    } as unknown as AirwallexGateway;
+    expect(await dispatchOne(pool, provider)).toBe(true);
+    expect(provider.createTransfer).toHaveBeenCalledTimes(1);
+  });
+
   it("accepts only evidence types whose qualification is backed by enough exact audit examples", () => {
     const examples = Array.from({ length: 1000 }, (_, index) => ({
       signalType: "expected_inflow_delay" as const, correct: true, labelId: `label-${index}`,
@@ -335,6 +391,7 @@ async function seedCustomer(pool: DatabasePool, input: {
   profileAgeMs?: number;
   snapshotAgeMs?: number;
   priorDefault?: "yes" | "no";
+  creditReview?: "approved" | "watch";
   profileData?: Partial<UnderwritingProfileCandidate["data"]>;
 }): Promise<{ customerId: string; expected: Record<string, unknown> }> {
   const id = `acceptance-${randomUUID()}`;
@@ -363,6 +420,9 @@ async function seedCustomer(pool: DatabasePool, input: {
   }
   const snapshotCapturedAt = new Date(now.getTime() - (input.snapshotAgeMs ?? 0));
   const payload = completeSnapshot(accountId);
+  if (input.creditReview) {
+    payload.account.creditReviewStatus = { ...payload.account.creditReviewStatus, value: input.creditReview };
+  }
   if (input.priorDefault) {
     payload.account.priorDefaultStatus = { ...payload.account.priorDefaultStatus, value: input.priorDefault };
   }

@@ -265,6 +265,46 @@ export async function confirmRemoteAuthorizationDispatch(
   return !signal.aborted && result.rowCount === 1;
 }
 
+/** Release a CLI-approved transfer only after its exact approval decision committed. */
+export async function confirmApprovedPolicyDispatch(
+  pool: Pick<DatabasePool, "query">,
+  requestId: string,
+  approvalDecisionId: string,
+): Promise<boolean> {
+  const approved = `EXISTS (
+    SELECT 1 FROM policy_request_evaluations AS approval
+     WHERE approval.decision_id = $2::uuid
+       AND approval.request_id = $1
+       AND approval.actor_id IS NOT NULL
+       AND approval.approval_reason IS NOT NULL
+       AND approval.outcome = 'auto_approved'
+       AND approval.amount_cents = operation.amount_cents
+  )`;
+  const released = await pool.query(
+    `UPDATE outbox_commands AS outbox
+        SET dispatch_ready = true
+       FROM provider_operations AS operation
+      WHERE operation.id = outbox.provider_operation_id
+        AND operation.authorization_request_id = $1
+        AND outbox.command_type = 'create_bridge_transfer'
+        AND outbox.status = 'queued'
+        AND ${approved}`,
+    [requestId, approvalDecisionId],
+  );
+  if (released.rowCount === 1) return true;
+  const existing = await pool.query(
+    `SELECT 1
+       FROM outbox_commands AS outbox
+       JOIN provider_operations AS operation ON operation.id = outbox.provider_operation_id
+      WHERE operation.authorization_request_id = $1
+        AND outbox.command_type = 'create_bridge_transfer'
+        AND outbox.dispatch_ready
+        AND ${approved} LIMIT 1`,
+    [requestId, approvalDecisionId],
+  );
+  return existing.rowCount === 1;
+}
+
 export async function completeRequest(
   pool: DatabasePool,
   eventId: string,

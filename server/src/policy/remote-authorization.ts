@@ -163,3 +163,4 @@ export function createRemoteAuthorizationResolver(input: {
 export { createRemoteAuthorizationApprovalRevalidator } from "./remote-authorization-approval.js";
 export { createRemoteAuthorizationNonceClaimer } from "./remote-authorization-nonce.js";
 export { confirmRemoteAuthorizationDispatch } from "./remote-authorization-data.js";
+export { confirmApprovedPolicyDispatch } from "./remote-authorization-data.js";
