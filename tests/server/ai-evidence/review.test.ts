@@ -50,6 +50,16 @@ describe("next-run evidence review application", () => {
     })).toMatchObject({ status: "success" });
   });
 
+  it("does not reuse confirmation when the later extraction changes its claims", () => {
+    const prior = result("snapshot-1");
+    const changed = result("snapshot-2", "success");
+    changed.signals[0]!.value = { disputed: false };
+
+    expect(applyReviewToNextExtraction(changed, prior, {
+      extractionId: "reviewed-1", reviewerId: "ramil", action: "confirmed",
+    })).toMatchObject({ status: "review_required", signals: [{ value: { disputed: false } }] });
+  });
+
   it("rejects review reuse on the same snapshot or a different customer", () => {
     expect(() => applyReviewToNextExtraction(result("snapshot-1"), result("snapshot-1"), {
       extractionId: "reviewed-1", reviewerId: "ramil", action: "confirmed",

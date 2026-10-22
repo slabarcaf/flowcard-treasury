@@ -19,6 +19,9 @@ export function applyReviewToNextExtraction(
     return { ...current, status: "review_required" };
   }
   if (review.action === "confirmed") {
+    // Confirmation applies only to the exact output the reviewer saw. A new claim
+    // on a later snapshot must go through review even if its evidence is related.
+    if (!sameModelOutput(current, reviewedOutput)) return { ...current, status: "review_required" };
     return { ...current, status: current.signals.length > 0 ? "success" : "no_signal" };
   }
   if (review.action === "corrected") {

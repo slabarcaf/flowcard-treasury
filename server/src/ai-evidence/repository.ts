@@ -42,7 +42,7 @@ export async function persistExtraction(
   result: ExtractionResult,
   evidenceFingerprint: string,
   configurationVersion: string,
-  decision: { allowed: boolean; reason?: string } = { allowed: false, reason: "Decision gate was not evaluated" },
+  decision: { allowed: boolean; reason?: string | null } = { allowed: false, reason: "Decision gate was not evaluated" },
 ): Promise<string> {
   assertFingerprint(evidenceFingerprint);
   const client = await pool.connect();

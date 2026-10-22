@@ -11,6 +11,7 @@ interface FakeState {
   snapshotFreshness: "fresh" | "missing" | "stale" | "invalid";
   evidenceStatus: "success" | "no_signal" | "review_required" | "unmapped" | "failed" | null;
   evidenceDecisionAllowed: boolean | null;
+  evidenceSnapshotId: string | null;
   evidenceReviewed: boolean;
   bridges: Array<{ id: string; customer_id: string; amount_cents: number; repayment_term?: string; repayment_due_at?: Date | null }>;
   events: Array<Record<string, unknown>>;
@@ -24,8 +25,9 @@ class ReservationPool implements DatabasePool {
     activeHold: false,
     customerActive: true,
     snapshotFreshness: "fresh",
-    evidenceStatus: null,
+    evidenceStatus: "no_signal",
     evidenceDecisionAllowed: null,
+    evidenceSnapshotId: "snapshot-1",
     evidenceReviewed: false,
     bridges: [],
     events: [{
@@ -101,8 +103,8 @@ class ReservationPool implements DatabasePool {
           } as QueryResult<Row>;
         }
         if (text.includes("FROM ai_evidence_extractions AS extraction")) {
-          if (!this.state.evidenceStatus) return { rows: [], rowCount: 0 } as QueryResult<Row>;
-          return { rows: [{ decision_allowed: this.state.evidenceDecisionAllowed ??
+          if (!this.state.evidenceStatus || this.state.evidenceSnapshotId !== values[1]) return { rows: [], rowCount: 0 } as QueryResult<Row>;
+          return { rows: [{ extraction_id: "extraction-1", decision_allowed: this.state.evidenceDecisionAllowed ??
             (this.state.evidenceStatus === "success" || this.state.evidenceStatus === "no_signal"),
             blocking_status: this.state.evidenceStatus }] as Row[], rowCount: 1 };
         }
@@ -285,6 +287,18 @@ describe("USD facility reservations", () => {
     pool.state.evidenceStatus = "success";
     pool.state.evidenceDecisionAllowed = false;
     await expect(reserveBridge(pool, { bridgeId: "00000000-0000-4000-8000-000000000024", customerId: "customer-1",
+      amountCents: 100_000, repaymentTerm: "asap" })).rejects.toThrow("AI evidence decision gate is unresolved");
+  });
+
+  it("requires evidence for the currently published snapshot", async () => {
+    const missing = new ReservationPool();
+    missing.state.evidenceStatus = null;
+    await expect(reserveBridge(missing, { bridgeId: "00000000-0000-4000-8000-000000000081", customerId: "customer-1",
+      amountCents: 100_000, repaymentTerm: "asap" })).rejects.toThrow("AI evidence decision gate is unresolved");
+
+    const stale = new ReservationPool();
+    stale.state.evidenceSnapshotId = "older-snapshot";
+    await expect(reserveBridge(stale, { bridgeId: "00000000-0000-4000-8000-000000000082", customerId: "customer-1",
       amountCents: 100_000, repaymentTerm: "asap" })).rejects.toThrow("AI evidence decision gate is unresolved");
   });
 
