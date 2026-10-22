@@ -18,6 +18,9 @@ import { getDemoSalesforceSnapshot } from "../../../server/src/salesforce/fixtur
 import type { AirwallexRemoteAuthorizationV2 } from "../../../server/src/http/routes/remote-authorization.js";
 
 const databaseUrl = process.env.POLICY_ACCEPTANCE_DATABASE_URL;
+if (!databaseUrl && process.env.POLICY_ACCEPTANCE_REQUIRED === "1") {
+  throw new Error("POLICY_ACCEPTANCE_DATABASE_URL is required for PostgreSQL policy acceptance tests");
+}
 const migrationFiles = [
   "001_bridge_ledger.sql", "002_customer_roster.sql", "003_salesforce_snapshots.sql",
   "004_ai_evidence.sql", "005_underwriting_profiles.sql", "006_policy_evaluations.sql",
@@ -187,6 +190,29 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
     expect(byCustomer.get(customerId)).toMatchObject({ status: "evaluated", outcome: "ready" });
   });
 
+  it("blocks each mapped no-go fact in an isolated customer evaluation", async () => {
+    viDemoMode();
+    const scenarios: Array<{ label: string; outcome: "blocked" | "ineligible"; profileData?: Partial<UnderwritingProfileCandidate["data"]>; mappings: NoGoMappingReadiness }> = [
+      { label: "frozen account", outcome: "blocked", profileData: { connectedAccountStatus: "frozen" }, mappings: verifiedMappings },
+      { label: "closed account", outcome: "blocked", profileData: { connectedAccountStatus: "closed" }, mappings: verifiedMappings },
+      { label: "open RFI", outcome: "blocked", profileData: { openRfi: true }, mappings: verifiedMappings },
+      { label: "payer concentration", outcome: "ineligible", profileData: { topPayerConcentration: 0.71 }, mappings: verifiedMappings },
+      { label: "excluded industry", outcome: "ineligible", mappings: { ...verifiedMappings, industryExcluded: true } },
+      { label: "fraud flag", outcome: "ineligible", mappings: { ...verifiedMappings, fraudFlag: true } },
+    ];
+    for (const scenario of scenarios) {
+      const fixture = await seedCustomer(pool, { profile: true, snapshot: true, evidence: "no_signal", profileData: scenario.profileData });
+      const results = await runDailyPolicyPrechecks({
+        pool, facility: { facilitySize: 50_000, reserveFloorPct: 20, maxPerCustomerPct: 0.2,
+          feeRatePer30Days: 0.015, minHistoryDays: 90 },
+        mappings: scenario.mappings, qualifications: {}, now, customerIds: [fixture.customerId],
+      });
+      expect(results, scenario.label).toEqual([expect.objectContaining({
+        customerId: fixture.customerId, status: "evaluated", outcome: scenario.outcome,
+      })]);
+    }
+  });
+
   it("keeps browser input restricted to a trusted request identifier", async () => {
     const { handleBridgeDecision } = await import("../../../server/src/http/routes/bridge-decision.js");
     const { Readable } = await import("node:stream");
@@ -234,7 +260,7 @@ function snapshotCandidate(customerId: string, payload: SalesforceCustomerSnapsh
   };
 }
 
-function profileCandidate(customerId: string, capturedAt = now): UnderwritingProfileCandidate {
+function profileCandidate(customerId: string, capturedAt = now, dataOverrides: Partial<UnderwritingProfileCandidate["data"]> = {}): UnderwritingProfileCandidate {
   const complete = { complete: true, pages: 1 };
   const windowEnd = new Date(now.getTime());
   return {
@@ -246,7 +272,7 @@ function profileCandidate(customerId: string, capturedAt = now): UnderwritingPro
     featureVersion: UNDERWRITING_FEATURE_VERSION, windowStart: new Date(windowEnd.getTime() - 90 * 86_400_000), windowEnd,
     data: { averageMonthlySettledInflowsCents: 10_000_000, expectedDateReliability: 0.95,
       topPayerConcentration: 0.3, lowBalanceDays: 3, historyDays: 90, eligibleSpend: "supported",
-      connectedAccountStatus: "active", openRfi: false, repaymentHistory: "never_borrowed" },
+      connectedAccountStatus: "active", openRfi: false, repaymentHistory: "never_borrowed", ...dataOverrides },
   };
 }
 
@@ -257,6 +283,7 @@ async function seedCustomer(pool: DatabasePool, input: {
   profileAgeMs?: number;
   snapshotAgeMs?: number;
   priorDefault?: "yes" | "no";
+  profileData?: Partial<UnderwritingProfileCandidate["data"]>;
 }): Promise<{ customerId: string; expected: Record<string, unknown> }> {
   const id = `acceptance-${randomUUID()}`;
   const client = await pool.connect();
@@ -277,7 +304,7 @@ async function seedCustomer(pool: DatabasePool, input: {
     return { customerId: id, expected };
   }
   const profileCapturedAt = new Date(now.getTime() - (input.profileAgeMs ?? 0));
-  await publishCustomerProfile(pool, profileCandidate(id, profileCapturedAt));
+  await publishCustomerProfile(pool, profileCandidate(id, profileCapturedAt, input.profileData));
   if (input.snapshot === false) {
     expected = { status: "waiting", reason: "snapshot_missing" };
     return { customerId: id, expected };

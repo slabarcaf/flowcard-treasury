@@ -25,6 +25,7 @@ npm run dev        # http://localhost:5173
 | ----------------- | --------------------------------------------- |
 | `npm run dev`     | Dev server with hot reload                    |
 | `npm test`        | Policy, ledger, and Salesforce snapshot tests (Vitest) |
+| `npm run test:acceptance` | PostgreSQL policy acceptance suite; requires `POLICY_ACCEPTANCE_DATABASE_URL` |
 | `npm run build`   | Type-check + production build into `dist/`    |
 | `npm run lint`    | Lint with oxlint                              |
 | `npm run preview` | Serve the production build locally            |
@@ -32,6 +33,8 @@ npm run dev        # http://localhost:5173
 The local demo Compose service sets `SALESFORCE_SNAPSHOT_MODE=demo`, which
 publishes synthetic snapshots at startup and refreshes them daily. Production
 Salesforce snapshots remain disabled until a trusted host MCP binding exists.
+Run `npm run test:acceptance` to execute the database-backed policy acceptance
+suite. It requires a local PostgreSQL database whose name includes `test`.
 
 ### Update the live demo
 
@@ -97,6 +100,10 @@ Set these server environment variables before starting the service:
 | `AIRWALLEX_API_KEY` | Yes | Server-side Airwallex API key. |
 | `AIRWALLEX_WEBHOOK_SECRET` | Yes | Secret used to verify webhook signatures. |
 | `AIRWALLEX_BASE_URL` | No | API base URL; defaults to the Airwallex sandbox. |
+| `AIRWALLEX_REMOTE_AUTHORIZATION_SECRET` | Required for remote authorization | Shared signature secret; without it, remote authorization ingress is rejected. |
+| `POLICY_DECISION_READ_TOKEN` | Required for decision reads | Bearer token for the authenticated server-side decision endpoint. No browser proxy is configured. |
+| `REMOTE_AUTH_REPAYMENT_TERM` | Required to reserve a bridge | Must be `15_days`, `30_days`, or `asap`; missing or invalid values fail closed. |
+| `POLICY_APPROVAL_ENABLED` | Optional, defaults disabled | Set to `true` only for the operator approval CLI. Approval still rechecks current policy and exact request terms. |
 
 Keep the credentials on the server. For example, after exporting the variables
 in the local shell, start the API with:
@@ -251,10 +258,21 @@ The deterministic server policy owns ratings, tier, line, request outcome, and
 review requirements. The bridge ledger owns deployable capacity, reservations,
 open-bridge exposure, and its transactional outbox. Only an auto-approved
 request or a human approval that is rechecked against current inputs can enter
-the reservation transaction. A browser request can identify a trusted stored
-request, but cannot supply its policy result or create a provider command.
-Daily and request evaluations retain policy and source-version references for
-audit.
+the reservation transaction. An authenticated server-side caller submits only
+a stored `requestId` to the decision endpoint using
+`POLICY_DECISION_READ_TOKEN`. No browser proxy is configured. The browser
+cannot submit trusted request details or create a provider command. Daily and
+request evaluations retain policy and source-version references for audit.
+
+Operators can inspect and approve pending human-review decisions with the
+server CLI. Approval rechecks current policy and exact request terms, and can
+fail closed when inputs or capacity have changed:
+
+```bash
+POLICY_APPROVAL_ENABLED=true npm run policy:approval -- list
+POLICY_APPROVAL_ENABLED=true npm run policy:approval -- inspect --decision-id 'DECISION_ID'
+POLICY_APPROVAL_ENABLED=true npm run policy:approval -- approve --decision-id 'DECISION_ID' --actor 'OPERATOR' --reason 'REASON'
+```
 
 Production decisioning stays disabled until Airwallex permissions, reports,
 pagination, and account reads are verified; a trusted expected-deposit-date

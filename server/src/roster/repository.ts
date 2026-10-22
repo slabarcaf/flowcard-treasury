@@ -96,10 +96,22 @@ export async function getCustomerRosterEntry(
   return result.rows[0] ? mapRosterRow(result.rows[0]) : null;
 }
 
-export async function listActiveCustomersForSnapshots(pool: DatabasePool): Promise<CustomerRosterEntry[]> {
-  const result = await pool.query<RosterRow>(
-    `SELECT ${SELECT_COLUMNS} FROM customer_roster WHERE is_active ORDER BY customer_id`,
-  );
+export async function listActiveCustomersForSnapshots(
+  pool: DatabasePool,
+  page?: { afterCustomerId: string | null; limit: number },
+): Promise<CustomerRosterEntry[]> {
+  if (page && (!Number.isSafeInteger(page.limit) || page.limit < 1 || page.limit > 1_000)) {
+    throw new Error("Active roster page limit must be from 1 through 1,000");
+  }
+  const result = page
+    ? await pool.query<RosterRow>(
+      `SELECT ${SELECT_COLUMNS} FROM customer_roster
+        WHERE is_active AND ($1::text IS NULL OR customer_id > $1)
+        ORDER BY customer_id LIMIT $2`, [page.afterCustomerId, page.limit],
+    )
+    : await pool.query<RosterRow>(
+      `SELECT ${SELECT_COLUMNS} FROM customer_roster WHERE is_active ORDER BY customer_id`,
+    );
   return result.rows.map(mapRosterRow);
 }
 

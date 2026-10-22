@@ -117,4 +117,15 @@ describe("customer enrollment roster", () => {
     await listCustomers(pool);
     expect(query.mock.calls[1][0]).not.toContain("WHERE is_active");
   });
+
+  it("pages active snapshot members with a bounded keyset query", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [row], rowCount: 1 });
+    const pool = { query } as unknown as DatabasePool;
+    const customers = await listActiveCustomersForSnapshots(pool, { afterCustomerId: "customer-0", limit: 1_000 });
+    expect(customers.map(({ customerId }) => customerId)).toEqual([row.customer_id]);
+    expect(query.mock.calls[0]?.[0]).toContain("customer_id > $1");
+    expect(query.mock.calls[0]?.[0]).toContain("LIMIT $2");
+    expect(query.mock.calls[0]?.[1]).toEqual(["customer-0", 1_000]);
+    await expect(listActiveCustomersForSnapshots(pool, { afterCustomerId: null, limit: 1_001 })).rejects.toThrow("1 through 1,000");
+  });
 });

@@ -293,14 +293,14 @@ async function loadRequestFacts(
   request: AirwallexRemoteAuthorizationV2,
   now: Date,
 ): Promise<RequestFacts | null> {
-  const result = await pool.query<EvaluationRow>(
+  const result = await pool.query<EvaluationRow & { airwallex_connected_account_id: string }>(
     `SELECT evaluation.evaluation_id, evaluation.customer_id, evaluation.policy_version,
             evaluation.profile_id, evaluation.snapshot_id, evaluation.evidence_run_id,
             evaluation.evaluated_at, evaluation.ratings, evaluation.tier,
             evaluation.credit_line_cents, evaluation.outcome,
             evaluation.human_approval_required, evaluation.reason_codes,
             evaluation.input_versions, evaluation.mapping_versions,
-            evaluation.roster_updated_at
+            evaluation.roster_updated_at, roster.airwallex_connected_account_id
        FROM policy_evaluations AS evaluation
        JOIN customer_roster AS roster ON roster.customer_id = evaluation.customer_id
        JOIN issuing_card_bindings AS card ON card.customer_id = roster.customer_id
@@ -323,9 +323,7 @@ async function loadRequestFacts(
       ORDER BY created_at DESC, extraction_id DESC LIMIT 1`, [customerId, row.snapshot_id]);
   const evidenceRow = evidence.rows[0];
   if (!evidenceRow || evidenceRow.extraction_id !== row.evidence_run_id || !["success", "no_signal"].includes(evidenceRow.status)) return null;
-  const roster = await pool.query<{ airwallex_connected_account_id: string }>(
-    `SELECT airwallex_connected_account_id FROM customer_roster WHERE customer_id = $1 AND is_active`, [customerId]);
-  const accountId = roster.rows[0]?.airwallex_connected_account_id;
+  const accountId = row.airwallex_connected_account_id;
   if (!accountId) return null;
   const precheck: StoredDailyPrecheck = {
     customerId: row.customer_id,

@@ -110,9 +110,11 @@ export async function persistDailyPrecheck(pool: DatabasePool | DatabaseClient, 
 }
 
 export function policyEvaluationKey(input: Pick<StoredDailyPrecheck,
-  "customerId" | "profileId" | "snapshotId" | "evidenceRunId" | "policyVersion">): string {
+  "customerId" | "profileId" | "snapshotId" | "evidenceRunId" | "policyVersion" | "inputVersions" | "mappingVersions">): string {
   const identity = JSON.stringify([
     input.customerId, input.profileId, input.snapshotId, input.evidenceRunId, input.policyVersion,
+    Object.entries(input.inputVersions).sort(([left], [right]) => left.localeCompare(right)),
+    Object.entries(input.mappingVersions).sort(([left], [right]) => left.localeCompare(right)),
   ]);
   return createHash("sha256").update(identity, "utf8").digest("hex");
 }

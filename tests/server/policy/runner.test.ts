@@ -24,7 +24,7 @@ const mappings: NoGoMappingReadiness = {
 class FakePool implements DatabasePool {
   writes: readonly unknown[][] = [];
   async query<Row>(sql: string, values: readonly unknown[] = []): Promise<QueryResult<Row>> {
-    if (sql.includes("FROM customer_roster WHERE is_active ORDER BY customer_id")) {
+    if (sql.includes("SELECT customer_id, salesforce_account_id") && sql.includes("FROM customer_roster")) {
       return { rows: ["acct_bloom001", customerId].map((id) => ({
         customer_id: id, salesforce_account_id: `sf-${id}`, airwallex_connected_account_id: `aw-${id}`,
         is_active: true, enrolled_at: new Date("2026-01-01"), enrolled_by: "test", enrollment_reason: "fixture",

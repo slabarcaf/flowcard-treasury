@@ -1,3 +1,6 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+
 /** Typed boundary for server-side Airwallex calls. Tests inject a fake gateway. */
 export type ProviderOperationKind = "transfer" | "charge";
 
@@ -49,7 +52,13 @@ export class HttpAirwallexUnderwritingGateway implements AirwallexUnderwritingGa
   private accessToken: string | undefined;
   private tokenExpiresAt = 0;
 
-  constructor(private readonly options: { baseUrl: string; clientId: string; apiKey: string; fetcher?: typeof fetch }) {}
+  constructor(private readonly options: {
+    baseUrl: string;
+    clientId: string;
+    apiKey: string;
+    fetcher?: typeof fetch;
+    resolveHost?: (hostname: string) => Promise<string[]>;
+  }) {}
 
   async createPlatformReport(input: { type: "TRANSACTION_RECON_REPORT"; fromDate: string; toDate: string }) {
     const data = await this.request<Record<string, unknown>>("/api/v1/platform_reports/create", { method: "POST", body: JSON.stringify({ report_type: input.type, from_date: input.fromDate, to_date: input.toDate }) });
@@ -70,7 +79,21 @@ export class HttpAirwallexUnderwritingGateway implements AirwallexUnderwritingGa
   }
 
   async downloadPlatformReport(url: string): Promise<unknown[]> {
-    const response = await (this.options.fetcher ?? fetch)(new URL(url), { method: "GET", signal: AbortSignal.timeout(15_000) });
+    let target: URL;
+    try {
+      target = new URL(url);
+    } catch {
+      throw new Error("Airwallex report download URL is invalid");
+    }
+    if (target.protocol !== "https:" || target.username || target.password || target.port && target.port !== "443" ||
+        !target.hostname || isIP(target.hostname) || !isAllowedReportHost(target.hostname, this.options.baseUrl)) {
+      throw new Error("Airwallex report download URL is not an allowed HTTPS host");
+    }
+    const addresses = await (this.options.resolveHost ?? resolvePublicAddresses)(target.hostname);
+    if (addresses.length === 0 || addresses.some(isPrivateOrLocalAddress)) {
+      throw new Error("Airwallex report download host resolves to a private or local address");
+    }
+    const response = await (this.options.fetcher ?? fetch)(target, { method: "GET", signal: AbortSignal.timeout(15_000), redirect: "error" });
     if (!response.ok) throw new ProviderHttpError(response.status, `Airwallex report download failed (${response.status})`);
     const data: unknown = await response.json();
     if (Array.isArray(data)) return data;
@@ -90,7 +113,8 @@ export class HttpAirwallexUnderwritingGateway implements AirwallexUnderwritingGa
     const data = await this.get<Record<string, unknown>>(`/api/v1/rfis?${params}`, { "x-on-behalf-of": accountId });
     const items = Array.isArray(data.items) ? data.items : [];
     if (!Array.isArray(data.items)) throw new Error("Airwallex RFI response returned an invalid page");
-    return { items, hasMore: data.has_more === true };
+    if (typeof data.has_more !== "boolean") throw new Error("Airwallex RFI response returned an invalid page");
+    return { items, hasMore: data.has_more };
   }
 
   async getBalanceHistory(accountId: string, fromDate: string, toDate: string, page: number) {
@@ -121,6 +145,35 @@ export class HttpAirwallexUnderwritingGateway implements AirwallexUnderwritingGa
     this.tokenExpiresAt = data.expires_at ? Date.parse(data.expires_at) : Date.now() + (data.expires_in ?? 1800) * 1000;
     return data.token;
   }
+}
+
+function isAllowedReportHost(hostname: string, baseUrl: string): boolean {
+  const host = hostname.toLowerCase();
+  const apiHost = new URL(baseUrl).hostname.toLowerCase();
+  return host === apiHost || host.endsWith(".airwallex.com") || host.endsWith(".amazonaws.com");
+}
+
+async function resolvePublicAddresses(hostname: string): Promise<string[]> {
+  const records = await lookup(hostname, { all: true, verbatim: true });
+  return records.map(({ address }) => address);
+}
+
+function isPrivateOrLocalAddress(address: string): boolean {
+  const version = isIP(address);
+  if (version === 4) {
+    const octets = address.split(".").map(Number);
+    const [first = 0, second = 0] = octets;
+    return first === 0 || first === 10 || first === 127 || first >= 224 ||
+      first === 169 && second === 254 || first === 172 && second >= 16 && second <= 31 ||
+      first === 192 && (second === 168 || second === 0) || first === 100 && second >= 64 && second <= 127;
+  }
+  if (version === 6) {
+    const normalized = address.toLowerCase();
+    return normalized === "::" || normalized === "::1" || normalized.startsWith("fc") ||
+      normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") ||
+      normalized.startsWith("fea") || normalized.startsWith("feb") || normalized.startsWith("::ffff:");
+  }
+  return true;
 }
 
 function stringField(data: Record<string, unknown>, ...keys: string[]): string | null {

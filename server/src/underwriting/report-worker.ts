@@ -1,12 +1,11 @@
 import type { AirwallexUnderwritingGateway } from "../airwallex/client.js";
-import type { CustomerRosterEntry } from "../roster/types.js";
 import { loadAirwallexProfileSources } from "./airwallex-source.js";
 import type { ProfileSourceData } from "./airwallex-source.js";
 
 /** Fetch the whole-book report once, then enrich only explicitly enrolled accounts. */
 export async function collectUnderwritingSources(
   gateway: AirwallexUnderwritingGateway,
-  roster: readonly CustomerRosterEntry[],
+  roster: readonly { customerId: string; airwallexConnectedAccountId: string; isActive: boolean }[],
   windowStart: Date,
   windowEnd: Date,
 ): Promise<ProfileSourceData> {

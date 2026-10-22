@@ -1,6 +1,5 @@
 import type { AirwallexUnderwritingGateway } from "../airwallex/client.js";
 import type { DatabasePool } from "../db/pool.js";
-import type { CustomerRosterEntry } from "../roster/types.js";
 import { collectUnderwritingSources } from "./report-worker.js";
 import { buildProfileCandidate, type RepaymentRecord } from "./feature-builder.js";
 import type { UnderwritingProfileCandidate } from "./types.js";
@@ -24,18 +23,10 @@ export async function runDailyUnderwritingProfileBuild(input: {
     `SELECT customer_id, airwallex_connected_account_id
        FROM customer_roster WHERE is_active ORDER BY customer_id`,
   );
-  const roster: CustomerRosterEntry[] = rosterRows.rows.map((row) => ({
+  const roster = rosterRows.rows.map((row) => ({
     customerId: row.customer_id,
-    salesforceAccountId: "",
     airwallexConnectedAccountId: row.airwallex_connected_account_id,
     isActive: true,
-    enrolledAt: startedAt,
-    enrolledBy: "system",
-    enrollmentReason: "profile-build",
-    deactivatedAt: null,
-    deactivatedBy: null,
-    deactivationReason: null,
-    updatedAt: startedAt,
   }));
   const sources = await collectUnderwritingSources(input.gateway, roster, windowStart, windowEnd);
   const customerIds = roster.map((row) => row.customerId);

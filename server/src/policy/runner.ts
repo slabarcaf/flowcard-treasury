@@ -21,12 +21,17 @@ export async function runDailyPolicyPrechecks(input: {
   facility: FacilityConfig;
   mappings: NoGoMappingReadiness;
   qualifications: Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>;
+  customerIds?: readonly string[];
   now?: Date;
 }): Promise<DailyPrecheckResult[]> {
   const now = input.now ?? new Date();
-  const customers = await listActiveCustomersForSnapshots(input.pool);
   const results: DailyPrecheckResult[] = [];
-  for (const roster of customers) {
+  let afterCustomerId: string | null = null;
+  while (true) {
+    const customers = await listActiveCustomersForSnapshots(input.pool, { afterCustomerId, limit: 1_000 });
+    if (customers.length === 0) break;
+    for (const roster of customers) {
+    if (input.customerIds && !input.customerIds.includes(roster.customerId)) continue;
     try {
       const profileRead = await getCurrentUnderwritingProfile(input.pool, roster.customerId, now);
       if (!profileRead.profile) {
@@ -101,6 +106,9 @@ export async function runDailyPolicyPrechecks(input: {
         reason: error instanceof Error ? error.message : "unknown evaluation failure",
       });
     }
+    }
+    afterCustomerId = customers[customers.length - 1]!.customerId;
+    if (customers.length < 1_000) break;
   }
   return results;
 }

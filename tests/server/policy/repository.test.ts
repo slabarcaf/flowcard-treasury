@@ -40,6 +40,9 @@ describe("policy evaluation repository", () => {
     expect(policyEvaluationKey(first)).not.toBe(policyEvaluationKey({ ...first, policyVersion: "underwriting-next" }));
     expect(policyEvaluationKey(first)).not.toBe(policyEvaluationKey({ ...first, customerId: "customer-2" }));
     expect(policyEvaluationKey(first)).not.toBe(policyEvaluationKey({ ...first, evidenceRunId: "00000000-0000-4000-8000-000000000004" }));
+    expect(policyEvaluationKey(first)).not.toBe(policyEvaluationKey({ ...first, inputVersions: { profileVersion: 2 } }));
+    expect(policyEvaluationKey(first)).not.toBe(policyEvaluationKey({ ...first, mappingVersions: { industry: "industry-2" } }));
+    expect(policyEvaluationKey(first)).toBe(policyEvaluationKey({ ...first, inputVersions: { profileVersion: 1 }, mappingVersions: { industry: "industry-1" } }));
   });
 
   it("appends once, returns the original row on retry, and appends policy-version history", async () => {

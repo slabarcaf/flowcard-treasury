@@ -18,6 +18,7 @@ import {
   createRemoteAuthorizationResolver,
   resolveStoredRemoteAuthorizationDecision,
 } from "./policy/remote-authorization.js";
+import { runDailyPolicyPrechecks } from "./policy/runner.js";
 
 if (process.argv[2] === "policy-approval") {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -90,7 +91,28 @@ if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo") {
     textLimits: parseTextLengthConfig(),
     onPublished: async (customer) => { await evidenceRunner.runCustomer(customer); },
   });
-  const snapshotSchedule = startDemoSnapshotSync(snapshotWorker, {
+  const dailyPolicyWorker = {
+    async run() {
+      const snapshotResult = await snapshotWorker.run();
+      const results = await runDailyPolicyPrechecks({
+        pool,
+        facility: { facilitySize: 50_000, reserveFloorPct: 20, maxPerCustomerPct: 0.2,
+          feeRatePer30Days: 0.015, minHistoryDays: 90 },
+        mappings: {
+          industry: { verified: true, version: "demo-industry-v1" }, industryExcluded: false,
+          fraud: { verified: true, version: "demo-fraud-v1" }, fraudFlag: false,
+          priorDefault: { verified: true, version: "demo-prior-default-v1" },
+          concentration: { verified: true, version: "demo-concentration-v1" },
+        },
+        qualifications: {},
+      });
+      for (const result of results) {
+        if (result.status === "failed") console.error("Demo policy precheck failed", result.customerId, result.reason);
+      }
+      return snapshotResult;
+    },
+  };
+  const snapshotSchedule = startDemoSnapshotSync(dailyPolicyWorker, {
     runAtUtc: snapshotDailyRunTime(),
     onError: (error) => console.error("Demo Salesforce snapshot sync failed", error),
   });

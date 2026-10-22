@@ -79,4 +79,28 @@ describe("Airwallex underwriting source", () => {
     expect(scoped).toHaveLength(3);
     expect(scoped.every((call) => call.headers.get("x-on-behalf-of") === "acct-1")).toBe(true);
   });
+
+  it("rejects unsafe report download URLs and malformed RFI pagination", async () => {
+    const gateway = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture",
+      resolveHost: async () => ["8.8.8.8"], fetcher: vi.fn(async () => new Response("[]", { status: 200 })) });
+    await expect(gateway.downloadPlatformReport("http://reports.example/report")).rejects.toThrow(/allowed HTTPS/);
+    await expect(gateway.downloadPlatformReport("not a URL")).rejects.toThrow("URL is invalid");
+    await expect(gateway.downloadPlatformReport("https://127.0.0.1/report")).rejects.toThrow(/allowed HTTPS/);
+    await expect(gateway.downloadPlatformReport("https://reports.example/report")).rejects.toThrow(/allowed HTTPS/);
+    await expect(gateway.downloadPlatformReport("https://reports.airwallex.com/report")).resolves.toEqual([]);
+
+    const malformed: typeof fetch = vi.fn(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/authentication/login")) return new Response(JSON.stringify({ token: "fake-token", expires_in: 3600 }));
+      return new Response(JSON.stringify({ items: [] }));
+    });
+    const rfiGateway = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture", fetcher: malformed });
+    await expect(rfiGateway.getOpenRfis("acct-1", 0)).rejects.toThrow("invalid page");
+  });
+
+  it("rejects report download hosts that resolve to local addresses", async () => {
+    const gateway = new HttpAirwallexUnderwritingGateway({ baseUrl: "https://api.invalid", clientId: "fixture", apiKey: "fixture",
+      resolveHost: async () => ["10.0.0.8"], fetcher: vi.fn(async () => new Response("[]", { status: 200 })) });
+    await expect(gateway.downloadPlatformReport("https://reports.airwallex.com/report")).rejects.toThrow(/private or local/);
+  });
 });

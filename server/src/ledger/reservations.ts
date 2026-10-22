@@ -208,7 +208,7 @@ export async function reservePolicyBridge(
       decision,
       actorId: input.humanApproval?.actorId,
       reason: input.humanApproval?.reason,
-      ledgerSequence: decision.ledgerSequence,
+      ledgerSequence: decision.ledgerSequence ?? ledgerSequence,
       evaluatedAt: new Date(),
     });
     if (decision.outcome !== "auto_approved") {
