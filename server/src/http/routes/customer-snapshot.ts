@@ -12,6 +12,14 @@ export async function handleCustomerSnapshot(
   productionReadToken: string | undefined,
   snapshotMode: "demo" | "production_mcp" | undefined,
 ): Promise<void> {
+  if (snapshotMode !== "demo" && snapshotMode !== "production_mcp") {
+    response.writeHead(503, {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+    });
+    response.end(JSON.stringify({ error: "snapshot_mode_unavailable" }));
+    return;
+  }
   if (snapshotMode === "production_mcp" && !hasValidBearerToken(authorization, productionReadToken)) {
     response.writeHead(401, {
       "content-type": "application/json",

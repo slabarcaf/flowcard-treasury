@@ -55,6 +55,22 @@ describe("customer snapshot read API", () => {
     expect(body(response).active).toBe(true);
   });
 
+  it("fails closed without querying when snapshot mode is unset", async () => {
+    const { response, query } = await request(snapshotRow(), `/api/customers/${customerId}/snapshot`,
+      undefined, undefined, null);
+    expect(response.writeHead).toHaveBeenCalledWith(503, expect.any(Object));
+    expect(body(response)).toEqual({ error: "snapshot_mode_unavailable" });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("fails closed without querying when snapshot mode is invalid", async () => {
+    const { response, query } = await request(snapshotRow(), `/api/customers/${customerId}/snapshot`,
+      undefined, undefined, "invalid" as "demo");
+    expect(response.writeHead).toHaveBeenCalledWith(503, expect.any(Object));
+    expect(body(response)).toEqual({ error: "snapshot_mode_unavailable" });
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("marks the prior version stale immediately after the latest exhausted attempt fails", async () => {
     const { response } = await request(snapshotRow({ attempt_run_id: "run-failed", attempt_status: "failed" }),
       `/api/customers/${customerId}/snapshot`);
@@ -109,7 +125,7 @@ async function request(
   url: string,
   authorization?: string,
   productionReadToken?: string,
-  snapshotMode: "demo" | "production_mcp" = "demo",
+  snapshotMode: "demo" | "production_mcp" | null = "demo",
 ) {
   const query = vi.fn(async <Row>(): Promise<QueryResult<Row>> => ({ rows: [row as Row], rowCount: 1 }));
   const pool = { query } as unknown as DatabasePool;
@@ -120,7 +136,7 @@ async function request(
     airwallexApiKey: "key",
     airwallexWebhookSecret: "secret",
     salesforceSnapshotReadToken: productionReadToken,
-    salesforceSnapshotMode: snapshotMode,
+    ...(snapshotMode === null ? {} : { salesforceSnapshotMode: snapshotMode }),
   }, pool);
   const response = { writeHead: vi.fn(), end: vi.fn() };
   handler({ method: "GET", url, headers: { authorization } } as never, response as never);
