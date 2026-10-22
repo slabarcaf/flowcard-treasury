@@ -18,6 +18,11 @@ function object(value: unknown, path: string): JsonObject {
   return value as JsonObject;
 }
 
+function onlyKeys(item: JsonObject, allowed: readonly string[], path: string): void {
+  const unexpected = Object.keys(item).find((key) => !allowed.includes(key));
+  if (unexpected) throw new Error(`${path}.${unexpected} is not allowed`);
+}
+
 function string(value: unknown, path: string): string {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${path} must be a non-empty string`);
   return value;
@@ -36,6 +41,7 @@ function score(value: unknown, path: string): number {
 
 function reference(value: unknown, path: string): EvidenceReference {
   const item = object(value, path);
+  onlyKeys(item, ["sourceType", "sourceId"], path);
   if (item.sourceType !== "case" && item.sourceType !== "call_activity") throw new Error(`${path}.sourceType is invalid`);
   return { sourceType: item.sourceType, sourceId: string(item.sourceId, `${path}.sourceId`) };
 }
@@ -47,7 +53,9 @@ function references(value: unknown, path: string): EvidenceReference[] {
 
 function quote(value: unknown, path: string): QuoteSpan {
   const item = object(value, path);
-  const ref = reference(item, path);
+  onlyKeys(item, ["sourceType", "sourceId", "quote", "start", "end"], path);
+  if (item.sourceType !== "case" && item.sourceType !== "call_activity") throw new Error(`${path}.sourceType is invalid`);
+  const ref: EvidenceReference = { sourceType: item.sourceType, sourceId: string(item.sourceId, `${path}.sourceId`) };
   const quoted = string(item.quote, `${path}.quote`);
   if (!Number.isInteger(item.start) || !Number.isInteger(item.end) || (item.start as number) < 0 || (item.end as number) <= (item.start as number)) {
     throw new Error(`${path} must have a valid quote span`);
@@ -62,6 +70,7 @@ function quotes(value: unknown, path: string): QuoteSpan[] {
 
 function alternative(value: unknown, path: string): SignalAlternative {
   const item = object(value, path);
+  onlyKeys(item, ["value", "evidence", "quotes", "rationale"], path);
   return {
     value: item.value,
     evidence: references(item.evidence, `${path}.evidence`),
@@ -72,9 +81,11 @@ function alternative(value: unknown, path: string): SignalAlternative {
 
 function signal(value: unknown, path: string): ExtractedSignal {
   const item = object(value, path);
+  onlyKeys(item, ["type", "value", "counterparty", "evidence", "quotes", "rawScore", "calibratedScore", "alternatives", "selectionRationale"], path);
   if (typeof item.type !== "string" || !isKnownSignalType(item.type)) throw new Error(`${path}.type is unknown`);
   if (!Array.isArray(item.alternatives)) throw new Error(`${path}.alternatives must be an array`);
   const counterparty = item.counterparty === null ? null : object(item.counterparty, `${path}.counterparty`);
+  if (counterparty) onlyKeys(counterparty, ["name"], `${path}.counterparty`);
   return {
     type: item.type,
     value: item.value,
@@ -90,6 +101,7 @@ function signal(value: unknown, path: string): ExtractedSignal {
 
 function metadata(value: unknown): ModelConfigurationMetadata {
   const item = object(value, "model");
+  onlyKeys(item, ["modelId", "promptVersion", "catalogVersion", "outputSchemaVersion", "packetBuilderVersion", "calibrationVersion"], "model");
   if (!Number.isInteger(item.outputSchemaVersion) || (item.outputSchemaVersion as number) < 1) throw new Error("model.outputSchemaVersion must be a positive integer");
   return {
     modelId: string(item.modelId, "model.modelId"),
@@ -106,12 +118,14 @@ const STATUSES: readonly ExtractionStatus[] = ["success", "no_signal", "review_r
 /** Parse an untrusted provider result; any unknown signal is retained for review. */
 export function parseExtractionResult(input: unknown): ExtractionResult | UnmappedExtractionResult {
   const item = object(input, "result");
+  onlyKeys(item, ["schemaVersion", "customerId", "snapshotId", "status", "signals", "unmapped", "model"], "result");
   if (item.schemaVersion !== AI_EVIDENCE_SCHEMA_VERSION) throw new Error("result.schemaVersion is unsupported");
   if (typeof item.status !== "string" || !STATUSES.includes(item.status as ExtractionStatus)) throw new Error("result.status is invalid");
   if (!Array.isArray(item.signals)) throw new Error("result.signals must be an array");
   if (!Array.isArray(item.unmapped)) throw new Error("result.unmapped must be an array");
   const unmapped = item.unmapped.map((entry, index) => {
     const value = object(entry, `result.unmapped[${index}]`);
+    onlyKeys(value, ["type", "value", "evidence"], `result.unmapped[${index}]`);
     if (typeof value.evidence !== "undefined") references(value.evidence, `result.unmapped[${index}].evidence`);
     return {
       type: string(value.type, `result.unmapped[${index}].type`),

@@ -306,24 +306,24 @@ demo frontend. A protected production review UI requires a separate auth scope.
 - Create: `server/src/ai-evidence/normalize-counterparty.ts`
 - Create: `tests/server/ai-evidence/extract.test.ts`
 
-- [ ] Make one bounded extraction call per customer packet; allow multiple
+- [x] Make one bounded extraction call per customer packet; allow multiple
   distinct signals from a source and separate signals for distinct
   counterparties.
-- [ ] Bind customer identity from the snapshot Account link. Require explicit
+- [x] Bind customer identity from the snapshot Account link. Require explicit
   counterparty text and match cross-record parties only after deterministic
   case, whitespace, and punctuation normalization.
-- [ ] Let the model select the strongest claim for a signal identity while
+- [x] Let the model select the strongest claim for a signal identity while
   retaining competing claims and their evidence references.
-- [ ] Require exact quotes for every text-derived signal and verify each quote
+- [x] Require exact quotes for every text-derived signal and verify each quote
   against the referenced source text.
-- [ ] Validate signal type, customer, source IDs, quote spans, values, raw
+- [x] Validate signal type, customer, source IDs, quote spans, values, raw
   score, and cross-record joins. Retry invalid output within the bounded retry
   policy.
-- [ ] Emit `no_signal` only after successful extraction; emit `review_required`,
+- [x] Emit `no_signal` only after successful extraction; emit `review_required`,
   `unmapped`, or `failed` distinctly.
-- [ ] Test prompt-injection text, unsupported claims, mismatched customer IDs,
+- [x] Test prompt-injection text, unsupported claims, mismatched customer IDs,
   quote mismatch, invalid aliases, conflicts, multi-signal records, and retries.
-- [ ] Run focused tests before Task 5.
+- [x] Run focused tests before Task 5.
 
 ### Task 5: Persist evidence claims and review history
 

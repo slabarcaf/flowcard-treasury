@@ -68,6 +68,7 @@ export interface ExtractionResult {
   signals: ExtractedSignal[];
   unmapped: Array<{ type: string; value: unknown; evidence: EvidenceReference[] }>;
   model: ModelConfigurationMetadata;
+  failureReason?: string;
 }
 
 export interface UnmappedExtractionResult extends Omit<ExtractionResult, "status" | "signals"> {
