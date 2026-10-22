@@ -445,17 +445,17 @@ demo frontend. A protected production review UI requires a separate auth scope.
 
 ### Task 10: Verify acceptance criteria
 
-- [ ] Verify the daily snapshot is the only source of production evidence.
-- [ ] Verify every automatic signal has an approved type, validated quote,
+- [x] Verify the daily snapshot is the only source of production evidence.
+- [x] Verify every automatic signal has an approved type, validated quote,
   source provenance, explicit attribution, and qualified per-type score.
-- [ ] Verify exact duplicates collapse without losing source IDs and fuzzy
+- [x] Verify exact duplicates collapse without losing source IDs and fuzzy
   duplicates remain separate.
-- [ ] Verify conflicting claims remain active until a reviewer clears one.
-- [ ] Verify no model path can set policy or call a transaction service.
-- [ ] Verify `review_required`, `unmapped`, and `failed` block only the affected
+- [x] Verify conflicting claims remain active until a reviewer clears one.
+- [x] Verify no model path can set policy or call a transaction service.
+- [x] Verify `review_required`, `unmapped`, and `failed` block only the affected
   customer; `no_signal` is a successful result.
-- [ ] Verify per-type promotion and demotion using the rolling 90-day bound.
-- [ ] Run `npm test`, `npm run build`, and `npm run lint`.
+- [x] Verify per-type promotion and demotion using the rolling 90-day bound.
+- [x] Run `npm test`, `npm run build`, and `npm run lint`.
 
 ### Task 11: Update documentation and plan status
 

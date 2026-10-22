@@ -22,7 +22,7 @@ describe("customer evidence decision gate", () => {
 
   it("allows valid no_signal, gates every proposed signal by qualification, and does not affect another customer", () => {
     expect(evaluateCustomerDecisionGate(base, {}).allowed).toBe(true);
-    const result: ExtractionResult = { ...base, status: "success", signals: [{
+    const result: ExtractionResult = { ...base, status: "success", model: { ...base.model, calibrationVersion: "cal-v1" }, signals: [{
       type: "client_payment_dispute", value: true, counterparty: { name: "Northstar" },
       evidence: [{ sourceType: "case", sourceId: "case-a" }],
       quotes: [{ sourceType: "case", sourceId: "case-a", quote: "claim", start: 0, end: 5 }],
@@ -31,5 +31,19 @@ describe("customer evidence decision gate", () => {
     expect(evaluateCustomerDecisionGate(result, {}).allowed).toBe(false);
     expect(evaluateCustomerDecisionGate(result, { client_payment_dispute: qualified }).allowed).toBe(true);
     expect(evaluateCustomerDecisionGate({ ...result, customerId: "customer-b", status: "no_signal", signals: [] }, {}).allowed).toBe(true);
+  });
+
+  it("requires a calibrated score tied to the qualification version before automatic use", () => {
+    const result: ExtractionResult = { ...base, status: "success", model: { ...base.model, calibrationVersion: "cal-v1" }, signals: [{
+      type: "client_payment_dispute", value: true, counterparty: { name: "Northstar" },
+      evidence: [{ sourceType: "case", sourceId: "case-a" }],
+      quotes: [{ sourceType: "case", sourceId: "case-a", quote: "claim", start: 0, end: 5 }],
+      rawScore: 0.99, calibratedScore: 0.99, alternatives: [], selectionRationale: null,
+    }] };
+    expect(evaluateCustomerDecisionGate(result, { client_payment_dispute: qualified }).allowed).toBe(true);
+    expect(evaluateCustomerDecisionGate({ ...result, signals: [{ ...result.signals[0]!, calibratedScore: null }] },
+      { client_payment_dispute: qualified })).toMatchObject({ allowed: false, reason: expect.stringContaining("calibration score") });
+    expect(evaluateCustomerDecisionGate({ ...result, model: { ...result.model, calibrationVersion: "cal-v2" } },
+      { client_payment_dispute: qualified })).toMatchObject({ allowed: false, reason: expect.stringContaining("calibration score") });
   });
 });

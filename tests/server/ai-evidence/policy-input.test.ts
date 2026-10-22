@@ -16,7 +16,7 @@ describe("deterministic policy input boundary", () => {
   });
 
   it("fails closed for unqualified, unmapped, or not source-approved signal meanings", () => {
-    const success: ExtractionResult = { ...noSignal, status: "success", signals: [{
+    const success: ExtractionResult = { ...noSignal, status: "success", model: { ...noSignal.model, calibrationVersion: "cal-v1" }, signals: [{
       type: "client_payment_dispute", value: { disputed: true }, counterparty: { name: "Northstar" },
       evidence: [{ sourceType: "case", sourceId: "case-a" }],
       quotes: [{ sourceType: "case", sourceId: "case-a", quote: "claim", start: 0, end: 5 }],
@@ -29,7 +29,7 @@ describe("deterministic policy input boundary", () => {
   });
 
   it("uses an explicitly approved meaning without changing calculation code or values", () => {
-    const success: ExtractionResult = { ...noSignal, status: "success", signals: [{
+    const success: ExtractionResult = { ...noSignal, status: "success", model: { ...noSignal.model, calibrationVersion: "cal-v1" }, signals: [{
       type: "client_payment_dispute", value: "confirmed-dispute", counterparty: { name: "Northstar" },
       evidence: [{ sourceType: "case", sourceId: "case-a" }],
       quotes: [{ sourceType: "case", sourceId: "case-a", quote: "claim", start: 0, end: 5 }],

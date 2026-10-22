@@ -19,6 +19,10 @@ export function evaluateCustomerDecisionGate(
     if (!qualification?.qualified || qualification.mode !== "auto_apply_with_audit") {
       return { allowed: false, reason: `Signal type ${signal.type} is not qualified` };
     }
+    if (signal.calibratedScore === null || !result.model.calibrationVersion ||
+        qualification.calibrationVersion !== result.model.calibrationVersion) {
+      return { allowed: false, reason: `Signal type ${signal.type} lacks a matching qualified calibration score` };
+    }
   }
   return { allowed: true, reason: null };
 }
