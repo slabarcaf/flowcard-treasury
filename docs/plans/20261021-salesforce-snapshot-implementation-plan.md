@@ -464,13 +464,35 @@ is attempted in production. Demo mode reads the deterministic local fixtures.
 
 - Create: tests/server/salesforce-snapshot.integration.test.ts
 
-- [ ] Verify roster selection, query completeness, atomic per-customer
+- [x] Verify roster selection, query completeness, atomic per-customer
   publication, freshness, and stale bridge gating end to end.
-- [ ] Verify one customer's failed query does not block another customer's
+- [x] Verify one customer's failed query does not block another customer's
   complete snapshot.
-- [ ] Verify production mode cannot silently switch to fixtures or REST.
-- [ ] Run the complete Vitest suite, lint, and production build.
-- [ ] Record MCP capability and mapping results in the deployment checklist.
+- [x] Verify production mode cannot silently switch to fixtures or REST.
+- [x] Run the complete Vitest suite, lint, and production build.
+- [x] Record MCP capability and mapping results in the deployment checklist.
+
+Task 10 acceptance record (2026-10-21): The automated acceptance suite uses
+deterministic fixtures and a simulated MCP read client; it makes no provider
+calls. The suite verifies active-roster selection, complete paginated MCP
+queries, atomic customer publication, freshness, stale bridge gating, and
+customer-level failure isolation. Production fallback is absent: production
+source errors remain failures and the production readiness check rejects the
+provisional mapping.
+
+Production deployment checklist:
+
+- [ ] Verify unattended MCP access, read-only permissions, complete pagination,
+  and bounded retry behavior against the production connector (**unverified**;
+  live connector checks were not authorized).
+- [ ] Confirm Salesforce Account/Contract/Case/Activity field API names and
+  canonical picklist mappings with the org owner (**unverified**).
+- [ ] Set the maximum case and call note text lengths before production
+  enablement.
+
+Keep production sync and new bridge decisions gated until the MCP capability
+check passes and an owner confirms the org mapping. This record is not a
+production-readiness approval.
 
 #### Task 11 (TASK-011): Update project documentation
 
