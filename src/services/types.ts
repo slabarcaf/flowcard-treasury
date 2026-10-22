@@ -109,6 +109,20 @@ export interface AgentSignalExtraction {
   signal: string;
   value: string;
   evidence: string;
+  sourceReference: string;
+  counterparty: string | null;
+  confidenceStatus: 'qualified' | 'review';
+  alternatives: string[];
+}
+
+export type DemoEvidenceScenario = 'no_signal' | 'unmapped' | 'conflicts' | 'multi_signal' | 'correction' | 'failure';
+
+export interface AgentEvidenceExtraction {
+  scenario: DemoEvidenceScenario;
+  status: 'no_signal' | 'unmapped' | 'review_required' | 'success' | 'failed';
+  signals: AgentSignalExtraction[];
+  unmapped: Array<{ type: string; value: string; evidence: string; sourceReference: string }>;
+  message: string;
 }
 
 export interface AgentAllocationProposal {
@@ -191,7 +205,7 @@ export interface CrmClient {
 }
 
 export interface AgentClient {
-  extractSignals(note: CrmNote): Promise<AgentSignalExtraction[]>;
+  extractSignals(note: CrmNote): Promise<AgentEvidenceExtraction>;
 
   proposeAllocation(params: {
     declines: Array<{ customerId: string; customerName: string; shortfall: number }>;

@@ -64,6 +64,22 @@ describe("bounded customer evidence packets", () => {
     ]);
   });
 
+  it("keeps near-duplicate narratives separate because only exact canonical matches collapse", () => {
+    const data = structuredClone(snapshot);
+    const original = data.cases[0]!;
+    data.cases.push({
+      ...original,
+      recordId: "case-near-duplicate",
+      description: { ...original.description, value: `${original.description.value} Follow up.` },
+    });
+    const packet = build(data);
+    expect(packet.status).toBe("ready");
+    if (packet.status !== "ready") return;
+    expect(packet.packet.entries.filter((entry) => entry.sourceType === "case")).toHaveLength(2);
+    expect(packet.packet.entries.find((entry) => entry.sourceIds.includes("case-near-duplicate"))?.sourceIds)
+      .toEqual(["case-near-duplicate"]);
+  });
+
   it("orders recent calls deterministically, limits them to five, and excludes calls outside 90 days", () => {
     const data = structuredClone(snapshot);
     const base = data.callActivities[0]!;
