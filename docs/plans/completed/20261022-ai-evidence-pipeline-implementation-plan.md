@@ -4,13 +4,13 @@ version: 1.0
 date_created: 2026-10-22
 last_updated: 2026-10-22
 owner: Ramil
-status: Implementation complete; review pending
+status: Complete
 tags: [feature, ai-evidence, salesforce, signal-extraction]
 ---
 
 # 20261022 AI evidence pipeline implementation plan
 
-![Status: Implementation complete; review pending](https://img.shields.io/badge/status-implementation--complete%3B%20review--pending-blue)
+![Status: Complete](https://img.shields.io/badge/status-complete-brightgreen)
 
 [TOC]
 
@@ -481,7 +481,7 @@ demo frontend. A protected production review UI requires a separate auth scope.
   review CLI.
 - [x] Update this plan with actual files, test commands, and any justified
   scope changes.
-- [ ] Move the completed plan to `docs/plans/completed/` after implementation.
+- [x] Move the completed plan to `docs/plans/completed/` after implementation.
   The execution harness will move it after reviews; it remains here until then.
 
 ## Post-completion gates
