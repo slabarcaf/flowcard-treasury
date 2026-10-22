@@ -26,6 +26,8 @@ describe("deterministic policy input boundary", () => {
     const result = buildPolicyInput(existing, success, {}, { client_payment_dispute: { key: "trackRecord", ratingsByValue: { '{"disputed":true}': "red" } } });
     expect(result.gate.allowed).toBe(false);
     expect(result.signals).toBeNull();
+    const partiallyUnmapped = { ...noSignal, status: "success" as const, unmapped: [{ type: "unknown", value: "private", evidence: [] }] };
+    expect(buildPolicyInput(existing, partiallyUnmapped, {}).signals).toBeNull();
   });
 
   it("uses an explicitly approved meaning without changing calculation code or values", () => {

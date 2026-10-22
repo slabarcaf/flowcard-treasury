@@ -411,22 +411,22 @@ provider operation unless all checks still pass.
 - Create: `tests/server/policy/input.test.ts`
 - Create: `tests/server/policy/gates.test.ts`
 
-- [ ] Join only active roster state, a complete fresh profile, the latest
+- [x] Join only active roster state, a complete fresh profile, the latest
   complete Salesforce snapshot, and the AI pipeline's qualified policy input.
-- [ ] Enforce account active, contract active and unexpired, verified KYB,
+- [x] Enforce account active, contract active and unexpired, verified KYB,
   approved cap, approved credit review, Airwallex active status, and no open
   KYC or transaction RFI.
-- [ ] Route credit-review `watch` to human approval; block
+- [x] Route credit-review `watch` to human approval; block
   `hold`, `review_required`, unknown, unmapped, and missing states.
-- [ ] Block the customer for inactive enrollment, stale or incomplete inputs,
+- [x] Block the customer for inactive enrollment, stale or incomplete inputs,
   unresolved evidence, failed extraction, or an unqualified signal type.
-- [ ] Apply explicit no-go mappings for industry, fraud, prior default, and
+- [x] Apply explicit no-go mappings for industry, fraud, prior default, and
   concentration; fail closed until each required source mapping is verified.
-- [ ] Preserve a valid `no_signal` outcome and continue processing other
+- [x] Preserve a valid `no_signal` outcome and continue processing other
   customers when one customer's inputs fail.
-- [ ] Test every input state and confirm no raw CRM text reaches the policy
+- [x] Test every input state and confirm no raw CRM text reaches the policy
   calculation.
-- [ ] Run focused gate tests before Task 5.
+- [x] Run focused gate tests before Task 5.
 
 ### Task 5: Compute and persist daily precheck decisions
 

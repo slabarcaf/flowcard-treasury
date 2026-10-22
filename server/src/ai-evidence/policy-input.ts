@@ -27,6 +27,9 @@ export function buildPolicyInput(
   qualificationByType: Readonly<Partial<Record<ProposedSignalType, TypeQualification>>>,
   approvedMappings: ApprovedSignalMappings = SOURCE_APPROVED_SIGNAL_MAPPINGS,
 ): PolicyInputResult {
+  if (result.unmapped.length > 0) {
+    return { gate: { allowed: false, reason: "Evidence contains an unmapped signal" }, signals: null };
+  }
   const gate = evaluateCustomerDecisionGate(result, qualificationByType);
   if (!gate.allowed) return { gate, signals: null };
   if (result.status === "no_signal") return { gate, signals: { ...existing } };
