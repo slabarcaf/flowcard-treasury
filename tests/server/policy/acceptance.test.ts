@@ -298,14 +298,14 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
   it("blocks each customer's missing, stale, unqualified, review, and no-go inputs independently", async () => {
     viDemoMode();
     const cases = [
-      await seedCustomer(pool, { profile: false, snapshot: false, evidence: false }),
-      await seedCustomer(pool, { profile: true, snapshot: false, evidence: false }),
-      await seedCustomer(pool, { profile: true, snapshot: true, evidence: false }),
-      await seedCustomer(pool, { profileAgeMs: 25 * 60 * 60 * 1000, snapshot: true, evidence: "no_signal" }),
-      await seedCustomer(pool, { profile: true, snapshotAgeMs: 25 * 60 * 60 * 1000, evidence: "no_signal" }),
-      await seedCustomer(pool, { profile: true, snapshot: true, evidence: "unqualified" }),
-      await seedCustomer(pool, { profile: true, snapshot: true, evidence: "review_required" }),
-      await seedCustomer(pool, { profile: true, snapshot: true, evidence: "no_signal", priorDefault: "yes" }),
+      { label: "missing profile", fixture: await seedCustomer(pool, { profile: false, snapshot: false, evidence: false }) },
+      { label: "missing snapshot", fixture: await seedCustomer(pool, { profile: true, snapshot: false, evidence: false }) },
+      { label: "missing evidence", fixture: await seedCustomer(pool, { profile: true, snapshot: true, evidence: false }) },
+      { label: "stale profile", fixture: await seedCustomer(pool, { profileAgeMs: 25 * 60 * 60 * 1000, snapshot: true, evidence: "no_signal" }) },
+      { label: "stale snapshot", fixture: await seedCustomer(pool, { profile: true, snapshotAgeMs: 25 * 60 * 60 * 1000, evidence: "no_signal" }) },
+      { label: "unqualified evidence", fixture: await seedCustomer(pool, { profile: true, snapshot: true, evidence: "unqualified" }) },
+      { label: "review evidence", fixture: await seedCustomer(pool, { profile: true, snapshot: true, evidence: "review_required" }) },
+      { label: "prior default", fixture: await seedCustomer(pool, { profile: true, snapshot: true, evidence: "no_signal", priorDefault: "yes" }) },
     ];
     const results = await runDailyPolicyPrechecks({
       pool, facility: { facilitySize: 50_000, reserveFloorPct: 20, maxPerCustomerPct: 0.2,
@@ -313,7 +313,12 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
       mappings: verifiedMappings, qualifications: {}, now,
     });
     const byCustomer = new Map(results.map((result) => [result.customerId, result]));
-    for (const fixture of cases) expect(byCustomer.get(fixture.customerId)).toMatchObject(fixture.expected);
+    for (const scenario of cases) {
+      const fixture = scenario.fixture;
+      expect(byCustomer.get(fixture.customerId),
+        `${scenario.label}, customer ${fixture.customerId}, expected ${JSON.stringify(fixture.expected)}`)
+        .toMatchObject(fixture.expected);
+    }
     expect(byCustomer.get(customerId)).toMatchObject({ status: "evaluated", outcome: "ready" });
   });
 
@@ -465,7 +470,7 @@ async function seedCustomer(pool: DatabasePool, input: {
   await persistExtraction(pool, result, randomUUID().replaceAll("-", "").padEnd(64, "a").slice(0, 64), "fixture-config-v1", decision);
   if (input.profileAgeMs || input.snapshotAgeMs) {
     expected = { status: "evaluated", outcome: "blocked" };
-  } else if (status === "unqualified" || status === "review_required") {
+  } else if (input.evidence === "unqualified" || status === "review_required") {
     expected = { status: "evaluated", outcome: "blocked" };
   } else if (input.priorDefault === "yes") {
     expected = { status: "evaluated", outcome: "ineligible" };
