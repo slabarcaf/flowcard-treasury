@@ -335,17 +335,19 @@ demo frontend. A protected production review UI requires a separate auth scope.
 - Create: `tests/server/ai-evidence/repository.test.ts`
 - Create: `tests/server/ai-evidence/review.test.ts`
 
-- [ ] Store immutable extraction outputs, active and non-selected claims,
+- [x] Store immutable extraction outputs, active and non-selected claims,
   evidence references, snapshot IDs, and configuration versions.
-- [ ] Store reviewer ID, timestamp, action, corrected signal, and clear reason
+- [x] Store reviewer ID, timestamp, action, corrected signal, and clear reason
   while preserving the original model output.
-- [ ] Apply corrections and clears at the next daily run; do not rewrite the
+- [x] Apply corrections and clears at the next daily run; do not rewrite the
   source snapshot or silently replace extraction history.
-- [ ] Retain a marker for corrected-away output on unchanged evidence so a
+- [x] Retain a marker for corrected-away output on unchanged evidence so a
   repeated result routes to review again.
-- [ ] Test migrations, persistence, reviewer actions, next-run application,
+- [x] Test migrations, persistence, reviewer actions, next-run application,
   retained history, and repeat-error detection.
-- [ ] Run focused database tests before Task 6.
+- [x] Run focused database tests before Task 6. PostgreSQL runtime verification
+  unavailable in this environment (no `psql`/`postgres`; Docker daemon socket
+  denied); focused fake-pool transaction tests and migration assertions pass.
 
 ### Task 6: Add operator review actions
 
