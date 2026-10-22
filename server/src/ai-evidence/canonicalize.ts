@@ -20,7 +20,8 @@ export function evidenceFingerprint(canonicalValue: string): string {
   return createHash("sha256").update(canonicalValue, "utf8").digest("hex");
 }
 
-function stableStringify(value: unknown): string {
+/** Serialize JSON values with stable object-key ordering for hashes and comparisons. */
+export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") {
     const encoded = JSON.stringify(value);
     if (encoded === undefined) throw new Error("Evidence contains a non-JSON value");

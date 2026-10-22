@@ -10,6 +10,7 @@ import { applyReviewToNextExtraction } from "./review.js";
 import { type ProposedSignalType, type ExtractionResult } from "./types.js";
 import type { TypeQualification } from "./qualification.js";
 import { evaluateCustomerDecisionGate } from "./decision-gate.js";
+import { stableStringify } from "./canonicalize.js";
 
 export interface EvidenceRunnerOptions {
   pool: DatabasePool;
@@ -46,7 +47,7 @@ export class DailyEvidenceRunner {
       const failed = this.failedResult(customer.customerId, readModel.snapshot.snapshotId, packetResult.reason);
       const extractionId = await persistExtraction(this.options.pool, failed,
         createHash("sha256").update(`${customer.customerId}\u0000${readModel.snapshot.snapshotId}\u0000${packetResult.reason}`).digest("hex"),
-        this.options.provider.metadata.configurationVersion);
+        this.options.provider.metadata.configurationVersion, { allowed: false, reason: packetResult.reason });
       return { customerId: customer.customerId, status: "failed", allowed: false, reason: packetResult.reason, extractionId };
     }
     const packet = packetResult.packet;
@@ -63,6 +64,7 @@ export class DailyEvidenceRunner {
     const gate = evaluateCustomerDecisionGate(result, qualifications);
     const extractionId = await persistExtraction(
       this.options.pool, result, fingerprint, this.options.provider.metadata.configurationVersion,
+      gate,
     );
     return {
       customerId: customer.customerId,
@@ -86,10 +88,10 @@ export class DailyEvidenceRunner {
 }
 
 function packetFingerprint(packet: { customerId: string; entries: readonly { sourceType: string; fields: Readonly<Record<string, unknown>> }[] }): string {
-  const canonical = JSON.stringify({
+  const canonical = stableStringify({
     customerId: packet.customerId,
     entries: packet.entries.map(({ sourceType, fields }) => ({ sourceType, fields }))
-      .sort((left, right) => left.sourceType.localeCompare(right.sourceType) || JSON.stringify(left.fields).localeCompare(JSON.stringify(right.fields))),
+      .sort((left, right) => left.sourceType.localeCompare(right.sourceType) || stableStringify(left.fields).localeCompare(stableStringify(right.fields))),
   });
   return createHash("sha256").update(canonical, "utf8").digest("hex");
 }

@@ -11,10 +11,11 @@ const signal = {
 
 class ReviewPool implements DatabasePool {
   calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+  constructor(private readonly extractionStatus = "unmapped") {}
   async query<Row>(sql: string, values: readonly unknown[] = []): Promise<QueryResult<Row>> {
     this.calls.push({ sql: sql.replace(/\s+/g, " ").trim(), values });
     if (sql.includes("FROM ai_evidence_extractions WHERE extraction_id")) {
-      return { rows: [{ extraction_id: "extract-1", customer_id: "customer-1", status: "unmapped", output: { unmapped: [{ type: "new_type" }] } } as Row], rowCount: 1 };
+      return { rows: [{ extraction_id: "extract-1", customer_id: "customer-1", status: this.extractionStatus, output: { unmapped: [{ type: "new_type" }] } } as Row], rowCount: 1 };
     }
     if (sql.includes("INSERT INTO ai_evidence_reviews")) return { rows: [], rowCount: 1 };
     return { rows: [{ extractionId: "extract-1", status: "unmapped", unmapped: [{ type: "new_type" }] } as Row], rowCount: 1 };
@@ -57,10 +58,14 @@ describe("operator evidence review CLI", () => {
     expect(JSON.parse(output[0]!)).toMatchObject({ output: { unmapped: [{ type: "new_type" }] } });
   });
 
-  it("rejects malformed correction, absent reviewer and resolved records", async () => {
+  it("rejects malformed correction, absent reviewer, and resolved records", async () => {
     await expect(runEvidenceReviewCli(new ReviewPool(), ["correct", "--extraction-id", "extract-1", "--reviewer-id", "r", "--signal-json", "{}"],
       { AI_EVIDENCE_REVIEW_ENABLED: "true" })).rejects.toThrow();
     await expect(runEvidenceReviewCli(new ReviewPool(), ["confirm", "--extraction-id", "extract-1"],
       { AI_EVIDENCE_REVIEW_ENABLED: "true" })).rejects.toThrow("--reviewer-id is required");
+    const resolved = new ReviewPool("success");
+    await expect(runEvidenceReviewCli(resolved, ["confirm", "--extraction-id", "extract-1", "--reviewer-id", "r"],
+      { AI_EVIDENCE_REVIEW_ENABLED: "true" })).rejects.toThrow("only review_required or unmapped extractions can be dispositioned");
+    expect(resolved.calls.some(({ sql }) => sql.includes("INSERT INTO ai_evidence_reviews"))).toBe(false);
   });
 });

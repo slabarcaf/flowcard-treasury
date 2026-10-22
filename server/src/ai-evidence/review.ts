@@ -1,5 +1,6 @@
 import type { ExtractionResult, ExtractedSignal } from "./types.js";
 import type { EvidenceReview } from "./repository.js";
+import { stableStringify } from "./canonicalize.js";
 
 /** Apply a matching prior review to this run while leaving the stored output untouched. */
 export function applyReviewToNextExtraction(
@@ -28,7 +29,7 @@ export function applyReviewToNextExtraction(
 }
 
 function sameModelOutput(current: ExtractionResult, reviewed: ExtractionResult): boolean {
-  return stableJson(withoutRunState(current)) === stableJson(withoutRunState(reviewed));
+  return stableStringify(withoutRunState(current)) === stableStringify(withoutRunState(reviewed));
 }
 
 function withoutRunState(result: ExtractionResult): Omit<ExtractionResult, "snapshotId" | "status"> {
@@ -36,15 +37,6 @@ function withoutRunState(result: ExtractionResult): Omit<ExtractionResult, "snap
   delete (copy as Partial<ExtractionResult>).snapshotId;
   delete (copy as Partial<ExtractionResult>).status;
   return copy;
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
 }
 
 function isExtractedSignal(value: unknown): value is ExtractedSignal {

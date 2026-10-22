@@ -30,7 +30,7 @@ export function validateExtractionResult(input: unknown, packet: EvidencePacket)
       throw new Error("text-derived signal requires evidence references and exact quotes");
     }
     const normalizedCounterparty = normalizeCounterpartyName(signal.counterparty.name);
-    if (signal.quotes.some((quote) => !normalizeCounterpartyName(quote.quote).includes(normalizedCounterparty))) {
+    if (signal.quotes.some((quote) => !containsNameTokens(quote.quote, normalizedCounterparty))) {
       throw new Error("counterparty must be explicitly named in every joined source quote");
     }
     for (const alternative of signal.alternatives) {
@@ -41,6 +41,13 @@ export function validateExtractionResult(input: unknown, packet: EvidencePacket)
   }
   validateReferences(result.unmapped.flatMap((item) => item.evidence), sourceText, "result.unmapped.evidence");
   return result;
+}
+
+function containsNameTokens(text: string, normalizedName: string): boolean {
+  const tokens = normalizedName.split(" ").filter(Boolean);
+  const textTokens = normalizeCounterpartyName(text).split(" ").filter(Boolean);
+  if (tokens.length === 0 || tokens.length > textTokens.length) return false;
+  return textTokens.some((_, start) => tokens.every((token, offset) => textTokens[start + offset] === token));
 }
 
 function assertNoPolicyAuthority(value: unknown, path: string): void {

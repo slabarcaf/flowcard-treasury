@@ -88,6 +88,7 @@ describe("AI evidence extraction", () => {
     const cases = [
       result([signal()], { customerId: "customer-2" }),
       result([signal("not-in-packet")]),
+      result([{ ...signal(), counterparty: { name: "North" } }]),
       result([{ ...signal(), quotes: [{ sourceType: "case", sourceId: "case-1", quote: "Northstar Supply", start: 0, end: 15 }] }]),
       result([{ ...signal(), unexpectedAlias: true }]),
     ];

@@ -9,6 +9,9 @@ interface FakeState {
   activeHold: boolean;
   customerActive: boolean;
   snapshotFreshness: "fresh" | "missing" | "stale" | "invalid";
+  evidenceStatus: "success" | "no_signal" | "review_required" | "unmapped" | "failed" | null;
+  evidenceDecisionAllowed: boolean | null;
+  evidenceReviewed: boolean;
   bridges: Array<{ id: string; customer_id: string; amount_cents: number; repayment_term?: string; repayment_due_at?: Date | null }>;
   events: Array<Record<string, unknown>>;
   outbox: unknown[];
@@ -21,6 +24,9 @@ class ReservationPool implements DatabasePool {
     activeHold: false,
     customerActive: true,
     snapshotFreshness: "fresh",
+    evidenceStatus: null,
+    evidenceDecisionAllowed: null,
+    evidenceReviewed: false,
     bridges: [],
     events: [{
       id: 1,
@@ -93,6 +99,15 @@ class ReservationPool implements DatabasePool {
             }],
             rowCount: 1,
           } as QueryResult<Row>;
+        }
+        if (text.includes("FROM ai_evidence_extractions AS extraction")) {
+          if (!this.state.evidenceStatus) return { rows: [], rowCount: 0 } as QueryResult<Row>;
+          return { rows: [{ decision_allowed: this.state.evidenceDecisionAllowed ??
+            (this.state.evidenceStatus === "success" || this.state.evidenceStatus === "no_signal"),
+            blocking_status: this.state.evidenceStatus }] as Row[], rowCount: 1 };
+        }
+        if (text.includes("FROM ai_evidence_reviews")) {
+          return { rows: this.state.evidenceReviewed ? [{ id: 1 }] as Row[] : [], rowCount: this.state.evidenceReviewed ? 1 : 0 };
         }
         if (text.includes("INSERT INTO bridge_cases")) {
           const [id, customerId, amountCents, repaymentTerm, repaymentDueAt] = values as [string, string, number, string, Date | null];
@@ -245,6 +260,32 @@ describe("USD facility reservations", () => {
     expect(pool.state.events).toHaveLength(2);
     expect(pool.state.outbox).toHaveLength(1);
     expect(pool.state.deployable).toBe(1_250_000);
+  });
+
+  it("blocks unresolved evidence per customer until an operator disposition is recorded", async () => {
+    const pool = new ReservationPool();
+    pool.state.evidenceStatus = "unmapped";
+    const blocked = { bridgeId: "00000000-0000-4000-8000-000000000021", customerId: "customer-1",
+      amountCents: 100_000, repaymentTerm: "asap" as const };
+    await expect(reserveBridge(pool, blocked)).rejects.toThrow("AI evidence decision gate is unresolved");
+    expect(pool.state.bridges).toHaveLength(0);
+
+    pool.state.evidenceReviewed = true;
+    await expect(reserveBridge(pool, blocked)).resolves.toMatchObject({ bridgeId: blocked.bridgeId });
+    const otherCustomerPool = new ReservationPool();
+    await expect(reserveBridge(otherCustomerPool, { ...blocked, bridgeId: "00000000-0000-4000-8000-000000000022",
+      customerId: "customer-2" })).resolves.toMatchObject({ bridgeId: "00000000-0000-4000-8000-000000000022" });
+  });
+
+  it("blocks failed and unqualified evidence results", async () => {
+    const pool = new ReservationPool();
+    pool.state.evidenceStatus = "failed";
+    await expect(reserveBridge(pool, { bridgeId: "00000000-0000-4000-8000-000000000023", customerId: "customer-1",
+      amountCents: 100_000, repaymentTerm: "asap" })).rejects.toThrow("AI evidence decision gate is unresolved");
+    pool.state.evidenceStatus = "success";
+    pool.state.evidenceDecisionAllowed = false;
+    await expect(reserveBridge(pool, { bridgeId: "00000000-0000-4000-8000-000000000024", customerId: "customer-1",
+      amountCents: 100_000, repaymentTerm: "asap" })).rejects.toThrow("AI evidence decision gate is unresolved");
   });
 
   it("blocks new bridge reservations while the facility has an active reconciliation hold", async () => {

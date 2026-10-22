@@ -401,9 +401,13 @@ demo frontend. A protected production review UI requires a separate auth scope.
 - Create: `server/src/ai-evidence/decision-gate.ts`
 - Create: `server/src/ai-evidence/policy-input.ts`
 - Modify: `server/src/main.ts`
+- Modify: `server/src/ai-evidence/repository.ts`
+- Modify: `server/src/db/migrations/004_ai_evidence.sql`
+- Modify: `server/src/ledger/reservations.ts`
 - Create: `tests/server/ai-evidence/runner.test.ts`
 - Create: `tests/server/ai-evidence/decision-gate.test.ts`
 - Create: `tests/server/ai-evidence/policy-input.test.ts`
+- Modify: `tests/server/reservations.test.ts`
 
 - [x] Run extraction only after each customer's daily snapshot is complete and
   fresh; never refresh Salesforce directly from the model path.
@@ -464,7 +468,8 @@ demo frontend. A protected production review UI requires a separate auth scope.
   production gates, server variables, migration, and operator CLI.
 - **Validation:** `npm test`, `npm run build`, and `npm run lint` passed in
   Task 10. Markdown style validation is run for this task.
-- **Scope:** No runtime behavior changed. Production remains gated pending
+- **Scope:** Review follow-up persists each extraction's decision gate and
+  enforces it during bridge reservation. Production remains gated pending
   Typesafe.ai signal definitions, provider approval and data-handling terms,
   and verified Salesforce fields. No live provider calls were made.
 
@@ -476,7 +481,7 @@ demo frontend. A protected production review UI requires a separate auth scope.
   review CLI.
 - [x] Update this plan with actual files, test commands, and any justified
   scope changes.
-- [x] Move the completed plan to `docs/plans/completed/` after implementation.
+- [ ] Move the completed plan to `docs/plans/completed/` after implementation.
   The execution harness will move it after reviews; it remains here until then.
 
 ## Post-completion gates

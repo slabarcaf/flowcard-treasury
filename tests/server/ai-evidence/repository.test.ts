@@ -56,6 +56,8 @@ describe("AI evidence persistence", () => {
     const sql = await readFile(migration, "utf8");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS ai_evidence_extractions");
     expect(sql).toContain("configuration_version text NOT NULL");
+    expect(sql).toContain("decision_allowed boolean NOT NULL DEFAULT false");
+    expect(sql).toContain("decision_block_reason text");
     expect(sql).toContain("evidence_references jsonb NOT NULL");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS ai_evidence_reviews");
     expect(sql).toContain("reviewer_id text NOT NULL");
@@ -66,14 +68,15 @@ describe("AI evidence persistence", () => {
 
   it("stores the immutable extraction with selected and alternative claims in one transaction", async () => {
     const pool = new EvidencePool();
-    const id = await persistExtraction(pool, extraction(), fingerprint, "model-prompt-catalog-v1");
+    const id = await persistExtraction(pool, extraction(), fingerprint, "model-prompt-catalog-v1", { allowed: true });
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
     expect(pool.statements.map(({ sql }) => sql)).toEqual([
-      "BEGIN", "INSERT INTO ai_evidence_extractions ( extraction_id, customer_id, snapshot_id, evidence_fingerprint, configuration_version, status, output ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)",
+      "BEGIN", "INSERT INTO ai_evidence_extractions ( extraction_id, customer_id, snapshot_id, evidence_fingerprint, configuration_version, status, decision_allowed, decision_block_reason, output ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)",
       "INSERT INTO ai_evidence_claims (extraction_id, claim_index, signal, evidence_references, is_selected) VALUES ($1, $2, $3::jsonb, $4::jsonb, true)",
       "INSERT INTO ai_evidence_claims (extraction_id, claim_index, signal, evidence_references, is_selected) VALUES ($1, $2, $3::jsonb, $4::jsonb, false)", "COMMIT",
     ]);
-    expect(pool.statements[1]?.values[6]).toContain('"snapshotId"');
+    expect(pool.statements[1]?.values[6]).toBe(true);
+    expect(pool.statements[1]?.values[8]).toContain('"snapshotId"');
     expect(pool.statements[2]?.sql.endsWith("true)")).toBe(true);
     expect(pool.statements[3]?.sql.endsWith("false)")).toBe(true);
   });

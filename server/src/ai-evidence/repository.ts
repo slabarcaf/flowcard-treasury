@@ -42,6 +42,7 @@ export async function persistExtraction(
   result: ExtractionResult,
   evidenceFingerprint: string,
   configurationVersion: string,
+  decision: { allowed: boolean; reason?: string } = { allowed: false, reason: "Decision gate was not evaluated" },
 ): Promise<string> {
   assertFingerprint(evidenceFingerprint);
   const client = await pool.connect();
@@ -51,10 +52,10 @@ export async function persistExtraction(
     await client.query(
       `INSERT INTO ai_evidence_extractions (
          extraction_id, customer_id, snapshot_id, evidence_fingerprint,
-         configuration_version, status, output
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+         configuration_version, status, decision_allowed, decision_block_reason, output
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
       [extractionId, result.customerId, result.snapshotId, evidenceFingerprint,
-        configurationVersion, result.status, JSON.stringify(result)],
+        configurationVersion, result.status, decision.allowed, decision.reason ?? null, JSON.stringify(result)],
     );
     let claimIndex = 0;
     for (const signal of result.signals) {

@@ -6,6 +6,12 @@ export type EvidenceFixtureScenario = "direct" | "ambiguous" | "conflicting" | "
 
 /** Synthetic packets are selected explicitly by customer ID; fixture output is stable and offline. */
 export const EVIDENCE_FIXTURES: Readonly<Record<string, EvidenceFixtureScenario>> = Object.freeze({
+  // The normal demo roster has no named-counterparty fixture evidence, so it
+  // must produce a valid no-signal result instead of an extraction failure.
+  acct_bloom001: "irrelevant",
+  acct_atlas001: "irrelevant",
+  acct_nova001: "irrelevant",
+  acct_pixel001: "irrelevant",
   "fixture-direct": "direct",
   "fixture-ambiguous": "ambiguous",
   "fixture-conflicting": "conflicting",
@@ -33,7 +39,8 @@ export class FixtureEvidenceProvider implements EvidenceModelProvider {
     if (!scenario) throw new Error(`No AI evidence fixture for customer: ${packet.customerId}`);
     const evidence = packet.entries[0];
     const ref = evidence ? { sourceType: evidence.sourceType, sourceId: evidence.sourceIds[0] } : null;
-    const quote = evidence ? firstText(evidence.fields) : null;
+    const narrativeField = evidence?.sourceType === "case" ? "description" : "note";
+    const quote = evidence ? firstText(evidence.fields[narrativeField]) : null;
     const signal = (value: unknown, rawScore: number, rationale: string) => ({
       type: "client_payment_dispute",
       value,
@@ -45,7 +52,9 @@ export class FixtureEvidenceProvider implements EvidenceModelProvider {
       alternatives: [],
       selectionRationale: rationale,
     });
-    const common = { schemaVersion: 1, customerId: packet.customerId, snapshotId: packet.snapshotId, model: this.metadata };
+    const { modelId, promptVersion, catalogVersion, outputSchemaVersion, packetBuilderVersion, calibrationVersion } = this.metadata;
+    const model = { modelId, promptVersion, catalogVersion, outputSchemaVersion, packetBuilderVersion, calibrationVersion };
+    const common = { schemaVersion: 1, customerId: packet.customerId, snapshotId: packet.snapshotId, model };
     switch (scenario) {
       case "direct":
         return { ...common, status: "success", signals: [signal({ disputed: true }, 0.98, "Direct synthetic claim.")], unmapped: [] };

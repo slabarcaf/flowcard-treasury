@@ -193,7 +193,11 @@ proposed catalog is `proposed-v1`; it is not approved for production use.
 `no_signal` is a successful empty result. `success` contains validated signal
 claims. `review_required` and `unmapped` block new decisions for that customer
 until a reviewer resolves the result. `failed` and oversized packets also block
-that customer. Other customers continue. A valid signal reaches deterministic
+that customer. The latest extraction's gate result is persisted, and bridge
+reservation checks it inside the reservation transaction. A reviewer
+disposition releases a `review_required` or `unmapped` result; failed
+extractions and unqualified signals stay blocked until a later run resolves
+the gate. Other customers continue. A valid signal reaches deterministic
 policy only after its signal type independently qualifies: the one-sided exact
 95% precision lower bound must be at least 95% on eligible rolling 90-day
 labels. Each type starts review-only and returns to review-only when evidence
@@ -226,7 +230,7 @@ npm run ai-evidence:review -- clear --extraction-id <uuid> \
 
 Apply migration `004_ai_evidence.sql` after the snapshot migrations before
 running the CLI or evidence runner. See the
-[AI evidence implementation plan](/docs/plans/20261022-ai-evidence-pipeline-implementation-plan.md)
+[AI evidence implementation plan](/docs/plans/completed/20261022-ai-evidence-pipeline-implementation-plan.md)
 for the contracts, validation rules, test coverage, and remaining production
 gates.
 

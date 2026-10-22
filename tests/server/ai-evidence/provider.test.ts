@@ -3,32 +3,40 @@ import { loadAiEvidenceConfig } from "../../../server/src/ai-evidence/config.js"
 import { EVIDENCE_FIXTURES, FixtureEvidenceProvider } from "../../../server/src/ai-evidence/fixture-provider.js";
 import { buildEvidencePrompt } from "../../../server/src/ai-evidence/prompt.js";
 import type { EvidencePacket } from "../../../server/src/ai-evidence/packet.js";
+import { extractEvidence } from "../../../server/src/ai-evidence/extract.js";
 
 function packet(customerId: string): EvidencePacket {
   return {
     customerId,
     snapshotId: "snapshot-fixture",
     builderVersion: "packet-v1",
-    entries: [{ sourceType: "case", sourceIds: ["case-fixture"], fields: { description: "Synthetic evidence quote." } }],
+    entries: [{ sourceType: "case", sourceIds: ["case-fixture"], fields: { createdAt: "2026-10-20", status: "Open",
+      description: "Northstar Supply disputes the invoice." } }],
     byteLength: 64,
   };
 }
 
 describe("AI evidence provider boundary", () => {
   it("selects deterministic synthetic fixture scenarios with versioned metadata and no tools", async () => {
-    expect(Object.values(EVIDENCE_FIXTURES)).toEqual([
+    expect(Object.values(EVIDENCE_FIXTURES).slice(-6)).toEqual([
       "direct", "ambiguous", "conflicting", "irrelevant", "duplicate", "superseded",
     ]);
     const provider = new FixtureEvidenceProvider();
     expect(provider.toolsEnabled).toBe(false);
     expect(provider.metadata).toMatchObject({ modelId: "synthetic-fixture-v1", configurationVersion: "evidence-config-v1" });
     expect(await provider.extract(packet("fixture-direct"))).toMatchObject({ status: "success" });
+    const validatedDirect = await extractEvidence(packet("fixture-direct"), provider);
+    expect(validatedDirect).toMatchObject({
+      status: "success", signals: [{ counterparty: { name: "Northstar Supply" },
+        quotes: [{ quote: "Northstar Supply disputes the invoice." }] }],
+    });
     expect(await provider.extract(packet("fixture-ambiguous"))).toMatchObject({ status: "review_required" });
     expect(await provider.extract(packet("fixture-conflicting"))).toMatchObject({ status: "review_required" });
     expect(await provider.extract(packet("fixture-irrelevant"))).toMatchObject({ status: "no_signal" });
     expect(await provider.extract(packet("fixture-duplicate"))).toMatchObject({ status: "success" });
     expect(await provider.extract(packet("fixture-superseded"))).toMatchObject({ status: "review_required" });
     await expect(provider.extract(packet("unknown"))).rejects.toThrow(/No AI evidence fixture/);
+    expect(await extractEvidence(packet("acct_bloom001"), provider)).toMatchObject({ status: "no_signal" });
   });
 
   it("defaults to fixture mode and rejects production until both approval gates are passed", () => {
