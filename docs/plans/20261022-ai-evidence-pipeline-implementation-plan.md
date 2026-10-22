@@ -405,22 +405,22 @@ demo frontend. A protected production review UI requires a separate auth scope.
 - Create: `tests/server/ai-evidence/decision-gate.test.ts`
 - Create: `tests/server/ai-evidence/policy-input.test.ts`
 
-- [ ] Run extraction only after each customer's daily snapshot is complete and
+- [x] Run extraction only after each customer's daily snapshot is complete and
   fresh; never refresh Salesforce directly from the model path.
-- [ ] Continue the batch for other customers when one packet or model call
+- [x] Continue the batch for other customers when one packet or model call
   fails.
-- [ ] Block new bridge decisions for a customer with `review_required`,
+- [x] Block new bridge decisions for a customer with `review_required`,
   `unmapped`, `failed`, oversized input, or an unqualified signal type until
   review or qualification resolves it.
-- [ ] Allow a valid `no_signal` result to proceed with existing deterministic
+- [x] Allow a valid `no_signal` result to proceed with existing deterministic
   profile data.
-- [ ] Pass only qualified signals into deterministic policy; do not modify
+- [x] Pass only qualified signals into deterministic policy; do not modify
   policy calculations, tiers, lines, amounts, or transfer actions.
-- [ ] Map only source-approved signal meanings into the existing `Signals`
+- [x] Map only source-approved signal meanings into the existing `Signals`
   input type; send every other interpretation to review.
-- [ ] Test customer-level isolation, snapshot freshness, all result-state gates,
+- [x] Test customer-level isolation, snapshot freshness, all result-state gates,
   and continued processing of other customers.
-- [ ] Run focused tests before Task 9.
+- [x] Run focused tests before Task 9.
 
 ### Task 9: Wire deterministic demo fixtures to the extraction panel
 

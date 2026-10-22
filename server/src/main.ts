@@ -10,6 +10,8 @@ import { startDemoSnapshotSync } from "./snapshots/runtime.js";
 import { snapshotDailyRunTime } from "./snapshots/scheduler.js";
 import { parseTextLengthConfig } from "./salesforce/validate.js";
 import { runEvidenceReviewCli } from "./ai-evidence/review-cli.js";
+import { DailyEvidenceRunner } from "./ai-evidence/runner.js";
+import { FixtureEvidenceProvider } from "./ai-evidence/fixture-provider.js";
 
 if (process.argv[2] === "evidence-review") {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -42,10 +44,16 @@ outboxWorker.start();
 const reconciliationWorker = new ReconciliationWorker(pool, gateway);
 reconciliationWorker.start();
 if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo") {
+  const evidenceRunner = new DailyEvidenceRunner({
+    pool,
+    provider: new FixtureEvidenceProvider(),
+    packet: { maxPacketBytes: 32_000, maxNarrativeChars: 4_000 },
+  });
   const snapshotWorker = new SnapshotSyncWorker({
     pool,
     source: createDemoSnapshotSource(),
     textLimits: parseTextLengthConfig(),
+    onPublished: async (customer) => { await evidenceRunner.runCustomer(customer); },
   });
   const snapshotSchedule = startDemoSnapshotSync(snapshotWorker, {
     runAtUtc: snapshotDailyRunTime(),
