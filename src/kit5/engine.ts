@@ -315,6 +315,15 @@ function decide(s: Kit5State, ev: DeclineEvent, opts: { signals?: Signals; tierF
     detail.status = 'Evaluating';
     detail.rationale = c.rationale ?? '';
     detail.bloomAgentPhase = 'found';
+    detail.precheck = [
+      ...detail.precheck,
+      {
+        label: 'Agent found something in CRM.',
+        sublabel: '',
+        status: 'flag',
+        tooltip: 'A new Salesforce note may change this customer’s signals. Re-evaluate before deciding.',
+      },
+    ];
     row.status = 'Evaluating';
     s.pause = { kind: 'crm', requestId: ev.requestId };
     pushFeed(s, ev.time, `Agent found a new Salesforce note on ${c.name}; decision waits for re-evaluation`, 'info');

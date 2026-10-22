@@ -76,7 +76,7 @@ export function BridgeQueue({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-x-hidden overflow-y-visible">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
       {/* Banner */}
       {totalEligibleShortfall > 0 && (
         <div className="bg-gray-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between">

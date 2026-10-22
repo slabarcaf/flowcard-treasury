@@ -11,7 +11,7 @@ export type DashboardPhase = 'idle' | 'scanned' | 'funded';
 export interface PipelineStep {
   label: string;       // "Enough data?"
   sublabel: string;    // "90 days on platform"
-  status: 'pass' | 'fail' | 'skip';
+  status: 'pass' | 'fail' | 'skip' | 'flag'; // flag = needs attention (orange)
   value?: string;      // "730 days", "Tier A", "$6,000"
   tooltip?: string;    // hover explanation
 }
@@ -103,7 +103,7 @@ export interface CustomerDetail {
   showApproval: boolean;      // Nova only
   awaitingApproval: boolean;  // Nova: true until funded
   ineligibleReason?: string;  // Pixel only
-  approvalTerms?: ApprovalTerms;    // Kit 5: terms built per request (GD uses NOVA_APPROVAL_TERMS)
+  approvalTerms?: ApprovalTerms;    // terms built per request (falls back to NOVA_APPROVAL_TERMS)
   collectionRows?: CollectionRow[]; // Kit 5: this request's own repayment
 }
 

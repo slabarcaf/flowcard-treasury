@@ -24,7 +24,7 @@ npm run dev        # http://localhost:5173
 | Command           | What it does                                  |
 | ----------------- | --------------------------------------------- |
 | `npm run dev`     | Dev server with hot reload                    |
-| `npm test`        | Policy + Kit 5 engine tests (Vitest, 63 tests)|
+| `npm test`        | Policy + Kit 5 engine tests (Vitest, 64 tests)|
 | `npm run build`   | Type-check + production build into `dist/`    |
 | `npm run lint`    | Lint with oxlint                              |
 | `npm run preview` | Serve the production build locally            |
@@ -38,27 +38,27 @@ GitHub does **not** redeploy it. After merging changes:
 vercel deploy --prod
 ```
 
-## Two versions: Kit 5 and GD original
+## The demo (Kit 5)
 
-A toggle at the top right switches between two versions. The choice is remembered in the browser.
+- **Facility:** $50,000 with a 20% reserve floor → $10,000 floor, $40,000 lendable.
+  $25,000 is already lent out, so $15,000 is deployable (*Less*).
+- **Sequencing:** each decline is decided **the moment it arrives**, in arrival order,
+  against the capital left at that moment.
+- **Scenarios:** four, picked from the **Scenario** dropdown in the header.
+- **Inputs:** every number is editable in the **Scenario inputs** drawer (slider icon).
 
-| | **Kit 5** (default) | **GD original** |
-| --- | --- | --- |
-| Reserve floor | 20% → $10,000 floor, $40,000 lendable | 5% → $2,500 floor |
-| Already lent out | $25,000 (deployable $15,000, Less) | $32,500 (deployable $15,000, Less) |
-| Sequencing | Each decline is decided **the moment it arrives**, in arrival order, against the capital left at that moment | All declines land at once; each is decided when you click its row |
-| Scenarios | Four, picked from the **Scenario** dropdown | One |
-| Inputs | Editable in the **Scenario inputs** panel (slider icon) | Fixed in `seed.ts` |
+It's scripted: no backend, no API keys, nothing leaves the browser. The rules come from the
+*Kit 5 Bridge Capital: Source of Truth* doc. This build covers the floor and sequencing
+changes; the doc's other changes are not built yet.
 
-Both versions are scripted: no backend, no API keys, nothing leaves the browser.
-The rules for Kit 5 come from the *Kit 5 Bridge Capital: Source of Truth* doc. This
-version covers the floor and sequencing changes only; the doc's other changes are not built yet.
+GD's original version (5% floor, rows decided on click) was removed from the UI on
+2026-10-21. It is still in the git history at commit `b7e1c91`.
 
-### Kit 5 scenarios
+### Scenarios
 
 | Scenario | What it shows |
 | --- | --- |
-| **Original** | GD's four customers on our facility. Bloom is held for the Salesforce note and declined at Tier C, Atlas is auto-funded, Nova goes to a credit officer (deployable $10,000 → $4,000), Pixel is ineligible. Nova repays on day 9 ($27 fee). |
+| **Original** | GD's four customers on our facility. Bloom arrives with an orange **"Agent found something in CRM."** box, is re-evaluated against the Salesforce note and declined at Tier C. Atlas is auto-funded, Nova goes to a credit officer (deployable $10,000 → $4,000), Pixel is ineligible. Nova repays on day 9 ($27 fee). |
 | **Kit 5 target** | The doc's target demo: Original plus **Juniper Labs**, the same $6,000 request as Nova, arriving later at 9:16. Only $4,000 is left above the floor, so Juniper gets a firm no. |
 | **First come, first served** | Two identical Tier A requests ($8,000 each). The first is funded; the second would breach the floor and is refused. After the first is repaid, the second customer's retried payment is funded. |
 | **Tight capital → human** | Two identical Tier A requests ($3,000 each) with $6,500 deployable. The first auto-funds and drops capital into *Critical*, where Tier A needs a person, so the second goes to a credit officer. |
@@ -67,6 +67,13 @@ While a scenario plays, declines arrive about every 1.5 seconds. It stops when i
 **Re-evaluate** (Salesforce note), **Continue** after an auto-approval (a green callout shows
 what was funded), **Approve Bridge** (credit officer) or **Simulate Collection** (a repayment
 on a later day).
+
+On screen:
+- **Top left:** the demo date, large, with *Funding day* (day 0) or *Collection day · +N days*.
+- **Summary bar:** the current step, plus a *Funded:* line listing every funded client with
+  its amount and collect-by or repaid date.
+- **Activity panel (right):** collapse it with the chevron to give the queue the full width;
+  the choice is remembered in the browser. On narrow screens the queue also scrolls sideways.
 
 ### Statuses and dates
 
@@ -89,63 +96,36 @@ request with **Collect within (days)** in the inputs panel, or `DEFAULT_TERM_DAY
 In the inputs panel, changing a request's time changes who arrives first. In *First come, first
 served*, set Cedar's time to 9:10 and Maple gets funded instead.
 
-### GD original, click by click
-
-1. **Start state.** A $50,000 facility with $32,500 already lent out, $15,000 deployable,
-   $2,500 reserve floor. Capital band: *Less*.
-2. **Scan Declines** pulls in four declined payments:
-
-   | Customer     | Payment            | Shortfall | What the story shows                                                                                     |
-   | ------------ | ------------------ | --------- | -------------------------------------------------------------------------------------------------------- |
-   | Bloom & Co.  | $12,000 payroll    | $10,000   | The AI agent finds a Salesforce note (largest client disputing an invoice), re-scores Bloom from Tier A to Tier C, and the bridge ends up declined. |
-   | Atlas SaaS   | $6,500 supplier    | $5,000    | Clean Tier A customer — auto-approved and funded.                                                                   |
-   | Nova Agency  | $7,000 contractor  | $6,000    | Tier B at a *Less* band → needs a human to approve.                                                      |
-   | Pixel Studio | $2,500 ad spend    | $2,000    | Only 41 days on platform (< 90 required) → ineligible.                                                   |
-
-3. **Click a row** to run that customer through the underwriting pipeline (daily
-   pre-check → per-request checks) and see the policy checks and rationale.
-4. **Approve** Nova → funding completes after a short delay.
-5. **Simulate Collection** shows the repayment waterfall. **Reset** starts over.
-
 ## How the code is organized
 
 ```
 src/
-  App.tsx              Version toggle: renders the Kit 5 or the GD dashboard
+  App.tsx              Renders the Kit 5 dashboard
   main.tsx             React entry point
   index.css            Tailwind import + custom animations
-  kit5/                Kit 5 version
+  kit5/
     scenarios.ts       The four scenarios + loadScenarios() — where backend data will plug in
     types.ts           Scenario input shape (backend-ready JSON) and engine state
     engine.ts          Sequential engine: one pure function per step (arrive, decide, approve, repay)
     useKit5Dashboard.ts  Wires the engine to React; plays arrivals on a timer
-    Kit5Dashboard.tsx  Page: header (scenario picker, toggle, buttons), capital bar, queue, feed
+    Kit5Dashboard.tsx  Page: header (date, scenario picker, buttons), summary, capital bar, queue, feed
     SettingsPanel.tsx  The hidden "Scenario inputs" drawer
-  gd/
-    GdDashboard.tsx    GD's original page
-  seed.ts              GD's demo data (Kit 5 reuses its customers and Salesforce note)
-  state/
-    machine.ts         GD's state machine
-    types.ts           Dashboard state shape, shared by both versions
-  hooks/
-    useDashboard.ts    Wires GD's state machine to React
-  components/          Shared UI blocks (Sidebar, CapitalBar, BridgeQueue, ActivityFeed, …)
+  seed.ts              Customer profiles, Salesforce note and AI text reused by the scenarios
+  state/types.ts       Dashboard state shape the components render
+  components/          UI blocks (Sidebar, CapitalBar, BridgeQueue, ActivityFeed, …)
   policy/              Underwriting rules as pure, tested functions (tiers, credit line, bands, fees)
   services/            Typed interfaces + mocks for Airwallex, CRM and the AI agent — NOT wired
                        into the UI yet (see docs/EDITING.md)
 tests/policy/          Unit tests for policy/
-tests/kit5/            Plays every Kit 5 scenario end to end and checks the outcomes
+tests/kit5/            Plays every scenario end to end and checks the outcomes
 ```
 
-Data flows one way in both versions, and both render the same components:
-
-- Kit 5: **`kit5/scenarios.ts` → `kit5/engine.ts` (uses `policy/`) → `useKit5Dashboard` → components**
-- GD: **`seed.ts` → `state/machine.ts` (uses `policy/`) → `useDashboard` → components**
+Data flows one way: **`kit5/scenarios.ts` → `kit5/engine.ts` (uses `policy/`) → `useKit5Dashboard` → components.**
 
 ## Editing
 
-See **[docs/EDITING.md](docs/EDITING.md)** for recipes: changing copy and numbers, adding a
-customer, restyling, changing policy rules, and where to plug in real APIs.
+See **[docs/EDITING.md](docs/EDITING.md)** for recipes: changing numbers and scenarios,
+restyling, changing policy rules, and where to plug in the backend.
 
 ## Tech
 

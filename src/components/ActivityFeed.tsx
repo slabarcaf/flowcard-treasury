@@ -2,6 +2,9 @@ import type { FeedEvent } from '../state/types.js';
 
 interface Props {
   events: FeedEvent[];
+  /** Collapsed to a narrow rail so the queue gets the full width. */
+  collapsed?: boolean;
+  onToggle?: () => void;
 }
 
 const TYPE_COLORS: Record<FeedEvent['type'], string> = {
@@ -24,13 +27,48 @@ const TYPE_DOTS: Record<FeedEvent['type'], string> = {
   info: 'bg-gray-400',
 };
 
-export function ActivityFeed({ events }: Props) {
+function Chevron({ direction }: { direction: 'left' | 'right' }) {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d={direction === 'left' ? 'M15.75 19.5L8.25 12l7.5-7.5' : 'M8.25 4.5l7.5 7.5-7.5 7.5'} />
+    </svg>
+  );
+}
+
+export function ActivityFeed({ events, collapsed = false, onToggle }: Props) {
+  if (collapsed) {
+    return (
+      <button
+        onClick={onToggle}
+        aria-label="Show activity"
+        title="Show activity"
+        className="w-10 shrink-0 border-l border-gray-200 bg-white hover:bg-gray-50 flex flex-col items-center gap-3 pt-4 text-gray-500 hover:text-gray-800 cursor-pointer"
+      >
+        <Chevron direction="left" />
+        <span className="text-xs font-semibold [writing-mode:vertical-rl] rotate-180">Activity</span>
+        {events.length > 0 && (
+          <span className="text-[10px] font-mono bg-gray-100 rounded-full px-1.5 py-0.5">{events.length}</span>
+        )}
+      </button>
+    );
+  }
+
   return (
     <div className="w-80 shrink-0 border-l border-gray-200 bg-white">
-      <div className="px-5 py-4 border-b border-gray-200">
+      <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900">
           Activity
         </h3>
+        {onToggle && (
+          <button
+            onClick={onToggle}
+            aria-label="Hide activity"
+            title="Hide activity"
+            className="text-gray-400 hover:text-gray-700 cursor-pointer"
+          >
+            <Chevron direction="right" />
+          </button>
+        )}
       </div>
       <div className="overflow-y-auto max-h-[calc(100vh-130px)] px-5 py-3 space-y-0.5">
         {events.length === 0 && (
