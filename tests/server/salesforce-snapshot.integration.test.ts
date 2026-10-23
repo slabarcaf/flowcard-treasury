@@ -28,7 +28,13 @@ describe("Salesforce snapshot acceptance composition", () => {
     ]);
     expect(published).toHaveLength(2);
     expect(published.every((candidate) => Object.values(candidate.queryCompletion).every(({ complete }) => complete))).toBe(true);
-    expect(published.find(({ customerId }) => customerId === "acct_bloom001")?.payload).toEqual(getDemoSalesforceSnapshot("acct_bloom001"));
+    const bloomFixture = getDemoSalesforceSnapshot("acct_bloom001");
+    expect(bloomFixture).not.toBeNull();
+    expect(published.find(({ customerId }) => customerId === "acct_bloom001")?.payload).toEqual({
+      ...bloomFixture!,
+      mappingVersion: "salesforce-demo-fixture-v1",
+      mappingVerified: true,
+    });
   });
 
   it("keeps a per-customer source failure isolated from complete fixture publication", async () => {

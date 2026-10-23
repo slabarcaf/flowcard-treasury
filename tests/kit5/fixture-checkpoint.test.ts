@@ -26,6 +26,8 @@ import {
 
 function renderDashboard(apiBaseUrl = '') {
   runtime.index = 0;
+  // The hook is exercised directly through this lightweight test harness.
+  // oxlint-disable-next-line react-hooks/rules-of-hooks
   return useKit5Dashboard(apiBaseUrl);
 }
 

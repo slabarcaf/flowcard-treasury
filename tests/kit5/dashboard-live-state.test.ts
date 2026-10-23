@@ -34,24 +34,26 @@ function resetHookRenderCursor() {
   runtime.refIndex = 0;
 }
 
-function useDashboardForTest() {
+function renderDashboard() {
   resetHookRenderCursor();
+  // The hook is exercised directly through this lightweight test harness.
+  // oxlint-disable-next-line react-hooks/rules-of-hooks
   return useKit5Dashboard('http://localhost:8000');
 }
 
 async function prepareFixtureCheckpoint(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal('fetch', fetchMock);
-  let dashboard = useDashboardForTest();
+  let dashboard = renderDashboard();
   await dashboard.authenticateOperator('runtime-only-token');
-  dashboard = useDashboardForTest();
+  dashboard = renderDashboard();
   dashboard.selectScenario('kit5-target');
-  dashboard = useDashboardForTest();
+  dashboard = renderDashboard();
   dashboard.selectMode('fixture-checkpoint');
-  dashboard = useDashboardForTest();
+  dashboard = renderDashboard();
   dashboard.scan();
-  dashboard = useDashboardForTest();
+  dashboard = renderDashboard();
   dashboard.advance();
-  return useDashboardForTest();
+  return renderDashboard();
 }
 
 function completedCheckpoint(result: {
@@ -142,13 +144,13 @@ describe('Kit 5 live dashboard recovery state', () => {
         },
       }) });
     vi.stubGlobal('fetch', fetchMock);
-    let dashboard = useDashboardForTest();
+    let dashboard = renderDashboard();
     await dashboard.authenticateOperator('runtime-only-token');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.selectMode('sandbox-live');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     await dashboard.submitNextCustomer();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.liveHistory).toHaveLength(1);
     expect(dashboard.liveAction?.status).toBe('completed');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
@@ -158,7 +160,7 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body))).toMatchObject({ customerId: 'acct_bloom001' });
 
     dashboard.selectScenario(loadScenarios()[1]!.id);
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.liveAction).toBeNull();
     expect(dashboard.liveHistory).toEqual([]);
     expect(dashboard.liveError).toBeNull();
@@ -180,18 +182,18 @@ describe('Kit 5 live dashboard recovery state', () => {
         },
       }) });
     vi.stubGlobal('fetch', fetchMock);
-    let dashboard = useDashboardForTest();
+    let dashboard = renderDashboard();
     await dashboard.authenticateOperator('runtime-only-token');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.selectMode('sandbox-live');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     await dashboard.submitNextCustomer();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.liveAction?.status).toBe('unresolved');
     expect(dashboard.liveComplete).toBe(false);
     expect(dashboard.livePending).toBe(false);
     await dashboard.refreshLiveAction();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.liveAction?.status).toBe('completed');
     expect(dashboard.liveHistory).toHaveLength(1);
     expect(dashboard.liveComplete).toBe(false);
@@ -213,26 +215,26 @@ describe('Kit 5 live dashboard recovery state', () => {
         },
       }) });
     vi.stubGlobal('fetch', fetchMock);
-    let dashboard = useDashboardForTest();
+    let dashboard = renderDashboard();
     await dashboard.authenticateOperator('runtime-only-token');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.selectMode('sandbox-live');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     const originalCustomerIndex = dashboard.nextLiveCustomer?.event.requestId;
     await dashboard.submitNextCustomer();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.liveAction?.status).toBe('unresolved');
     expect(dashboard.liveBlocked).toBe(true);
 
     await dashboard.refreshLiveAction();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.liveAction?.status).toBe('not_persisted');
     expect(dashboard.liveBlocked).toBe(false);
     expect(dashboard.nextLiveCustomer?.event.requestId).toBe(originalCustomerIndex);
     expect(dashboard.liveError).toContain('Retry this same customer and action');
 
     await dashboard.submitNextCustomer();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.liveAction?.status).toBe('completed');
     expect(dashboard.liveAction?.attemptId).toBe('original:txn_bloom_payroll_001');
     expect(dashboard.liveHistory).toHaveLength(1);
@@ -260,17 +262,17 @@ describe('Kit 5 live dashboard recovery state', () => {
         },
       }) });
     vi.stubGlobal('fetch', fetchMock);
-    let dashboard = useDashboardForTest();
+    let dashboard = renderDashboard();
     await dashboard.authenticateOperator('runtime-only-token');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.selectMode('sandbox-live');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     await dashboard.submitNextCustomer();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.liveAction).toBeNull();
     expect(dashboard.liveComplete).toBe(false);
     await dashboard.submitNextCustomer();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.liveHistory).toHaveLength(1);
     expect(dashboard.liveAction?.status).toBe('completed');
     expect(dashboard.liveComplete).toBe(false);
@@ -280,7 +282,7 @@ describe('Kit 5 live dashboard recovery state', () => {
   it('keeps fixture interactions away from provider-action endpoints', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const dashboard = useDashboardForTest();
+    const dashboard = renderDashboard();
     dashboard.scan();
     dashboard.advance();
     await dashboard.submitNextCustomer();
@@ -290,14 +292,14 @@ describe('Kit 5 live dashboard recovery state', () => {
   it('holds the target Bloom event in checkpoint mode without creating a live request', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    let dashboard = useDashboardForTest();
+    let dashboard = renderDashboard();
     dashboard.selectScenario('kit5-target');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.selectMode('fixture-checkpoint');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.scan();
     dashboard.advance();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
 
     expect(dashboard.fixtureCheckpointPaused).toBe(true);
     expect(dashboard.state.cursor).toBe(0);
@@ -306,9 +308,9 @@ describe('Kit 5 live dashboard recovery state', () => {
   });
 
   it('restores checkpoint mode after reload when the presenter enabled it before the provider attempt', () => {
-    let dashboard = useDashboardForTest();
+    let dashboard = renderDashboard();
     dashboard.selectScenario('kit5-target');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.selectMode('fixture-checkpoint');
 
     const saved = JSON.parse(window.sessionStorage.getItem('flowcard-kit5-fixture-checkpoint:kit5-target') ?? '{}') as Record<string, unknown>;
@@ -317,9 +319,9 @@ describe('Kit 5 live dashboard recovery state', () => {
 
     runtime.values = [];
     runtime.refs = [];
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.selectScenario('kit5-target');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
 
     expect(dashboard.mode).toBe('fixture-checkpoint');
     expect(dashboard.fixtureCheckpointRunId).toBe(runId);
@@ -335,9 +337,9 @@ describe('Kit 5 live dashboard recovery state', () => {
     const runId = '00000000-0000-4000-8000-000000000002';
     persistCheckpointRun({ runId, activity: checkpointActivity(runId, status, result), resolution, enabled });
 
-    let dashboard = useDashboardForTest();
+    let dashboard = renderDashboard();
     dashboard.selectScenario('kit5-target');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
 
     expect(dashboard.mode).toBe('fixture-checkpoint');
     expect(dashboard.fixtureCheckpointRunId).toBe(runId);
@@ -345,10 +347,10 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(dashboard.fixtureCheckpointPaused).toBe(true);
     expect(dashboard.state.cursor).toBe(0);
     dashboard.advance();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.state.cursor).toBe(0);
     dashboard.selectMode('fixture');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.mode).toBe('fixture-checkpoint');
   });
 
@@ -359,9 +361,9 @@ describe('Kit 5 live dashboard recovery state', () => {
     }).result);
     persistCheckpointRun({ runId, activity, resolution: 'confirmed' });
 
-    let dashboard = useDashboardForTest();
+    let dashboard = renderDashboard();
     dashboard.selectScenario('kit5-target');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
 
     expect(dashboard.mode).toBe('fixture-checkpoint');
     expect(dashboard.fixtureCheckpointActivity).toEqual(activity);
@@ -439,7 +441,7 @@ describe('Kit 5 live dashboard recovery state', () => {
     let dashboard = await prepareFixtureCheckpoint(fetchMock);
     const clockBeforeRequest = dashboard.state.demoClock;
     const request = dashboard.runFixtureCheckpoint();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
 
     expect(dashboard.fixtureCheckpointPending).toBe(true);
     expect(dashboard.fixtureCheckpointPaused).toBe(true);
@@ -453,7 +455,7 @@ describe('Kit 5 live dashboard recovery state', () => {
       json: async () => completedCheckpoint({ processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS' }),
     });
     await request;
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.fixtureCheckpointPaused).toBe(true);
     expect(dashboard.state.cursor).toBe(0);
     expect(dashboard.state.queue).toHaveLength(0);
@@ -467,7 +469,7 @@ describe('Kit 5 live dashboard recovery state', () => {
 
     expect(dashboard.fixtureCheckpointPaused).toBe(true);
     await dashboard.runFixtureCheckpoint();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.fixtureCheckpointProviderConfirmed).toBe(true);
     expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
     expect(dashboard.fixtureCheckpointPaused).toBe(true);
@@ -481,20 +483,20 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(input.actionId).toBe(`${input.scenarioId}:txn_bloom_supplier_001`);
 
     dashboard.reset();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.fixtureCheckpointRunId).toBe(input.scenarioId.split(':')[1]);
     await dashboard.runFixtureCheckpoint();
     expect(fetchMock.mock.calls.filter(([url]) => url === 'http://localhost:8000/api/kit5/fixture-checkpoint')).toHaveLength(1);
 
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.selectMode('fixture');
     dashboard.selectScenario('original');
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.mode).toBe('fixture-checkpoint');
     expect(dashboard.scenario.id).toBe('kit5-target');
 
     dashboard.confirmFixtureCheckpoint();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.fixtureCheckpointResolution).toBe('confirmed');
   });
 
@@ -507,13 +509,13 @@ describe('Kit 5 live dashboard recovery state', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => completedCheckpoint(result) });
     let dashboard = await prepareFixtureCheckpoint(fetchMock);
     await dashboard.runFixtureCheckpoint();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
 
     expect(dashboard.fixtureCheckpointProviderConfirmed).toBe(false);
     expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
     expect(dashboard.fixtureCheckpointPaused).toBe(true);
     dashboard.confirmFixtureCheckpoint();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
     expect(dashboard.fixtureCheckpointError).toContain('does not confirm an insufficient-funds decline');
   });
@@ -530,16 +532,16 @@ describe('Kit 5 live dashboard recovery state', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => completedCheckpoint({ processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS' }) });
     let dashboard = await prepareFixtureCheckpoint(fetchMock);
     await dashboard.runFixtureCheckpoint();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
 
     expect(dashboard.fixtureCheckpointUnresolved).toBe(true);
     expect(dashboard.fixtureCheckpointPaused).toBe(true);
     dashboard.continueFixtureOnly();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
 
     await dashboard.reconcileFixtureCheckpoint();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.fixtureCheckpointUnresolved).toBe(false);
     expect(dashboard.fixtureCheckpointProviderConfirmed).toBe(true);
     expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
@@ -571,9 +573,9 @@ describe('Kit 5 live dashboard recovery state', () => {
     finishCreate?.({ ok: true, status: 200, json: async () => completedCheckpoint({ processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS' }) });
     await firstSubmit;
 
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     dashboard.startNewFixtureCheckpointRun();
-    dashboard = useDashboardForTest();
+    dashboard = renderDashboard();
     expect(dashboard.fixtureCheckpointRunId).not.toBe(firstRunId);
     await dashboard.runFixtureCheckpoint();
     const checkpointCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/kit5/fixture-checkpoint'));

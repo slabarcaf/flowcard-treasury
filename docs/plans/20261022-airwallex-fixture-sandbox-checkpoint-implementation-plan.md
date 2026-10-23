@@ -269,12 +269,12 @@ create another provider attempt; a new provider run gets a new run UUID.
 **Files:**
 - No production files; fix failures in the owning task before proceeding.
 
-- [ ] Run `npm test` with no live provider calls.
-- [ ] Run `npm run lint`.
-- [ ] Run `npm run build`.
-- [ ] Run `git diff --check` and confirm no credentials or provider IDs were
+- [x] Run `npm test` with no live provider calls.
+- [x] Run `npm run lint`.
+- [x] Run `npm run build`.
+- [x] Run `git diff --check` and confirm no credentials or provider IDs were
       added to browser code, fixtures, or committed documentation.
-- [ ] Confirm the automated result distinguishes provider-confirmed
+- [x] Confirm the automated result distinguishes provider-confirmed
       insufficient funds from explicit fixture-only continuation.
 
 ### Task 7: Document the hybrid presenter flow
