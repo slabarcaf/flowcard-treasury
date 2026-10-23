@@ -25,6 +25,7 @@ export interface IssuingSimulationResponse {
   /** Present only when Airwallex returns transaction facts with the simulation result. */
   transactionType?: "AUTHORIZATION" | "CLEARING";
   transactionCategory?: string;
+  merchantName?: string;
   merchantCategoryCode?: string;
   accountId?: string;
   cardId?: string;
@@ -215,8 +216,11 @@ export class HttpAirwallexGateway implements AirwallexGateway, IssuingSimulation
   }
 
   getIssuingLifecycle(lifecycleId: string, accountId: string): Promise<unknown | null> {
-    return this.getIssuingLifecycleEvents(lifecycleId, accountId).then((events) =>
-      events?.length === 1 ? events[0] ?? null : null);
+    return this.get(`/api/v1/issuing/lifecycles/${encodeURIComponent(lifecycleId)}`, { "x-on-behalf-of": accountId })
+      .catch((error: unknown) => {
+        if (error instanceof ProviderHttpError && error.status === 404) return null;
+        throw error;
+      });
   }
 
   async getIssuingLifecycleEvents(lifecycleId: string, accountId: string): Promise<unknown[] | null> {

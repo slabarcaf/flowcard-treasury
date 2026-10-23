@@ -70,7 +70,9 @@ export async function handleKit5FixtureCheckpoint(
     }
     // Intentionally omit dependencies.bridgeFunding. This route only records
     // and reconciles the Airwallex issuing attempt.
-    const outcome = await processNextCustomerAction(dependencies.pool, dependencies.gateway, input, fixture);
+    const outcome = await processNextCustomerAction(dependencies.pool, dependencies.gateway, input, fixture, undefined, {
+      requireCheckpointIdentity: true,
+    });
     if (outcome.status === "rejected") {
       send(response, 409, { status: "rejected", reason: outcome.reason });
       return;
@@ -234,15 +236,24 @@ export async function handleKit5AttemptStatus(
     send(response, 400, { error: "invalid_action" });
     return;
   }
-  const fixture = await dependencies.resolveScenario(input.scenarioId);
+  const isFixtureCheckpoint = isKit5FixtureCheckpointInput(input);
+  const fixture = isFixtureCheckpoint
+    ? await dependencies.resolveFixtureCheckpoint?.(input) ?? null
+    : await dependencies.resolveScenario(input.scenarioId);
+  if (isFixtureCheckpoint && !fixture) {
+    send(response, 409, { status: "rejected", reason: "fixture_checkpoint_mapping_unavailable" });
+    return;
+  }
   const attemptedAmount = fixture?.resolveCustomer(input.customerId);
-  let attempt = await reconcileKit5CustomerAction(dependencies.pool, dependencies.gateway, input, fixture);
+  let attempt = await reconcileKit5CustomerAction(dependencies.pool, dependencies.gateway, input, fixture, {
+    requireCheckpointIdentity: isFixtureCheckpoint,
+  });
   if (!attempt) {
     send(response, 404, { error: "kit5_attempt_not_found" });
     return;
   }
   const customer = fixture?.resolveCustomer(input.customerId);
-  if (attempt.status === "completed" && attempt.result && customer && dependencies.bridgeFunding?.recover) {
+  if (!isFixtureCheckpoint && attempt.status === "completed" && attempt.result && customer && dependencies.bridgeFunding?.recover) {
     await dependencies.bridgeFunding.recover({
       ...input,
       accountId: customer.accountId,

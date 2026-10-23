@@ -91,6 +91,7 @@ export function normalizeIssuingResponse(value: unknown, expectedLifecycleId?: s
   const merchant = typeof response.merchant === "object" && response.merchant !== null && !Array.isArray(response.merchant)
     ? response.merchant as Record<string, unknown>
     : null;
+  const merchantName = optionalProviderString(response.merchant_name ?? merchant?.name, "merchant_name");
   const merchantCategoryCode = optionalProviderString(
     response.merchant_category_code ?? merchant?.category_code,
     "merchant_category_code",
@@ -114,6 +115,7 @@ export function normalizeIssuingResponse(value: unknown, expectedLifecycleId?: s
     cardTransactionLifecycleId,
     ...(transactionType === undefined ? {} : { transactionType }),
     ...(transactionCategory === undefined ? {} : { transactionCategory }),
+    ...(merchantName === undefined ? {} : { merchantName }),
     ...(merchantCategoryCode === undefined ? {} : { merchantCategoryCode }),
     ...(accountId === undefined ? {} : { accountId }),
     ...(cardId === undefined ? {} : { cardId }),

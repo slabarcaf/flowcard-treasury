@@ -152,6 +152,36 @@ describe("Airwallex gateway", () => {
     expect(calls[0]?.headers.get("x-api-version")).toBe("2026-08-21");
   });
 
+  it("keeps generic lifecycle retrieval independent from the number of lifecycle events", async () => {
+    const calls: URL[] = [];
+    const lifecycle = {
+      process_result: "DECLINED",
+      failure_reason: "INSUFFICIENT_FUNDS",
+      card_transaction_event_id: "latest-event",
+      card_transaction_id: "transaction-1",
+      card_transaction_lifecycle_id: "lifecycle-1",
+      events: [{ id: "authorization-event" }, { id: "clearing-event" }],
+    };
+    const gateway = new HttpAirwallexGateway({
+      baseUrl: "https://airwallex.invalid",
+      clientId: "id",
+      apiKey: "key",
+      fetcher: async (input) => {
+        const url = new URL(String(input));
+        calls.push(url);
+        if (url.pathname.endsWith("/authentication/login")) return new Response(JSON.stringify({ token: "access" }));
+        return new Response(JSON.stringify(lifecycle));
+      },
+    });
+
+    await expect(gateway.getIssuingLifecycle("lifecycle-1", "account-bloom")).resolves.toEqual(lifecycle);
+
+    expect(calls.map(({ pathname }) => pathname)).toEqual([
+      "/api/v1/authentication/login",
+      "/api/v1/issuing/lifecycles/lifecycle-1",
+    ]);
+  });
+
   it("creates a settled Global Account deposit simulation on behalf of a connected account", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const gateway = new HttpAirwallexGateway({

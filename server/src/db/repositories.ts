@@ -335,6 +335,22 @@ export async function finishKit5Attempt(
   if (result.rowCount !== 1) throw new Error("Kit 5 attempt could not be finalized");
 }
 
+/** Remove an unverified checkpoint result from the sequence and leave its provider lifecycle unresolved. */
+export async function invalidateKit5CheckpointResult(
+  pool: Pick<DatabasePool, "query">,
+  input: { scenarioId: string; actionId: string },
+): Promise<void> {
+  const result = await pool.query(
+    `UPDATE kit5_card_attempts
+        SET status = 'ambiguous', provider_result = NULL, error = 'checkpoint_identity_unverified', updated_at = now()
+      WHERE scenario_id = $1 AND action_id = $2 AND status = 'completed'
+        AND funding_claimed = false AND policy_status = 'not_started'
+        AND retry_lifecycle_id IS NULL AND retry_request_id IS NULL`,
+    [input.scenarioId, input.actionId],
+  );
+  if (result.rowCount !== 1) throw new Error("Kit 5 checkpoint result could not be invalidated");
+}
+
 export async function getKit5CardAttempt(
   pool: Pick<DatabasePool, "query">,
   scenarioId: string,

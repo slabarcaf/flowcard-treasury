@@ -7,6 +7,7 @@ import {
   claimKit5ProviderCreate,
   finishKit5Attempt,
   getKit5CardAttempt,
+  invalidateKit5CheckpointResult,
   resolveKit5AttemptLifecycle,
   setKit5AttemptLifecycle,
   type Kit5CardAttempt,
@@ -82,6 +83,7 @@ export async function processNextCustomerAction(
   input: NextCustomerInput,
   fixture: Kit5CustomerFixture | null,
   bridgeFunding?: Kit5BridgeFundingBoundary,
+  options: { requireCheckpointIdentity?: boolean } = {},
 ): Promise<NextCustomerOutcome> {
   if (!fixture) return { status: "rejected", reason: "unknown_scenario" };
   const customer = fixture.resolveCustomer(input.customerId);
@@ -101,14 +103,23 @@ export async function processNextCustomerAction(
   let attempt = action.attempt;
   let ownsProviderCreate = false;
   if (!action.created && attempt.status === "completed" && attempt.result) {
-    await bridgeFunding?.recover?.({ ...input, accountId: customer.accountId, cardId: customer.cardId,
-      attemptedAmountCents: customer.amountCents, amountCents: customer.amountCents, currency: customer.currency,
-      providerResult: decodeResult(attempt.result) });
-    const refreshed = await requiredAttempt(pool, input);
-    const result = decodeResult(attempt.result);
-    return isFundingPending(refreshed, result)
-      ? { status: "in_progress", attempt: refreshed }
-      : { status: "completed", attempt: refreshed, result };
+    if (options.requireCheckpointIdentity) {
+      const result = decodeResult(attempt.result);
+      if (matchesCheckpointResult(result, attempt.requestFacts, customer.accountId, attempt.lifecycleId)) {
+        return { status: "completed", attempt, result };
+      }
+      await invalidateKit5CheckpointResult(pool, input);
+      attempt = await requiredAttempt(pool, input);
+    } else {
+      await bridgeFunding?.recover?.({ ...input, accountId: customer.accountId, cardId: customer.cardId,
+        attemptedAmountCents: customer.amountCents, amountCents: customer.amountCents, currency: customer.currency,
+        providerResult: decodeResult(attempt.result) });
+      const refreshed = await requiredAttempt(pool, input);
+      const result = decodeResult(attempt.result);
+      return isFundingPending(refreshed, result)
+        ? { status: "in_progress", attempt: refreshed }
+        : { status: "completed", attempt: refreshed, result };
+    }
   }
   if (!action.created && attempt.status === "failed") return { status: "failed", attempt };
 
@@ -133,6 +144,11 @@ export async function processNextCustomerAction(
   if (!ownsProviderCreate) {
     const existing = attempt;
     if ((existing.status === "in_progress" || existing.status === "ambiguous") && existing.lifecycleId) {
+      if (options.requireCheckpointIdentity) {
+        const result = await reconcileSavedCheckpointLifecycle(pool, gateway, input, existing, customer, policyFacts);
+        if (result) return result;
+        return { status: existing.status === "ambiguous" ? "ambiguous" : "in_progress", attempt: existing };
+      }
       try {
         const lifecycle = await gateway.getIssuingLifecycle(existing.lifecycleId, customer.accountId);
         if (lifecycle !== null) {
@@ -175,6 +191,13 @@ export async function processNextCustomerAction(
     }
     throw error;
   }
+  if (options.requireCheckpointIdentity) {
+    const persisted = await requiredAttempt(pool, input);
+    if (!matchesCheckpointResult(result, persisted.requestFacts, customer.accountId, persisted.lifecycleId)) {
+      await finishKit5Attempt(pool, { ...input, status: "ambiguous", error: "checkpoint_identity_unverified" });
+      return { status: "ambiguous", attempt: await requiredAttempt(pool, input) };
+    }
+  }
   await finishKit5Attempt(pool, { ...input, status: "completed", result: resultRecord(result) });
   await maybeFundAndRetry(pool, bridgeFunding, input, customer, result);
   const finalAttempt = await requiredAttempt(pool, input);
@@ -188,13 +211,33 @@ export async function reconcileKit5CustomerAction(
   gateway: IssuingSimulationGateway,
   input: Pick<NextCustomerInput, "scenarioId" | "customerId" | "actionId">,
   fixture: Kit5CustomerFixture | null,
+  options: { requireCheckpointIdentity?: boolean } = {},
 ): Promise<Kit5CardAttempt | null> {
   if (!fixture) return null;
   const customer = fixture.resolveCustomer(input.customerId);
   if (!customer) return null;
-  const attempt = await getKit5CardAttempt(pool, input.scenarioId, input.actionId);
+  let attempt = await getKit5CardAttempt(pool, input.scenarioId, input.actionId);
   if (!attempt || attempt.customerId !== input.customerId) return null;
+  if (options.requireCheckpointIdentity && attempt.status === "completed" && attempt.result) {
+    const policyFacts = fixture.policyFacts?.(input.customerId);
+    const result = decodeResult(attempt.result);
+    if (!policyFacts || !matchesTrustedCheckpointRequest(attempt.requestFacts, customer, policyFacts) ||
+        !matchesCheckpointResult(result, attempt.requestFacts, customer.accountId, attempt.lifecycleId)) {
+      await invalidateKit5CheckpointResult(pool, input);
+      attempt = await requiredAttempt(pool, input);
+    }
+  }
   if ((attempt.status !== "in_progress" && attempt.status !== "ambiguous") || !attempt.lifecycleId) return attempt;
+  if (options.requireCheckpointIdentity) {
+    const policyFacts = fixture.policyFacts?.(input.customerId);
+    if (!policyFacts) return attempt;
+    const outcome = await reconcileSavedCheckpointLifecycle(pool, gateway, {
+      ...input,
+      customerId: input.customerId,
+      actionId: input.actionId,
+    }, attempt, customer, policyFacts);
+    return outcome.status === "completed" ? outcome.attempt : await getKit5CardAttempt(pool, input.scenarioId, input.actionId);
+  }
   try {
     const lifecycle = await gateway.getIssuingLifecycle(attempt.lifecycleId, customer.accountId);
     if (lifecycle === null) return attempt;
@@ -224,16 +267,22 @@ export async function reconcileKit5CheckpointLifecycle(
   if (!attempt || attempt.customerId !== input.customerId) {
     return { status: "rejected", reason: "checkpoint_attempt_not_found" };
   }
+  if (attempt.lifecycleId && attempt.lifecycleId !== input.lifecycleId) {
+    return { status: "rejected", reason: "checkpoint_lifecycle_conflict" };
+  }
   if (attempt.status === "completed" && attempt.result) {
-    return { status: "completed", attempt, result: decodeResult(attempt.result) };
+    const policyFacts = fixture.policyFacts?.(input.customerId);
+    const result = decodeResult(attempt.result);
+    if (policyFacts && matchesTrustedCheckpointRequest(attempt.requestFacts, customer, policyFacts) &&
+        matchesCheckpointResult(result, attempt.requestFacts, customer.accountId, attempt.lifecycleId)) {
+      return { status: "completed", attempt, result };
+    }
+    await invalidateKit5CheckpointResult(pool, input);
+    attempt = await requiredAttempt(pool, input);
   }
   if (!["submitting", "in_progress", "ambiguous"].includes(attempt.status)) {
     return { status: "rejected", reason: "checkpoint_attempt_not_unresolved" };
   }
-  if (attempt.lifecycleId && attempt.lifecycleId !== input.lifecycleId) {
-    return { status: "rejected", reason: "checkpoint_lifecycle_conflict" };
-  }
-
   const policyFacts = fixture.policyFacts?.(input.customerId);
   if (!policyFacts || !matchesTrustedCheckpointRequest(attempt.requestFacts, customer, policyFacts)) {
     return unresolvedCheckpoint(attempt);
@@ -278,7 +327,7 @@ function matchesTrustedCheckpointRequest(
   customer: Omit<IssuingSimulationInput, "scenarioId">,
   policyFacts: ReturnType<NonNullable<Kit5CustomerFixture["policyFacts"]>>,
 ): boolean {
-  return saved !== null && saved.accountId === customer.accountId && saved.cardId === customer.cardId &&
+  return saved != null && saved.accountId === customer.accountId && saved.cardId === customer.cardId &&
     saved.amountCents === customer.amountCents && saved.currency === customer.currency &&
     saved.merchant === customer.merchant && saved.transactionType === policyFacts.transactionType &&
     saved.transactionCategory === policyFacts.transactionCategory &&
@@ -292,7 +341,7 @@ function matchesCheckpointLifecycle(
   scopedAccountId: string,
   expectedLifecycleId: string,
 ): boolean {
-  if (facts === null || typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  if (facts == null || typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const lifecycle = value as Record<string, unknown>;
   const merchant = typeof lifecycle.merchant === "object" && lifecycle.merchant !== null && !Array.isArray(lifecycle.merchant)
     ? lifecycle.merchant as Record<string, unknown>
@@ -342,6 +391,68 @@ function normalizeCheckpointLifecycleEvent(value: unknown, expectedLifecycleId: 
 
 function unresolvedCheckpoint(attempt: Kit5CardAttempt): NextCustomerOutcome {
   return { status: attempt.status === "ambiguous" ? "ambiguous" : "in_progress", attempt };
+}
+
+async function reconcileSavedCheckpointLifecycle(
+  pool: DatabasePool,
+  gateway: IssuingSimulationGateway,
+  input: NextCustomerInput,
+  attempt: Kit5CardAttempt,
+  customer: Omit<IssuingSimulationInput, "scenarioId">,
+  policyFacts: NonNullable<ReturnType<NonNullable<Kit5CustomerFixture["policyFacts"]>>>,
+): Promise<NextCustomerOutcome> {
+  if (!attempt.lifecycleId || !matchesTrustedCheckpointRequest(attempt.requestFacts, customer, policyFacts)) {
+    return unresolvedCheckpoint(attempt);
+  }
+
+  let events: unknown[] | null;
+  try {
+    events = await gateway.getIssuingLifecycleEvents?.(attempt.lifecycleId, customer.accountId) ?? null;
+  } catch {
+    return unresolvedCheckpoint(attempt);
+  }
+  if (events === null) return unresolvedCheckpoint(attempt);
+
+  const matchingEvents = events.filter((event) =>
+    matchesCheckpointLifecycle(event, attempt.requestFacts, customer.accountId, attempt.lifecycleId!));
+  if (matchingEvents.length !== 1) {
+    if (events.length > 0) {
+      await finishKit5Attempt(pool, { ...input, status: "ambiguous", error: "checkpoint_identity_unverified" });
+      return { status: "ambiguous", attempt: await requiredAttempt(pool, input) };
+    }
+    return unresolvedCheckpoint(attempt);
+  }
+
+  try {
+    const event = normalizeCheckpointLifecycleEvent(matchingEvents[0], attempt.lifecycleId);
+    if (!event) return unresolvedCheckpoint(attempt);
+    const result = normalizeIssuingResponse(event, attempt.lifecycleId);
+    if (!matchesCheckpointResult(result, attempt.requestFacts, customer.accountId, attempt.lifecycleId)) {
+      await finishKit5Attempt(pool, { ...input, status: "ambiguous", error: "checkpoint_identity_unverified" });
+      return { status: "ambiguous", attempt: await requiredAttempt(pool, input) };
+    }
+    await finishKit5Attempt(pool, { ...input, status: "completed", result: resultRecord(result) });
+    return { status: "completed", attempt: await requiredAttempt(pool, input), result };
+  } catch {
+    return unresolvedCheckpoint(attempt);
+  }
+}
+
+function matchesCheckpointResult(
+  result: IssuingSimulationResponse,
+  facts: Kit5CardAttempt["requestFacts"],
+  scopedAccountId: string,
+  expectedLifecycleId: string | null,
+): boolean {
+  return facts != null && expectedLifecycleId !== null && facts.accountId === scopedAccountId &&
+    (result.accountId === undefined || result.accountId === scopedAccountId) && result.cardId === facts.cardId &&
+    result.transactionAmountCents === facts.amountCents &&
+    result.transactionCurrency?.toUpperCase() === facts.currency.toUpperCase() &&
+    result.merchantName === facts.merchant &&
+    result.merchantCategoryCode === facts.merchantCategoryCode &&
+    result.transactionType === facts.transactionType &&
+    result.transactionCategory === facts.transactionCategory &&
+    result.cardTransactionLifecycleId === expectedLifecycleId;
 }
 
 async function maybeFundAndRetry(
@@ -411,6 +522,7 @@ function resultRecord(result: IssuingSimulationResponse): Record<string, unknown
     cardTransactionLifecycleId: result.cardTransactionLifecycleId,
     ...(result.transactionType === undefined ? {} : { transactionType: result.transactionType }),
     ...(result.transactionCategory === undefined ? {} : { transactionCategory: result.transactionCategory }),
+    ...(result.merchantName === undefined ? {} : { merchantName: result.merchantName }),
     ...(result.merchantCategoryCode === undefined ? {} : { merchantCategoryCode: result.merchantCategoryCode }),
     ...(result.accountId === undefined ? {} : { accountId: result.accountId }),
     ...(result.cardId === undefined ? {} : { cardId: result.cardId }),
@@ -435,6 +547,7 @@ function decodeResult(result: Record<string, unknown>): IssuingSimulationRespons
     cardTransactionLifecycleId: result.cardTransactionLifecycleId,
     ...(result.transactionType === "AUTHORIZATION" || result.transactionType === "CLEARING" ? { transactionType: result.transactionType } : {}),
     ...(typeof result.transactionCategory === "string" ? { transactionCategory: result.transactionCategory } : {}),
+    ...(typeof result.merchantName === "string" ? { merchantName: result.merchantName } : {}),
     ...(typeof result.merchantCategoryCode === "string" ? { merchantCategoryCode: result.merchantCategoryCode } : {}),
     ...(typeof result.accountId === "string" ? { accountId: result.accountId } : {}),
     ...(typeof result.cardId === "string" ? { cardId: result.cardId } : {}),

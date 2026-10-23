@@ -52,6 +52,18 @@ class MemoryPool implements DatabasePool {
             result: null,
             error: null,
             fundingClaimed: false,
+            requestFacts: values[4] ? JSON.parse(String(values[4])) as Kit5CardAttempt["requestFacts"] : null,
+            policyStatus: "not_started",
+            policyError: null,
+            policyDecisionId: null,
+            pendingPolicyDecisionId: null,
+            policyActorId: null,
+            policyApprovalReason: null,
+            bridgeId: null,
+            retryLifecycleId: null,
+            retryRequestId: null,
+            retryResult: null,
+            retryError: null,
           };
           this.attempts.set(this.key(attempt.scenarioId, attempt.actionId), attempt);
           return { rows: [this.row(attempt) as Row], rowCount: 1 };
@@ -122,8 +134,18 @@ class MemoryPool implements DatabasePool {
       provider_result: attempt.result,
       error: attempt.error,
       funding_claimed: attempt.fundingClaimed,
+      request_facts: attempt.requestFacts,
       policy_status: attempt.policyStatus,
+      policy_error: attempt.policyError,
+      policy_decision_id: attempt.policyDecisionId,
+      pending_policy_decision_id: attempt.pendingPolicyDecisionId,
+      policy_actor_id: attempt.policyActorId,
+      policy_approval_reason: attempt.policyApprovalReason,
       bridge_id: attempt.bridgeId,
+      retry_lifecycle_id: attempt.retryLifecycleId,
+      retry_request_id: attempt.retryRequestId,
+      retry_provider_result: attempt.retryResult,
+      retry_error: attempt.retryError,
     };
   }
 }
@@ -226,6 +248,12 @@ describe("Kit 5 mocked sandbox-live flow", () => {
         card_transaction_event_id: "evt_bloom_checkpoint",
         card_transaction_id: "txn_bloom_checkpoint",
         card_transaction_lifecycle_id: "life_bloom_checkpoint",
+        card_id: `fixture-card-${bloomCustomerId}`,
+        transaction_amount: 9_000,
+        transaction_currency: "USD",
+        merchant: { name: "Supplier", category_code: "5411" },
+        transaction_type: "AUTHORIZATION",
+        transaction_category: "PURCHASE",
       })),
       getIssuingLifecycle: vi.fn(async () => null),
     };

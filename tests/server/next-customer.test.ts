@@ -50,6 +50,16 @@ class MemoryPool implements DatabasePool {
       attempt.fundingClaimed = true;
       return { rows: [], rowCount: 1 };
     }
+    if (sql.includes("SET status = 'ambiguous', provider_result = NULL")) {
+      const attempt = this.get(String(values[0]), String(values[1]));
+      if (!attempt || attempt.status !== "completed" || attempt.fundingClaimed || attempt.policyStatus !== "not_started") {
+        return { rows: [], rowCount: 0 };
+      }
+      attempt.status = "ambiguous";
+      attempt.result = null;
+      attempt.error = "checkpoint_identity_unverified";
+      return { rows: [], rowCount: 1 };
+    }
     if (sql.includes("SET lifecycle_id =")) {
       const attempt = this.get(String(values[0]), String(values[1]));
       if (!attempt || attempt.status !== "submitting") return { rows: [], rowCount: 0 };
@@ -354,7 +364,7 @@ describe("Kit 5 next-customer persistence", () => {
     let releaseProvider!: () => void;
     const started = new Promise<void>((resolve) => { signalStarted = resolve; });
     const held = new Promise<void>((resolve) => { releaseProvider = resolve; });
-    const provider = gateway(async (request) => {
+    const provider = gateway(async (_request) => {
       signalStarted();
       await held;
       return providerResponse(providerLifecycleId);
@@ -381,7 +391,10 @@ describe("Kit 5 next-customer persistence", () => {
       retryLifecycleId: null, retryRequestId: null, retryResult: null, retryError: null,
     };
     pool.attempts.set(`${scenarioId}/${attempt.actionId}`, attempt);
-    const provider = gateway(async () => { throw new Error("create must not run during reconciliation"); }, async () => providerResponse("lifecycle-saved"));
+    const provider = gateway(async () => { throw new Error("create must not run during reconciliation"); }, async () => ({
+      ...providerResponse("lifecycle-saved"),
+      events: [{ id: "authorization-event" }, { id: "clearing-event" }],
+    }));
 
     const refreshed = await reconcileKit5CustomerAction(pool, provider, {
       scenarioId, customerId: customerIds[0]!, actionId: attempt.actionId,
