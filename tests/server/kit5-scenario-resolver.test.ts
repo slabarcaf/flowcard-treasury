@@ -73,6 +73,33 @@ describe("Kit 5 server-side scenario mappings", () => {
   });
 
   it.each([
+    ["missing", (id: string) => id !== "acct_atlas001" ? binding(id) : null],
+    ["inactive", (id: string) => binding(id, id === "acct_atlas001" ? { roster_active: false } : {})],
+  ])("resolves Bloom and preserves all five ordered IDs when another customer's mapping is %s", async (_name, makeRow) => {
+    const ids = ["acct_bloom001", "acct_atlas001", "acct_nova001", "acct_pixel001", "acct_juniper001"];
+    const rows = ids.flatMap((id) => {
+      const row = makeRow(id);
+      return row ? [row] : [];
+    });
+    const { pool, query } = poolWith(rows);
+    const scenarioId = "kit5-target:00000000-0000-4000-8000-000000000001";
+
+    const fixture = await createKit5FixtureCheckpointResolver(pool)({
+      scenarioId,
+      customerId: "acct_bloom001",
+      actionId: `${scenarioId}:txn_bloom_supplier_001`,
+    });
+
+    expect(fixture?.orderedCustomerIds).toEqual(ids);
+    expect(fixture?.resolveCustomer("acct_bloom001")).toMatchObject({
+      accountId: "verified-account-acct_bloom001",
+      cardId: "verified-card-acct_bloom001",
+    });
+    expect(fixture?.resolveCustomer("acct_atlas001")).toBeNull();
+    expect(query.mock.calls[0]?.[1]).toEqual([["acct_bloom001"]]);
+  });
+
+  it.each([
     ["another scenario", "original:00000000-0000-4000-8000-000000000001", "acct_bloom001", "original:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001"],
     ["the unscoped target", "kit5-target", "acct_bloom001", "kit5-target:txn_bloom_supplier_001"],
     ["another customer", "kit5-target:00000000-0000-4000-8000-000000000001", "acct_atlas001", "kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001"],

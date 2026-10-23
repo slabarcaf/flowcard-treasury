@@ -121,17 +121,36 @@ export function createKit5ScenarioResolver(pool: DatabasePool) {
  * the existing trusted scenario resolver.
  */
 export function createKit5FixtureCheckpointResolver(pool: DatabasePool) {
-  const resolveScenario = createKit5ScenarioResolver(pool);
   return async (input: NextCustomerInput): Promise<Kit5CustomerFixture | null> => {
     if (!isKit5FixtureCheckpointInput(input)) return null;
-    const fixture = await resolveScenario(input.scenarioId);
-    if (!fixture || fixture.orderedCustomerIds[0] !== KIT5_BLOOM_CUSTOMER_ID) return null;
-    const customer = fixture.resolveCustomer(KIT5_BLOOM_CUSTOMER_ID);
-    const facts = fixture.policyFacts?.(KIT5_BLOOM_CUSTOMER_ID);
-    if (!customer || customer.amountCents !== KIT5_BLOOM_CHECKPOINT_AMOUNT_CENTS ||
-        customer.currency !== "USD" || customer.merchant !== "Supplier" ||
-        customer.merchantCategoryCode !== "5411" || facts?.merchantCategoryCode !== "5411") return null;
-    return fixture;
+    const specs = SCENARIOS[KIT5_TARGET_SCENARIO_ID];
+    const bloomSpec = specs?.find((spec) => spec.customerId === KIT5_BLOOM_CUSTOMER_ID);
+    if (!specs || specs[0]?.customerId !== KIT5_BLOOM_CUSTOMER_ID || !bloomSpec ||
+        bloomSpec.amountCents !== KIT5_BLOOM_CHECKPOINT_AMOUNT_CENTS ||
+        bloomSpec.merchant !== "Supplier" || bloomSpec.merchantCategoryCode !== "5411") return null;
+
+    // Only Bloom needs an Airwallex binding for this provider checkpoint.
+    // Keep the complete scenario order for the durable first-attempt guard.
+    const bindings = await loadBindings(pool, [KIT5_BLOOM_CUSTOMER_ID]);
+    const bloomBinding = bindings?.[0];
+    if (!bloomBinding) return null;
+    const customer = {
+      accountId: bloomBinding.accountId,
+      cardId: bloomBinding.cardId,
+      amountCents: bloomSpec.amountCents,
+      currency: "USD",
+      merchant: bloomSpec.merchant,
+      merchantCategoryCode: bloomSpec.merchantCategoryCode,
+    };
+    return {
+      orderedCustomerIds: specs.map(({ customerId }) => customerId),
+      resolveCustomer: (customerId) => customerId === KIT5_BLOOM_CUSTOMER_ID ? customer : null,
+      policyFacts: (customerId) => customerId === KIT5_BLOOM_CUSTOMER_ID ? {
+        transactionType: "AUTHORIZATION",
+        transactionCategory: "PURCHASE",
+        merchantCategoryCode: bloomSpec.merchantCategoryCode,
+      } : null,
+    };
   };
 }
 
