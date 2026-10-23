@@ -57,10 +57,25 @@ A toggle at the top right switches between two versions. The choice is remembere
 | Scenarios | Four, picked from the **Scenario** dropdown | One |
 | Inputs | Editable in the **Scenario inputs** panel (slider icon) | Fixed in `seed.ts` |
 
-Kit 5 supports deterministic fixture mode for the video and sandbox-live mode
-for the final submission. Fixture mode makes no Airwallex calls. Sandbox-live
-mode sends operator-triggered card attempts through the server after provider
-mappings and setup are verified. The browser never holds Airwallex credentials.
+Kit 5 has three modes. **Fixture** plays deterministic local data and makes no
+Airwallex calls. **Fixture + Airwallex checkpoint** pauses the Kit 5 target
+before Bloom's 9:02, $9,000 supplier event. The authenticated browser request
+goes to `POST /api/kit5/fixture-checkpoint`; the server creates one issuing
+simulation using the scenario amount and Bloom's active connected-account and
+card mappings. The provider receipt stays separate from fixture policy state.
+Only exact `DECLINED` plus `INSUFFICIENT_FUNDS` confirms the checkpoint, and the
+presenter must click **Continue fixture sequence**. Other definite results are
+shown accurately and allow only **Continue fixture-only**. In-progress,
+ambiguous, or unresolved attempts stay paused and reconcile by replaying the
+same provider-only request with the same run/action identity. This checkpoint
+creates no bridge transfer, card retry, fee charge, or repayment deposit.
+**Reset** restarts visual fixture state and does not create another Airwallex
+attempt. The remaining policy outcomes, including Bloom's evidence-review
+block, and other customers' outcomes remain fixture data. **Sandbox live** is
+the separate per-customer provider flow, including its existing bridge
+funding, transfer, retry, and Nova deposit/collection behavior where applicable.
+It requires mappings for all five Kit 5 customers. The browser never holds
+Airwallex credentials. See the [Kit 5 demo flow and sandbox gates](/docs/airwallex-kit5-demo-flow-draft.md).
 
 ## Local Airwallex bridge ledger
 
@@ -239,17 +254,17 @@ and promptly acknowledges verified requests with HTTP 200. Airwallex may
 deliver events out of order. Keep secrets server-side and use a sandbox
 subscription.
 
-The final submission uses sandbox-live mode. Each **Next customer** action
-creates one issuing simulation for the mapped card, using the server-resolved
+The separate Sandbox live mode sends each **Next customer** action through an
+issuing simulation for that customer's mapped card, using the server-resolved
 scenario amount. Bloom's $9,000 attempt is below the $9,999.99 simulation limit,
-and the mapped card must also allow that amount. The repository includes the
-policy adapter, durable bridge reservation, transfer settlement, card retry,
-Nova deposit association, and fee-first collection path. These stay fail-closed
-until external sandbox acceptance verifies customer mappings, scoped API
-permissions and product enablement, Bloom's natural provider
+and the mapped card must also allow that amount. This full live path includes
+the policy adapter, durable bridge reservation, transfer settlement, card
+retry, Nova deposit association, and fee-first collection. It stays fail-closed
+until external sandbox acceptance verifies all five customer mappings, scoped
+API permissions and product enablement, Bloom's natural provider
 `INSUFFICIENT_FUNDS` result, signed webhook delivery and HTTP 200
-acknowledgement, and provider record retrieval and reconciliation. See the
-[Kit 5 demo flow and sandbox gates](/docs/airwallex-kit5-demo-flow-draft.md).
+acknowledgement, and provider record retrieval and reconciliation. These are
+manual gates; local fake-gateway tests do not establish provider success.
 
 The sandbox demo uses direct server-side REST calls, not the Airwallex AgentOS
 production connector. The main-checkout `.env` contains seven Airwallex

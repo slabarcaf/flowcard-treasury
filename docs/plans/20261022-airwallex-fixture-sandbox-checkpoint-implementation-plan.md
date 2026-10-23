@@ -284,14 +284,14 @@ create another provider attempt; a new provider run gets a new run UUID.
 - Modify: `docs/airwallex-kit5-demo-flow-draft.md`
 - Modify: `docs/airwallex-sandbox-demo-prerequisites.md`
 
-- [ ] Document the three modes and identify Bloom's 9:02 event as the single
+- [x] Document the three modes and identify Bloom's 9:02 event as the single
       live checkpoint in Kit 5 target.
-- [ ] Explain which parts come from Airwallex and which remain fixture data.
-- [ ] Document the exact provider-result gate, explicit fixture-only
+- [x] Explain which parts come from Airwallex and which remain fixture data.
+- [x] Document the exact provider-result gate, explicit fixture-only
       continuation, and lifecycle-reconciliation behavior.
-- [ ] State that the checkpoint performs no bridge transfer, card retry,
+- [x] State that the checkpoint performs no bridge transfer, card retry,
       charge, or repayment deposit.
-- [ ] Run `git diff --check` after documentation updates.
+- [x] Run `git diff --check` after documentation updates.
 
 ## Post-Completion
 

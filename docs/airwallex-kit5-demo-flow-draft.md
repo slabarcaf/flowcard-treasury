@@ -1,27 +1,50 @@
 # Airwallex Kit 5 Demo Flow Draft
 
-This draft separates the deterministic video flow from the final sandbox-live
-submission and records the provider checks still required for acceptance.
+This draft describes the deterministic fixture demo, its single real
+Airwallex checkpoint, and the separate full Sandbox live path. It records the
+provider checks still required for acceptance.
 
 [TOC]
 
 ## Run modes and current status
 
-Use deterministic fixture mode for the video. It uses local scripted data and
-makes no Airwallex calls. Fixture customer aliases are fictional and must remain
-separate from provider-issued IDs.
+Kit 5 offers three modes:
 
-The final submission is intended to use sandbox-live mode. Each **Next
-customer** action creates one simulated card transaction for that customer's
-mapped card. The server resolves the attempt amount from the scenario, and the
-Airwallex response supplies its status, failure reason, and provider IDs. A
-duplicate action must not create a second provider transaction. This is a
-sandbox record, not a production authorization or movement of funds.
+- **Fixture** plays deterministic local data and makes no Airwallex calls.
+  Fixture customer aliases are fictional and must remain separate from
+  provider-issued IDs.
+- **Fixture + Airwallex checkpoint** pauses the Kit 5 target scenario before
+  Bloom's 9:02, $9,000 supplier event. The browser calls the authenticated
+  `POST /api/kit5/fixture-checkpoint` route. The server resolves the trusted
+  scenario amount and Bloom's active connected-account and issuing-card
+  mapping, then sends one `POST /api/v1/simulation/issuing/create` attempt.
+  Show the provider receipt separately from fixture policy state. Only an exact
+  `DECLINED` result with `INSUFFICIENT_FUNDS` confirms the checkpoint. The
+  presenter must click **Continue fixture sequence** to resume the fixture
+  event. A different definite result is shown accurately and allows only the
+  clearly labeled **Continue fixture-only** action. In-progress, ambiguous, or
+  unresolved attempts stay paused; reconcile by replaying the same
+  provider-only request with the same run/action identity before any new
+  provider attempt.
+- **Sandbox live** remains the separate per-customer full provider path. Each
+  **Next customer** action creates one simulated card transaction for that
+  customer's mapped card, then the live policy/funding flow may transfer a
+  bridge and retry the card. Its Nova deposit and collection behavior remains
+  part of this full path where applicable.
 
-The current route remains fail-closed until real customer mappings and the
-policy-to-ledger composition exist. Local implementation tests use fixture
-aliases and a mocked Airwallex gateway. They do not establish provider success
-or end-to-end live readiness. No customer or card is created by this demo.
+The checkpoint performs no bridge transfer, card retry, fee charge, or
+repayment deposit. After presenter continuation, Bloom's evidence-review block
+and all later customer outcomes come from fixture data. The regular **Reset**
+restarts visual fixture state; it does not make a new Airwallex attempt. Other
+customers remain in the five-customer ordered scenario, but the checkpoint
+resolves provider mappings only for Bloom. Full Sandbox live requires mappings
+for all five Kit 5 customers.
+
+The checkpoint route uses the existing operator session and keeps credentials
+and provider IDs server-side. Local implementation tests use fixture aliases
+and a mocked Airwallex gateway; they do not establish provider success,
+verified mappings, webhook acceptance, or end-to-end live readiness. No
+customer or card is created by this demo.
 
 ## Kit 5 target story
 
@@ -43,33 +66,72 @@ Juniper arrives after Nova with the same $6,000 shortfall; only $4,000 remains
 above the floor, so policy refuses it. Nova's Day +9 repayment is triggered by
 an $8,000 settled deposit and collects the $27 fee before the $6,000 principal.
 
-## Presenter sequence
+## Fixture plus Airwallex checkpoint presenter sequence
 
-1. **Set the scene.** Open **Kit 5 target** and show the facility, floor,
+1. **Set the scene.** Open **Kit 5 target**, select **Fixture + Airwallex
+   checkpoint**, authenticate the operator, and show the facility, floor,
    outstanding exposure, and $15,000 opening deployable amount.
-2. **Re-rate Bloom.** Surface the Salesforce evidence before the decline. Show
-   the $9,000 attempt, $2,000 opening balance, $7,000 shortfall, and Tier C
-   refusal.
+2. **Pause at Bloom.** Let the fixture clock reach Bloom's 9:02 event. It pauses
+   before the fixture engine processes that event. Show the $9,000 attempt,
+   $2,000 opening balance, and $7,000 shortfall.
+3. **Run the provider attempt.** Click **Run Airwallex Sandbox attempt**. The
+   authenticated server route uses Bloom's active connected-account/card
+   mapping and the trusted scenario amount. Show the Airwallex result,
+   failure reason, and provider IDs in the provider receipt section, separate
+   from the fixture policy panel.
+4. **Confirm and continue.** Continue the fixture sequence only when the
+   provider result is exactly `DECLINED` / `INSUFFICIENT_FUNDS`. The presenter
+   explicitly clicks **Continue fixture sequence**; the fixture then processes
+   Bloom using its existing evidence-review gate, which blocks Bloom pending
+   review.
+5. **Handle other provider results accurately.** For a different definite
+   result, show the returned status and reason and offer only **Continue
+   fixture-only**. Keep in-progress, ambiguous, or unresolved results paused.
+   Use the reconcile control to replay the same provider-only request with the
+   same run/action identity before any new provider attempt.
+6. **Finish with fixture outcomes.** Atlas, Nova, Pixel, Juniper, and Bloom's
+   policy outcome remain scripted fixture data after the checkpoint. No bridge
+   transfer, card retry, fee charge, or repayment deposit is created by this
+   checkpoint. **Reset** returns the visual fixture sequence to its start and
+   does not issue another Airwallex attempt.
+
+## Full Sandbox live presenter sequence
+
+Use this separate path for the full per-customer provider flow. It requires
+verified active connected-account and card mappings for all five Kit 5
+customers.
+
+1. **Start the sequence.** Open **Kit 5 target**, select **Sandbox live**,
+   authenticate the operator, and verify the live-action controls are enabled.
+2. **Record Bloom.** Submit Bloom's $9,000 attempt and show the actual provider
+   result. Continue through policy and the existing evidence-review gate.
 3. **Fund Atlas.** Record the $5,000 sandbox card attempt. Show the provider
    result, then the policy decision and separate bridge transfer if approved.
 4. **Pause for Nova.** Record the $6,000 attempt and wait for credit-officer
    approval before any bridge funding.
 5. **Show Pixel's history gate.** Record the $2,000 attempt and explain why
    policy gives Pixel no line.
-6. **Refuse Juniper at the floor.** Record the $6,000 attempt and show that only
-   $4,000 remains above the protected floor.
-7. **Collect Nova's repayment.** After a settled $8,000 deposit, collect the
-   $27 fee first and then principal, capped at that deposit.
+6. **Refuse Juniper at the floor.** Record the $6,000 attempt and show that
+   only $4,000 remains above the protected floor.
+7. **Collect Nova's repayment.** Where the configured Nova deposit flow is
+   enabled, use a settled $8,000 deposit to collect the $27 fee first and then
+   principal, capped at that deposit.
 8. **Close on the treasury view.** Summarize the customer outcomes and show
-   provider records alongside FlowCard records when sandbox-live acceptance is
-   complete.
+   provider records alongside FlowCard records after the applicable Sandbox
+   live acceptance gates pass.
 
 ## Customer mapping requirements
 
-Before sandbox-live acceptance, map each of Bloom, Atlas, Nova, Pixel, and
-Juniper to existing provider records. Do not invent IDs or create real
-customers, accounts, cardholders, cards, or global accounts as part of this
-work. Record and verify these fields for each customer:
+For the Fixture + Airwallex checkpoint, verify one active Bloom roster entry
+and a matching active issuing-card binding. The binding's connected-account
+ID must match Bloom's roster mapping. The five customer IDs remain in the
+ordered Kit 5 scenario, but only Bloom's provider mapping is resolved by this
+checkpoint; the other customer outcomes are fixtures.
+
+Full Sandbox live requires existing provider records for Bloom, Atlas, Nova,
+Pixel, and Juniper. Do not invent IDs or create real customers, accounts,
+cardholders, cards, or global accounts as part of this work. Record and verify
+these fields for each customer:
 
 - Stable internal customer key and Airwallex connected-account ID.
 - Connected-account status and account-scoped access through
@@ -81,11 +143,12 @@ work. Record and verify these fields for each customer:
 - Scenario opening USD balance and transaction amount, verified against the
   connected account's actual funding state.
 
-Bloom's natural $9,000 attempt must return provider
-`INSUFFICIENT_FUNDS` with a $2,000 opening USD balance. Do not pass
+For the checkpoint, Bloom's natural $9,000 attempt must return provider
+`DECLINED` / `INSUFFICIENT_FUNDS` with a $2,000 opening USD balance. Do not pass
 `INSUFFICIENT_FUNDS` as a forced failure value or translate another decline
 reason into it. The Issuing simulation API documents a $9,999.99 maximum per
-transaction; the mapped card's own limit must also allow $9,000.
+transaction; the mapped card's own limit must also allow $9,000. These provider
+conditions and mappings have not been verified by this document.
 
 ## Sandbox API contract
 
