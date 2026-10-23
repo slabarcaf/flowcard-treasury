@@ -45,6 +45,8 @@ export interface LiveProviderActivity {
 
 export type FixtureCheckpointResolution = 'awaiting' | 'confirmed' | 'fixture-only';
 
+export type FixtureCheckpointControl = 'run-attempt' | 'reconcile-attempt' | 'continue-fixture' | 'continue-fixture-only';
+
 export interface FixtureCheckpointActivity {
   scenarioId: string;
   customerId: string;
@@ -143,7 +145,52 @@ export function isFixtureCheckpointProviderConfirmed(activity: FixtureCheckpoint
 }
 
 export function fixtureCheckpointNeedsReconciliation(activity: FixtureCheckpointActivity | null): boolean {
-  return activity !== null && ['in_progress', 'ambiguous', 'unresolved'].includes(activity.status);
+  return activity !== null && activity !== undefined && ['in_progress', 'ambiguous', 'unresolved'].includes(activity.status);
+}
+
+/** The small set of actions allowed while the fixture sequence is paused at its provider checkpoint. */
+export function fixtureCheckpointControls(input: {
+  mode: 'fixture' | 'fixture-checkpoint' | 'sandbox-live';
+  paused: boolean;
+  pending: boolean;
+  resolution: FixtureCheckpointResolution;
+  activity: FixtureCheckpointActivity | null;
+}): FixtureCheckpointControl[] {
+  if (input.mode !== 'fixture-checkpoint' || !input.paused || input.pending || input.resolution !== 'awaiting') return [];
+  if (fixtureCheckpointNeedsReconciliation(input.activity)) return ['reconcile-attempt'];
+  if (isFixtureCheckpointProviderConfirmed(input.activity)) return ['continue-fixture'];
+  if (input.activity) return ['continue-fixture-only'];
+  return ['run-attempt'];
+}
+
+export function fixtureCheckpointReceipt(activity: FixtureCheckpointActivity | null) {
+  return {
+    providerResult: activity?.result?.processResult ?? 'Unavailable',
+    attemptStatus: activity?.status ?? 'not_started',
+    failureReason: activity?.result ? activity.result.failureReason ?? 'None returned' : 'Unavailable',
+    amountCents: activity?.attemptedAmount?.amountCents ?? null,
+    currency: activity?.attemptedAmount?.currency ?? null,
+    eventId: activity?.result?.cardTransactionEventId ?? 'Unavailable',
+    transactionId: activity?.result?.cardTransactionId ?? 'Unavailable',
+    lifecycleId: activity?.result?.cardTransactionLifecycleId ?? activity?.lifecycleId ?? 'Unavailable',
+  };
+}
+
+export function fixtureCheckpointRecoveryState(
+  activity: FixtureCheckpointActivity | null,
+  resolution: FixtureCheckpointResolution,
+  pending: boolean,
+  paused: boolean,
+): string {
+  if (pending) return 'Waiting for Airwallex. The scenario clock and fixture decision are paused.';
+  if (fixtureCheckpointNeedsReconciliation(activity)) return 'Reconciliation required. Keep the fixture paused until this same attempt is resolved.';
+  if (resolution === 'confirmed') return 'The provider confirmed DECLINED / INSUFFICIENT_FUNDS. The presenter resumed the fixture sequence.';
+  if (resolution === 'fixture-only') return 'The presenter chose fixture-only continuation. The provider result did not determine the fixture decision.';
+  if (!paused) return 'The fixture sequence is running toward Bloom’s checkpoint.';
+  if (isFixtureCheckpointProviderConfirmed(activity)) return 'Provider decline confirmed. Presenter continuation is required before the fixture event runs.';
+  if (activity?.status === 'completed') return 'Provider result recorded. It did not confirm DECLINED / INSUFFICIENT_FUNDS. Fixture-only continuation is available.';
+  if (activity) return 'The provider attempt did not return a completed receipt. Fixture-only continuation is available.';
+  return 'Waiting for the presenter to run the Airwallex Sandbox attempt.';
 }
 
 function isLiveProviderActivity(value: unknown): value is LiveProviderActivity {
@@ -324,7 +371,8 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
 
   const selectScenario = useCallback((id: string) => {
     if (fixtureCheckpointPending || fixtureCheckpointSubmissionRef.current ||
-        fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity)) return;
+        fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity) ||
+        (fixtureCheckpointActivity !== null && fixtureCheckpointResolution === 'awaiting')) return;
     const next = scenarios.find((s) => s.id === id);
     if (!next) return;
     const liveRun = loadLiveRun(id);
@@ -346,11 +394,13 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setLivePending(false);
     setInputs(structuredClone(next.inputs));
     setState(initialKit5State(next.inputs));
-  }, [fixtureCheckpointActivity, fixtureCheckpointPending, scenarioId, scenarios]);
+    if (!next.providerCheckpoint && mode === 'fixture-checkpoint') setMode('fixture');
+  }, [fixtureCheckpointActivity, fixtureCheckpointPending, fixtureCheckpointResolution, mode, scenarioId, scenarios]);
 
   const applyInputs = useCallback((next: ScenarioInputs) => {
     if (fixtureCheckpointPending || fixtureCheckpointSubmissionRef.current ||
-        fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity)) return;
+        fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity) ||
+        (fixtureCheckpointActivity !== null && fixtureCheckpointResolution === 'awaiting')) return;
     liveGenerationRef.current += 1;
     liveSubmissionRef.current = false;
     fixtureCheckpointSubmissionRef.current = false;
@@ -367,7 +417,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setFixtureCheckpointPending(false);
     setInputs(structuredClone(next));
     setState(initialKit5State(next));
-  }, [fixtureCheckpointActivity, fixtureCheckpointPending]);
+  }, [fixtureCheckpointActivity, fixtureCheckpointPending, fixtureCheckpointResolution]);
 
   const scan = useCallback(() => setState((s) => start(s)), []);
   const advance = useCallback(() => setState((s) => (
@@ -418,9 +468,10 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
 
   const selectMode = useCallback((next: 'fixture' | 'fixture-checkpoint' | 'sandbox-live') => {
     if (liveSubmissionRef.current || liveActivityNeedsReconciliation(liveAction) ||
-        fixtureCheckpointSubmissionRef.current || fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity)) return;
+        fixtureCheckpointSubmissionRef.current || fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity) ||
+        (fixtureCheckpointActivity !== null && fixtureCheckpointResolution === 'awaiting')) return;
     setMode(next);
-  }, [fixtureCheckpointActivity, liveAction]);
+  }, [fixtureCheckpointActivity, fixtureCheckpointResolution, liveAction]);
 
   const confirmFixtureCheckpoint = useCallback(() => {
     if (!shouldPauseForFixtureCheckpoint(mode, scenario, state, fixtureCheckpointResolution) ||

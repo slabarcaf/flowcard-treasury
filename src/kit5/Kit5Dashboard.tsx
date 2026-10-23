@@ -4,7 +4,14 @@ import { BridgeQueue } from '../components/BridgeQueue.js';
 import { ActivityFeed } from '../components/ActivityFeed.js';
 import { FeedToast } from '../components/FeedToast.js';
 import { Sidebar } from '../components/Sidebar.js';
-import { canApproveKit5Decision, canCreateNovaRepaymentDeposit, useKit5Dashboard } from './useKit5Dashboard.js';
+import {
+  canApproveKit5Decision,
+  canCreateNovaRepaymentDeposit,
+  fixtureCheckpointControls,
+  fixtureCheckpointReceipt,
+  fixtureCheckpointRecoveryState,
+  useKit5Dashboard,
+} from './useKit5Dashboard.js';
 import { nextEvent, shortDate } from './engine.js';
 import { SettingsPanel } from './SettingsPanel.js';
 import { formatCollectionCharge } from './live-format.js';
@@ -27,12 +34,34 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
   const autoApproved = state.pause?.kind === 'ack' ? state.queue.find((r) => r.id === state.pause!.requestId) : undefined;
   const autoDetail = autoApproved ? state.customerDetails[autoApproved.id] : undefined;
   const outstanding = Object.values(state.bridges);
+  const checkpointRequestId = k.scenario.providerCheckpoint?.eventRequestId;
+  const checkpointDecision = checkpointRequestId
+    ? state.queue.find((row) => row.id === checkpointRequestId)
+    : undefined;
+  const checkpointReceipt = fixtureCheckpointReceipt(k.fixtureCheckpointActivity);
+  const checkpointRecoveryState = fixtureCheckpointRecoveryState(
+    k.fixtureCheckpointActivity,
+    k.fixtureCheckpointResolution,
+    k.fixtureCheckpointPending,
+    k.fixtureCheckpointPaused,
+  );
+  const checkpointControls = fixtureCheckpointControls({
+    mode: k.mode,
+    paused: k.fixtureCheckpointPaused,
+    pending: k.fixtureCheckpointPending,
+    resolution: k.fixtureCheckpointResolution,
+    activity: k.fixtureCheckpointActivity,
+  });
+  const fixtureMode = k.mode !== 'sandbox-live';
+  const checkpointChoiceRequired = k.mode === 'fixture-checkpoint' &&
+    k.fixtureCheckpointActivity !== null && k.fixtureCheckpointResolution === 'awaiting';
 
   let statusLine = k.scenario.summary;
   if (autoApproved) statusLine = `${autoApproved.customerName} was auto-approved. Continue when you're ready for the next request.`;
   else if (state.pause?.kind === 'human') statusLine = 'Waiting on the credit officer. The next request is decided after this one.';
   else if (state.pause?.kind === 'crm') statusLine = 'Agent found new Salesforce information. Re-evaluate to decide this request.';
   else if (awaitingCollection) statusLine = 'All requests for the day are decided. Simulate the next collection to move the clock forward.';
+  else if (k.mode === 'fixture-checkpoint' && k.fixtureCheckpointPaused) statusLine = 'Bloom’s event is paused for the Airwallex checkpoint. The fixture clock and decision will wait for presenter input.';
   else if (finished) {
     statusLine = outstanding.length === 0
       ? 'Scenario complete. Every bridge has been repaid.'
@@ -55,6 +84,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               Scenario
               <select
                 value={k.scenario.id}
+                disabled={k.fixtureCheckpointPending || k.fixtureCheckpointUnresolved || checkpointChoiceRequired}
                 onChange={(e) => k.selectScenario(e.target.value)}
                 className="text-sm text-gray-900 bg-white border border-gray-300 rounded-md px-2 py-1.5 cursor-pointer"
               >
@@ -71,11 +101,12 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               <select
                 aria-label="Demo mode"
                 value={k.mode}
-                disabled={k.liveBlocked}
-                onChange={(event) => k.selectMode(event.target.value as 'fixture' | 'sandbox-live')}
+                disabled={k.liveBlocked || k.fixtureCheckpointPending || k.fixtureCheckpointUnresolved || checkpointChoiceRequired}
+                onChange={(event) => k.selectMode(event.target.value as 'fixture' | 'fixture-checkpoint' | 'sandbox-live')}
                 className="text-sm text-gray-900 bg-white border border-gray-300 rounded-md px-2 py-1.5 cursor-pointer"
               >
                 <option value="fixture">Fixture</option>
+                <option value="fixture-checkpoint" disabled={!k.scenario.providerCheckpoint}>Fixture + Airwallex checkpoint</option>
                 <option value="sandbox-live">Sandbox live</option>
               </select>
             </label>
@@ -103,7 +134,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 </button>
               </>
             )}
-            {k.mode === 'fixture' && state.phase === 'idle' && (
+            {fixtureMode && state.phase === 'idle' && (
               <button
                 onClick={k.scan}
                 className="px-4 py-2 text-sm font-medium bg-[#e04e2f] hover:bg-[#c9442a] active:bg-[#b33d25] text-white rounded-lg transition-colors cursor-pointer"
@@ -111,7 +142,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 Scan Declines
               </button>
             )}
-            {k.mode === 'fixture' && awaitingCollection && (
+            {fixtureMode && awaitingCollection && (
               <button
                 onClick={k.advance}
                 className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg transition-colors cursor-pointer"
@@ -119,19 +150,21 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 Simulate Collection
               </button>
             )}
-            {k.mode === 'fixture' && state.phase !== 'idle' && (
+            {fixtureMode && state.phase !== 'idle' && (
               <button
                 onClick={k.reset}
-                className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-300 hover:border-gray-400 rounded-lg transition-colors cursor-pointer"
+                disabled={checkpointChoiceRequired}
+                className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-300 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer"
               >
                 Reset
               </button>
             )}
             <button
               onClick={() => setSettingsOpen(true)}
+              disabled={checkpointChoiceRequired}
               aria-label="Scenario inputs"
               title="Scenario inputs"
-              className="w-8 h-8 rounded-lg border border-gray-200 hover:border-gray-300 text-gray-500 hover:text-gray-700 flex items-center justify-center cursor-pointer"
+              className="w-8 h-8 rounded-lg border border-gray-200 hover:border-gray-300 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" /></svg>
             </button>
@@ -151,6 +184,114 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 </span>
               )}
             </div>
+
+            {k.mode === 'fixture-checkpoint' && (
+              <section aria-label="Fixture and Airwallex checkpoint" className="bg-white border border-gray-200 rounded-xl px-5 py-4 space-y-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-900">Fixture + Airwallex checkpoint</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    The Airwallex receipt records one Sandbox attempt. The fixture engine makes and displays its policy decision separately.
+                  </p>
+                </div>
+                {!k.ledgerApiEnabled && <p role="alert" className="text-sm text-amber-700">Set VITE_BRIDGE_API_URL to enable the Airwallex checkpoint API.</p>}
+                {!k.operatorAuthenticated && (
+                  <form
+                    className="flex items-end gap-2"
+                    onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                      event.preventDefault();
+                      void k.authenticateOperator(operatorToken)
+                        .then(() => setOperatorToken(''))
+                        .catch(() => {});
+                    }}
+                  >
+                    <label className="flex flex-col gap-1 text-xs text-gray-600">
+                      Operator credential
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={operatorToken}
+                        onChange={(event) => setOperatorToken(event.target.value)}
+                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                    <button type="submit" disabled={!operatorToken || !k.ledgerApiEnabled || k.fixtureCheckpointPending} className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50">Authorize</button>
+                  </form>
+                )}
+                {k.liveError && !k.operatorAuthenticated && <p role="alert" className="text-sm text-red-700">{k.liveError}</p>}
+                {k.fixtureCheckpointPaused && !k.fixtureCheckpointActivity && (
+                  <p className="text-sm text-gray-600">Bloom’s $9,000 supplier payment is waiting at the provider checkpoint. The scenario clock and fixture decision remain paused.</p>
+                )}
+                {k.fixtureCheckpointPending && <p role="status" className="text-sm text-sky-700">Airwallex request in progress. The scenario clock and fixture decision remain paused.</p>}
+                {k.fixtureCheckpointError && <p role="alert" className="text-sm text-amber-800">{k.fixtureCheckpointError}</p>}
+                {k.fixtureCheckpointPaused && (
+                  <div className="flex flex-wrap gap-2">
+                    {checkpointControls.includes('run-attempt') && (
+                      <button
+                        type="button"
+                        onClick={() => void k.runFixtureCheckpoint()}
+                        disabled={!k.operatorAuthenticated || !k.ledgerApiEnabled || k.fixtureCheckpointPending}
+                        className="px-4 py-2 text-sm font-medium bg-[#e04e2f] hover:bg-[#c9442a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors cursor-pointer"
+                      >
+                        Run Airwallex Sandbox attempt
+                      </button>
+                    )}
+                    {checkpointControls.includes('reconcile-attempt') && (
+                      <button
+                        type="button"
+                        onClick={() => void k.reconcileFixtureCheckpoint()}
+                        disabled={!k.operatorAuthenticated || !k.ledgerApiEnabled || k.fixtureCheckpointPending}
+                        className="px-4 py-2 text-sm font-medium border border-sky-300 text-sky-800 hover:bg-sky-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer"
+                      >
+                        Reconcile Airwallex checkpoint
+                      </button>
+                    )}
+                    {checkpointControls.includes('continue-fixture') && (
+                      <button
+                        type="button"
+                        onClick={k.confirmFixtureCheckpoint}
+                        className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer"
+                      >
+                        Continue fixture sequence
+                      </button>
+                    )}
+                    {checkpointControls.includes('continue-fixture-only') && (
+                      <button
+                        type="button"
+                        onClick={k.continueFixtureOnly}
+                        className="px-4 py-2 text-sm font-medium border border-amber-300 text-amber-900 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Continue fixture-only
+                      </button>
+                    )}
+                  </div>
+                )}
+                <p role="status" className="text-sm text-gray-700">Recovery state: {checkpointRecoveryState}</p>
+
+                <section aria-label="Airwallex provider receipt" className="border-t border-gray-100 pt-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Airwallex provider receipt</h3>
+                  <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 mt-2 text-xs text-gray-600">
+                    <dt>Provider result</dt><dd>{checkpointReceipt.providerResult}</dd>
+                    <dt>Attempt status</dt><dd>{checkpointReceipt.attemptStatus}</dd>
+                    <dt>Server-resolved amount</dt><dd>{checkpointReceipt.amountCents === null ? 'Unavailable' : `$${(checkpointReceipt.amountCents / 100).toLocaleString('en-US')} ${checkpointReceipt.currency}`}</dd>
+                    <dt>Failure reason</dt><dd>{checkpointReceipt.failureReason}</dd>
+                    <dt>Provider event ID</dt><dd className="font-mono break-all">{checkpointReceipt.eventId}</dd>
+                    <dt>Provider transaction ID</dt><dd className="font-mono break-all">{checkpointReceipt.transactionId}</dd>
+                    <dt>Lifecycle ID</dt><dd className="font-mono break-all">{checkpointReceipt.lifecycleId}</dd>
+                    {k.fixtureCheckpointActivity?.attemptId && <><dt>Attempt ID</dt><dd className="font-mono break-all">{k.fixtureCheckpointActivity.attemptId}</dd></>}
+                    {k.fixtureCheckpointActivity?.reason && <><dt>Server response</dt><dd>{k.fixtureCheckpointActivity.reason}</dd></>}
+                  </dl>
+                </section>
+
+                <section aria-label="Fixture policy decision" className="border-t border-gray-100 pt-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Fixture policy decision</h3>
+                  <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 mt-2 text-xs text-gray-600">
+                    <dt>Bloom decision</dt><dd>{checkpointDecision?.status ?? 'Waiting for fixture continuation'}</dd>
+                    <dt>Fixture shortfall</dt><dd>{checkpointDecision ? `$${checkpointDecision.shortfall.toLocaleString('en-US')}` : 'Not calculated yet'}</dd>
+                    <dt>Fixture allocation</dt><dd>{checkpointDecision ? `$${checkpointDecision.allocation.toLocaleString('en-US')}` : 'Not decided yet'}</dd>
+                  </dl>
+                </section>
+              </section>
+            )}
 
             {k.mode === 'sandbox-live' && (
               <section aria-label="Sandbox live provider activity" className="bg-white border border-gray-200 rounded-xl px-5 py-4 space-y-2">
@@ -284,7 +425,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               band={state.band}
             />
 
-            {k.mode === 'fixture' && autoApproved && (
+            {fixtureMode && autoApproved && (
               <div className="flex items-center justify-between gap-4 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 animate-panel-in" role="status">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-emerald-800">
@@ -305,21 +446,26 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               </div>
             )}
 
-            {k.mode === 'fixture' ? <BridgeQueue
-              rows={state.queue}
-              totalEligibleShortfall={totalEligibleShortfall}
-              deployable={state.deployableCapital}
-              customerDetails={state.customerDetails}
-              selectedCustomerId={state.selectedCustomerId}
-              processedCustomers={state.processedCustomers}
-              showCollection={state.showCollection}
-              collectionRows={state.collectionRows}
-              onSelectCustomer={k.selectCustomer}
-              onBloomReveal={k.crmReveal}
-              onBloomReEvaluate={k.crmReEvaluate}
-              onApprove={k.approve}
-              showDates
-            /> : (
+            {fixtureMode ? (
+              <>
+                {k.mode === 'fixture-checkpoint' && <h2 className="text-sm font-semibold text-gray-700">Fixture policy outcomes</h2>}
+                <BridgeQueue
+                  rows={state.queue}
+                  totalEligibleShortfall={totalEligibleShortfall}
+                  deployable={state.deployableCapital}
+                  customerDetails={state.customerDetails}
+                  selectedCustomerId={state.selectedCustomerId}
+                  processedCustomers={state.processedCustomers}
+                  showCollection={state.showCollection}
+                  collectionRows={state.collectionRows}
+                  onSelectCustomer={k.selectCustomer}
+                  onBloomReveal={k.crmReveal}
+                  onBloomReEvaluate={k.crmReEvaluate}
+                  onApprove={k.approve}
+                  showDates
+                />
+              </>
+            ) : (
               <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-500">
                 Fixture decisions are paused in sandbox-live mode. Provider outcomes are shown above.
               </div>

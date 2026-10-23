@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { initialKit5State } from '../../src/kit5/engine.js';
+import { initialKit5State, start } from '../../src/kit5/engine.js';
 import { loadScenarios } from '../../src/kit5/scenarios.js';
 import { BridgeApiClient } from '../../src/services/http/BridgeApiClient.js';
 import type { Kit5NextCustomerRequest, Kit5NextCustomerResponse, Kit5ProviderTransaction } from '../../src/services/types.js';
 import { Kit5Dashboard } from '../../src/kit5/Kit5Dashboard.js';
+import type { FixtureCheckpointActivity } from '../../src/kit5/useKit5Dashboard.js';
 
 const { useKit5DashboardMock } = vi.hoisted(() => ({ useKit5DashboardMock: vi.fn() }));
 vi.mock('../../src/kit5/useKit5Dashboard.js', async (importOriginal) => ({
@@ -112,17 +113,71 @@ describe('Kit 5 sandbox-live transaction client', () => {
     expect(html).toContain('fixture-transaction-id');
     expect(html).toContain('fixture-lifecycle-id');
   });
+
+  it('renders the hybrid checkpoint as a provider receipt plus a separate fixture decision', () => {
+    const hook = dashboardHookValue('fixture-checkpoint');
+    hook.state = start(hook.state);
+    hook.fixtureCheckpointPaused = true;
+    hook.operatorAuthenticated = true;
+    useKit5DashboardMock.mockReturnValue(hook);
+    const promptHtml = renderToStaticMarkup(createElement(Kit5Dashboard, { versionToggle: null }));
+
+    expect(promptHtml).toContain('Fixture + Airwallex checkpoint');
+    expect(promptHtml).toContain('Run Airwallex Sandbox attempt');
+    expect(promptHtml).toContain('The scenario clock and fixture decision remain paused');
+    expect(promptHtml).not.toContain('Next customer');
+    expect(promptHtml).not.toContain('Restart sequence');
+    expect(promptHtml).not.toContain('Create Nova');
+    expect(promptHtml).not.toContain('Card retry');
+
+    const confirmedActivity: FixtureCheckpointActivity = {
+      scenarioId: 'kit5-target:run',
+      customerId: 'acct_bloom001',
+      actionId: 'kit5-target:run:txn_bloom_supplier_001',
+      status: 'completed',
+      attemptId: 'attempt-demo',
+      lifecycleId: 'lifecycle-demo',
+      attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+      result: {
+        processResult: 'DECLINED',
+        failureReason: 'INSUFFICIENT_FUNDS',
+        cardTransactionEventId: 'fixture-event-id',
+        cardTransactionId: 'fixture-transaction-id',
+        cardTransactionLifecycleId: 'fixture-lifecycle-id',
+      },
+    };
+    const receiptHook = dashboardHookValue('fixture-checkpoint', [], confirmedActivity);
+    receiptHook.state = start(receiptHook.state);
+    receiptHook.fixtureCheckpointPaused = true;
+    receiptHook.operatorAuthenticated = true;
+    useKit5DashboardMock.mockReturnValue(receiptHook);
+    const receiptHtml = renderToStaticMarkup(createElement(Kit5Dashboard, { versionToggle: null }));
+
+    expect(receiptHtml).toContain('Airwallex provider receipt');
+    expect(receiptHtml).toContain('Provider result</dt><dd>DECLINED');
+    expect(receiptHtml).toContain('$9,000 USD');
+    expect(receiptHtml).toContain('INSUFFICIENT_FUNDS');
+    expect(receiptHtml).toContain('fixture-event-id');
+    expect(receiptHtml).toContain('fixture-transaction-id');
+    expect(receiptHtml).toContain('fixture-lifecycle-id');
+    expect(receiptHtml).toContain('Fixture policy decision');
+    expect(receiptHtml).toContain('Continue fixture sequence');
+    expect(receiptHtml).not.toContain('Run Airwallex Sandbox attempt');
+    expect(receiptHtml).not.toContain('Next customer');
+    expect(receiptHtml).not.toContain('Create Nova');
+    expect(receiptHtml).not.toContain('Card retry');
+  });
 });
 
-function dashboardHookValue(mode: 'fixture' | 'sandbox-live', liveHistory: Array<{
+function dashboardHookValue(mode: 'fixture' | 'fixture-checkpoint' | 'sandbox-live', liveHistory: Array<{
   status: string;
   attemptId?: string;
   result?: Kit5ProviderTransaction;
   amount?: number;
   customerName?: string;
-}> = []) {
+}> = [], fixtureCheckpointActivity: FixtureCheckpointActivity | null = null) {
   const scenarios = loadScenarios();
-  const scenario = scenarios[0]!;
+  const scenario = scenarios.find((item) => item.id === (mode === 'fixture-checkpoint' ? 'kit5-target' : 'original'))!;
   return {
     scenarios,
     scenario,
@@ -132,11 +187,22 @@ function dashboardHookValue(mode: 'fixture' | 'sandbox-live', liveHistory: Array
     ledgerProjectionLoading: false,
     ledgerProjectionError: null,
     mode,
+    fixtureCheckpointResolution: 'awaiting',
+    fixtureCheckpointPaused: false,
+    fixtureCheckpointRunId: 'run-demo',
+    fixtureCheckpointScenarioId: `${scenario.id}:run-demo`,
+    fixtureCheckpointActivity,
+    fixtureCheckpointProviderConfirmed: false,
+    fixtureCheckpointUnresolved: false,
+    fixtureCheckpointPending: false,
+    fixtureCheckpointError: null,
     liveAction: null,
     liveHistory,
     liveError: null,
     livePending: false,
     liveBlocked: false,
+    operatorAuthenticated: false,
+    operatorApprovalAvailable: false,
     nextLiveCustomer: undefined,
     liveComplete: false,
     ledgerApiEnabled: true,
@@ -150,7 +216,13 @@ function dashboardHookValue(mode: 'fixture' | 'sandbox-live', liveHistory: Array
     crmReEvaluate: vi.fn(),
     approve: vi.fn(),
     continueAfterAuto: vi.fn(),
+    confirmFixtureCheckpoint: vi.fn(),
+    continueFixtureOnly: vi.fn(),
+    runFixtureCheckpoint: vi.fn(),
+    reconcileFixtureCheckpoint: vi.fn(),
+    startNewFixtureCheckpointRun: vi.fn(),
     selectMode: vi.fn(),
+    authenticateOperator: vi.fn(),
     submitNextCustomer: vi.fn(),
   };
 }

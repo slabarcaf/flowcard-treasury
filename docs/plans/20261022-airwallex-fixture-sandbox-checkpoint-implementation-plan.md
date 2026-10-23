@@ -229,21 +229,22 @@ create another provider attempt; a new provider run gets a new run UUID.
 - Modify: `src/kit5/Kit5Dashboard.tsx`
 - Modify: `src/kit5/useKit5Dashboard.ts`
 - Modify: `tests/kit5/dashboard-live-state.test.ts`
+- Modify: `tests/kit5/live-transaction.test.ts`
 
-- [ ] Add the **Fixture + Airwallex checkpoint** mode option and retain the
+- [x] Add the **Fixture + Airwallex checkpoint** mode option and retain the
       existing Fixture and Sandbox live options.
-- [ ] At the Bloom event, show **Run Airwallex Sandbox attempt** and keep the
+- [x] At the Bloom event, show **Run Airwallex Sandbox attempt** and keep the
       scenario clock and fixture decision paused while the request runs.
-- [ ] Display the provider result, failure reason, scenario-resolved amount,
+- [x] Display the provider result, failure reason, scenario-resolved amount,
       provider event/transaction/lifecycle IDs, and recovery state.
-- [ ] On exact `DECLINED` / `INSUFFICIENT_FUNDS`, require presenter
+- [x] On exact `DECLINED` / `INSUFFICIENT_FUNDS`, require presenter
       continuation and then resume the fixture event sequence.
-- [ ] On a different result, show the actual provider result and expose only
+- [x] On a different result, show the actual provider result and expose only
       a clearly labeled fixture-only continuation; keep ambiguous attempts
       paused pending reconciliation.
-- [ ] Test that the UI labels provider and fixture outcomes separately and
+- [x] Test that the UI labels provider and fixture outcomes separately and
       that no bridge/transfer or retry actions appear in checkpoint mode.
-- [ ] Run the focused Kit 5 tests before starting Task 5.
+- [x] Run the focused Kit 5 tests before starting Task 5.
 
 ### Task 5: Verify cross-mode safety and regression behavior
 

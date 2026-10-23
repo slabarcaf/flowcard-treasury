@@ -20,7 +20,13 @@ vi.mock('react', () => ({
   },
 }));
 
-import { useKit5Dashboard } from '../../src/kit5/useKit5Dashboard.js';
+import {
+  fixtureCheckpointControls,
+  fixtureCheckpointReceipt,
+  fixtureCheckpointRecoveryState,
+  useKit5Dashboard,
+  type FixtureCheckpointActivity,
+} from '../../src/kit5/useKit5Dashboard.js';
 import { loadScenarios } from '../../src/kit5/scenarios.js';
 
 function resetHookRenderCursor() {
@@ -247,6 +253,96 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('keeps provider receipt provenance separate and exposes only checkpoint-safe controls', () => {
+    const confirmedActivity: FixtureCheckpointActivity = {
+      scenarioId: 'kit5-target:run',
+      customerId: 'acct_bloom001',
+      actionId: 'kit5-target:run:txn_bloom_supplier_001',
+      status: 'completed',
+      attemptId: 'attempt-demo',
+      lifecycleId: 'lifecycle-demo',
+      attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+      result: {
+        processResult: 'DECLINED',
+        failureReason: 'INSUFFICIENT_FUNDS',
+        cardTransactionEventId: 'event-demo',
+        cardTransactionId: 'transaction-demo',
+        cardTransactionLifecycleId: 'lifecycle-demo',
+      },
+    };
+    expect(fixtureCheckpointReceipt(confirmedActivity)).toEqual({
+      providerResult: 'DECLINED',
+      attemptStatus: 'completed',
+      failureReason: 'INSUFFICIENT_FUNDS',
+      amountCents: 900_000,
+      currency: 'USD',
+      eventId: 'event-demo',
+      transactionId: 'transaction-demo',
+      lifecycleId: 'lifecycle-demo',
+    });
+    expect(fixtureCheckpointRecoveryState(confirmedActivity, 'awaiting', false, true)).toContain('Presenter continuation is required');
+    expect(fixtureCheckpointControls({
+      mode: 'fixture-checkpoint', paused: true, pending: false, resolution: 'awaiting', activity: confirmedActivity,
+    })).toEqual(['continue-fixture']);
+
+    const unexpectedActivity: FixtureCheckpointActivity = {
+      ...confirmedActivity,
+      result: {
+        processResult: 'APPROVED',
+        failureReason: null,
+        cardTransactionEventId: 'event-demo',
+        cardTransactionId: 'transaction-demo',
+        cardTransactionLifecycleId: 'lifecycle-demo',
+      },
+    };
+    expect(fixtureCheckpointRecoveryState(unexpectedActivity, 'awaiting', false, true)).toContain('Fixture-only continuation is available');
+    expect(fixtureCheckpointControls({
+      mode: 'fixture-checkpoint', paused: true, pending: false, resolution: 'awaiting', activity: unexpectedActivity,
+    })).toEqual(['continue-fixture-only']);
+
+    const unresolvedActivity = { ...confirmedActivity, status: 'ambiguous' as const };
+    expect(fixtureCheckpointControls({
+      mode: 'fixture-checkpoint', paused: true, pending: false, resolution: 'awaiting', activity: unresolvedActivity,
+    })).toEqual(['reconcile-attempt']);
+    expect(fixtureCheckpointControls({
+      mode: 'fixture-checkpoint', paused: true, pending: true, resolution: 'awaiting', activity: unresolvedActivity,
+    })).toEqual([]);
+    expect(fixtureCheckpointControls({
+      mode: 'fixture-checkpoint', paused: true, pending: false, resolution: 'awaiting', activity: null,
+    })).toEqual(['run-attempt']);
+  });
+
+  it('keeps the fixture cursor and decision unchanged while the provider request is pending', async () => {
+    let finishCreate: ((value: { ok: boolean; status: number; json: () => Promise<unknown> }) => void) | undefined;
+    const pendingResponse = new Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>((resolve) => {
+      finishCreate = resolve;
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
+      .mockReturnValueOnce(pendingResponse);
+    let dashboard = await prepareFixtureCheckpoint(fetchMock);
+    const clockBeforeRequest = dashboard.state.demoClock;
+    const request = dashboard.runFixtureCheckpoint();
+    dashboard = useDashboardForTest();
+
+    expect(dashboard.fixtureCheckpointPending).toBe(true);
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+    expect(dashboard.state.demoClock).toBe(clockBeforeRequest);
+    expect(dashboard.state.cursor).toBe(0);
+    expect(dashboard.state.queue).toHaveLength(0);
+
+    finishCreate?.({
+      ok: true,
+      status: 200,
+      json: async () => completedCheckpoint({ processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS' }),
+    });
+    await request;
+    dashboard = useDashboardForTest();
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+    expect(dashboard.state.cursor).toBe(0);
+    expect(dashboard.state.queue).toHaveLength(0);
+  });
+
   it('requires the exact provider insufficient-funds decline and reuses one action identity per run', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
@@ -273,6 +369,13 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(dashboard.fixtureCheckpointRunId).toBe(input.scenarioId.split(':')[1]);
     await dashboard.runFixtureCheckpoint();
     expect(fetchMock.mock.calls.filter(([url]) => url === 'http://localhost:8000/api/kit5/fixture-checkpoint')).toHaveLength(1);
+
+    dashboard = useDashboardForTest();
+    dashboard.selectMode('fixture');
+    dashboard.selectScenario('original');
+    dashboard = useDashboardForTest();
+    expect(dashboard.mode).toBe('fixture-checkpoint');
+    expect(dashboard.scenario.id).toBe('kit5-target');
 
     dashboard.confirmFixtureCheckpoint();
     dashboard = useDashboardForTest();
