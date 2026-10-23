@@ -381,7 +381,7 @@ export async function reconcileKit5CheckpointLifecycle(
 function matchesTrustedCheckpointRequest(
   saved: Kit5CardAttempt["requestFacts"],
   customer: Omit<IssuingSimulationInput, "scenarioId">,
-  policyFacts: ReturnType<NonNullable<Kit5CustomerFixture["policyFacts"]>>,
+  policyFacts: NonNullable<ReturnType<NonNullable<Kit5CustomerFixture["policyFacts"]>>>,
 ): boolean {
   return saved != null && saved.accountId === customer.accountId && saved.cardId === customer.cardId &&
     saved.amountCents === customer.amountCents && saved.currency === customer.currency &&
