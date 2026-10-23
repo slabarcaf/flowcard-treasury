@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
-import type { IssuingSimulationGateway, IssuingSimulationRequest } from "../../server/src/airwallex/client.js";
+import type { AirwallexGateway, IssuingSimulationGateway, IssuingSimulationRequest } from "../../server/src/airwallex/client.js";
 import type { DatabaseClient, DatabasePool, QueryResult } from "../../server/src/db/pool.js";
 import type { Kit5CardAttempt, Kit5AttemptStatus } from "../../server/src/db/repositories.js";
 import type { Kit5CustomerFixture } from "../../server/src/demo/next-customer.js";
+import { acknowledge, approve, initialKit5State, nextEvent, reEvaluateCrm, revealCrm, start, step } from "../../src/kit5/engine.js";
+import { loadScenarios } from "../../src/kit5/scenarios.js";
 import { createRequestHandler } from "../../server/src/http/server.js";
 import { createOperatorSessionCookie } from "../../server/src/http/kit5-operator-auth.js";
 
@@ -160,10 +162,15 @@ function responseFor(index: number): Record<string, string | null> {
   };
 }
 
-function requestFor(customerId: string, actionId: string) {
-  return Object.assign(Readable.from([JSON.stringify({ scenarioId, customerId, actionId })]), {
+function requestFor(
+  customerId: string,
+  actionId: string,
+  url = "/api/kit5/next-customer",
+  requestedScenarioId = scenarioId,
+) {
+  return Object.assign(Readable.from([JSON.stringify({ scenarioId: requestedScenarioId, customerId, actionId })]), {
     method: "POST",
-    url: "/api/kit5/next-customer",
+    url,
     headers: { origin: allowedOrigins[0], cookie: `kit5_operator_session=${createOperatorSessionCookie(operatorToken)}` },
   }) as IncomingMessage;
 }
@@ -172,6 +179,8 @@ async function callRoute(
   route: ReturnType<typeof createRequestHandler>,
   customerId: string,
   actionId: string,
+  url = "/api/kit5/next-customer",
+  requestedScenarioId = scenarioId,
 ): Promise<{ statusCode: number; body: Record<string, unknown> }> {
   let statusCode = 0;
   let responseBody = "";
@@ -181,12 +190,112 @@ async function callRoute(
     writeHead(code: number) { statusCode = code; this.headersSent = true; return this; },
     end(body: string) { responseBody = body; return this; },
   } as unknown as ServerResponse;
-  route(requestFor(customerId, actionId), response);
+  route(requestFor(customerId, actionId, url, requestedScenarioId), response);
   await new Promise((resolve) => setImmediate(resolve));
   return { statusCode, body: JSON.parse(responseBody) as Record<string, unknown> };
 }
 
 describe("Kit 5 mocked sandbox-live flow", () => {
+  it("confirms one provider Bloom decline, then applies the same event through ordered fixture policy", async () => {
+    const pool = new MemoryPool();
+    const runId = "00000000-0000-4000-8000-000000000001";
+    const checkpointScenarioId = `kit5-target:${runId}`;
+    const bloomCustomerId = "acct_bloom001";
+    const bloomActionId = `${checkpointScenarioId}:txn_bloom_supplier_001`;
+    const orderedCustomerIds = [bloomCustomerId, "acct_atlas001", "acct_nova001", "acct_pixel001", "acct_juniper001"];
+    const amounts = [900_000, 650_000, 700_000, 250_000, 700_000];
+    const checkpointFixture: Kit5CustomerFixture = {
+      orderedCustomerIds,
+      policyFacts: () => ({ transactionType: "AUTHORIZATION", transactionCategory: "PURCHASE", merchantCategoryCode: "5411" }),
+      resolveCustomer: (id) => {
+        const index = orderedCustomerIds.indexOf(id);
+        return index < 0 ? null : {
+          accountId: `fixture-account-${id}`,
+          cardId: `fixture-card-${id}`,
+          amountCents: amounts[index]!,
+          currency: "USD",
+          merchant: id === bloomCustomerId ? "Supplier" : "Fixture merchant",
+          merchantCategoryCode: "5411",
+        };
+      },
+    };
+    const provider = {
+      createIssuingSimulation: vi.fn(async () => ({
+        process_result: "DECLINED",
+        failure_reason: "INSUFFICIENT_FUNDS",
+        card_transaction_event_id: "evt_bloom_checkpoint",
+        card_transaction_id: "txn_bloom_checkpoint",
+        card_transaction_lifecycle_id: "life_bloom_checkpoint",
+      })),
+      getIssuingLifecycle: vi.fn(async () => null),
+    };
+    const fundingBoundary = {
+      evaluate: vi.fn(),
+      reserveAndWaitForSettlement: vi.fn(),
+      retryCardAfterSettlement: vi.fn(),
+    };
+    const createFeeCharge = vi.fn();
+    const createRepaymentDeposit = vi.fn();
+    const resolveRepaymentDepositTarget = vi.fn();
+    const repaymentGateway = {
+      createCharge: createFeeCharge,
+      createGlobalAccountDepositSimulation: createRepaymentDeposit,
+    } as unknown as AirwallexGateway;
+    const route = createRequestHandler({
+      port: 8000, databaseUrl: "fixture", airwallexClientId: "fixture", airwallexApiKey: "fixture",
+      airwallexWebhookSecret: "fixture", kit5OperatorToken: operatorToken, kit5AllowedOrigins: allowedOrigins,
+    }, pool, undefined, {
+      pool,
+      gateway: provider,
+      resolveScenario: () => checkpointFixture,
+      resolveFixtureCheckpoint: () => checkpointFixture,
+      operatorAuth: { operatorToken, allowedOrigins },
+      bridgeFunding: fundingBoundary,
+      repaymentDepositGateway: repaymentGateway,
+      resolveRepaymentDepositTarget,
+    });
+
+    const providerAttempt = await callRoute(route, bloomCustomerId, bloomActionId,
+      "/api/kit5/fixture-checkpoint", checkpointScenarioId);
+    const providerResult = providerAttempt.body.result as Record<string, unknown>;
+    const kit5Target = loadScenarios().find((scenario) => scenario.id === "kit5-target")!;
+    const bloomEvent = kit5Target.inputs.events.find((event) => event.type === "decline")!;
+
+    expect(providerAttempt.statusCode).toBe(200);
+    expect(providerResult).toMatchObject({ processResult: "DECLINED", failureReason: "INSUFFICIENT_FUNDS" });
+    expect(bloomEvent).toMatchObject({ requestId: "txn_bloom_supplier_001", paymentAmount: 9_000, walletBalance: 2_000 });
+    expect(provider.createIssuingSimulation).toHaveBeenCalledOnce();
+
+    let fixtureState = start(initialKit5State(kit5Target.inputs));
+    expect(nextEvent(fixtureState)?.requestId).toBe(bloomEvent.requestId);
+    fixtureState = step(fixtureState);
+    const bloomFixtureDecision = fixtureState.queue.find((row) => row.id === bloomEvent.requestId);
+    expect(bloomFixtureDecision?.status).toBe("Blocked");
+    expect(fixtureState.customerDetails[bloomEvent.requestId].reasonCodes).toContain("EVIDENCE_REVIEW_REQUIRED");
+
+    const expectedArrivalOrder = fixtureState.events.filter((event) => event.type === "decline").map((event) => event.requestId);
+    for (let guard = 0; fixtureState.queue.length < expectedArrivalOrder.length && guard < 20; guard++) {
+      if (fixtureState.pause?.kind === "ack") fixtureState = acknowledge(fixtureState);
+      else if (fixtureState.pause?.kind === "human") fixtureState = approve(fixtureState, fixtureState.pause.requestId);
+      else if (fixtureState.pause?.kind === "crm") fixtureState = reEvaluateCrm(revealCrm(fixtureState));
+      fixtureState = step(fixtureState);
+    }
+
+    expect(fixtureState.queue.map((row) => row.id)).toEqual(expectedArrivalOrder);
+    expect(fixtureState.queue.find((row) => row.id === bloomEvent.requestId)?.status).toBe("Blocked");
+    expect(fundingBoundary.evaluate).not.toHaveBeenCalled();
+    expect(fundingBoundary.reserveAndWaitForSettlement).not.toHaveBeenCalled();
+    expect(fundingBoundary.retryCardAfterSettlement).not.toHaveBeenCalled();
+    expect(createFeeCharge).not.toHaveBeenCalled();
+    expect(createRepaymentDeposit).not.toHaveBeenCalled();
+    expect(resolveRepaymentDepositTarget).not.toHaveBeenCalled();
+    expect(pool.attempts.size).toBe(1);
+    expect(pool.attempts.get(`${checkpointScenarioId}/${bloomActionId}`)).toMatchObject({
+      status: "completed",
+      fundingClaimed: false,
+    });
+  });
+
   it("does not fund Bloom while evidence is unresolved and enters the bridge boundary after reviewer release", async () => {
     const cardProvider: IssuingSimulationGateway = {
       createIssuingSimulation: vi.fn(async () => ({

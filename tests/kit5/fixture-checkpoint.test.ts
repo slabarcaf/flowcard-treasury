@@ -29,14 +29,33 @@ function renderDashboard(apiBaseUrl = '') {
   return useKit5Dashboard(apiBaseUrl);
 }
 
+function completedCheckpoint(result: {
+  processResult: 'APPROVED' | 'DECLINED';
+  failureReason: string | null;
+}) {
+  return {
+    status: 'completed',
+    attemptId: 'attempt-demo',
+    lifecycleId: 'lifecycle-demo',
+    attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+    result: {
+      ...result,
+      cardTransactionEventId: 'event-demo',
+      cardTransactionId: 'transaction-demo',
+      cardTransactionLifecycleId: 'lifecycle-demo',
+    },
+  };
+}
+
 describe('Kit 5 fixture provider checkpoint', () => {
   beforeEach(() => {
     runtime.values = [];
-    try {
-      window.sessionStorage.clear();
-    } catch {
-      // The hook supports unavailable browser storage.
-    }
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { sessionStorage: {
+      clear: () => storage.clear(),
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    } });
   });
 
   it('marks only Bloom’s Kit 5 target event as the Airwallex checkpoint', () => {
@@ -108,6 +127,8 @@ describe('Kit 5 fixture provider checkpoint', () => {
 
     await dashboard.runFixtureCheckpoint();
     dashboard = renderDashboard('http://localhost:8000');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(dashboard.fixtureCheckpointActivity?.status).toBe('completed');
     expect(dashboard.fixtureCheckpointProviderConfirmed).toBe(true);
     expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
     dashboard.confirmFixtureCheckpoint();
@@ -123,6 +144,64 @@ describe('Kit 5 fixture provider checkpoint', () => {
     dashboard = renderDashboard('http://localhost:8000');
     expect(dashboard.state.queue.filter((row) => row.id === 'txn_bloom_supplier_001')).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('continues the provider-confirmed Bloom decline through ordered fixture policy outcomes', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => completedCheckpoint({
+        processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS',
+      }) });
+    vi.stubGlobal('fetch', fetchMock);
+    let dashboard = renderDashboard('http://localhost:8000');
+    await dashboard.authenticateOperator('runtime-only-token');
+    dashboard = renderDashboard('http://localhost:8000');
+    dashboard.selectScenario('kit5-target');
+    dashboard = renderDashboard('http://localhost:8000');
+    dashboard.selectMode('fixture-checkpoint');
+    dashboard = renderDashboard('http://localhost:8000');
+    dashboard.scan();
+    dashboard = renderDashboard('http://localhost:8000');
+    dashboard.advance();
+    dashboard = renderDashboard('http://localhost:8000');
+
+    await dashboard.runFixtureCheckpoint();
+    dashboard = renderDashboard('http://localhost:8000');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(dashboard.fixtureCheckpointActivity?.status).toBe('completed');
+    expect(dashboard.fixtureCheckpointProviderConfirmed).toBe(true);
+    dashboard.confirmFixtureCheckpoint();
+    dashboard = renderDashboard('http://localhost:8000');
+    dashboard.advance();
+    dashboard = renderDashboard('http://localhost:8000');
+
+    const bloom = dashboard.state.queue.find((row) => row.id === 'txn_bloom_supplier_001');
+    expect(bloom?.status).toBe('Blocked');
+    expect(dashboard.state.customerDetails.txn_bloom_supplier_001.reasonCodes).toContain('EVIDENCE_REVIEW_REQUIRED');
+    expect(dashboard.state.queue.filter((row) => row.id === 'txn_bloom_supplier_001')).toHaveLength(1);
+
+    const expectedArrivalOrder = dashboard.scenario.inputs.events
+      .filter((event) => event.type === 'decline')
+      .map((event) => event.requestId);
+    for (let guard = 0; dashboard.state.queue.length < expectedArrivalOrder.length && guard < 20; guard++) {
+      if (dashboard.state.pause?.kind === 'ack') dashboard.continueAfterAuto();
+      else if (dashboard.state.pause?.kind === 'human') dashboard.approve(dashboard.state.pause.requestId);
+      else if (dashboard.state.pause?.kind === 'crm') {
+        dashboard.crmReveal();
+        dashboard = renderDashboard('http://localhost:8000');
+        dashboard.crmReEvaluate();
+      }
+      dashboard = renderDashboard('http://localhost:8000');
+      dashboard.advance();
+      dashboard = renderDashboard('http://localhost:8000');
+    }
+
+    expect(dashboard.state.queue.map((row) => row.id)).toEqual(expectedArrivalOrder);
+    expect(dashboard.state.queue.find((row) => row.id === 'txn_bloom_supplier_001')?.status).toBe('Blocked');
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:8000/api/kit5/session',
+      'http://localhost:8000/api/kit5/fixture-checkpoint',
+    ]);
   });
 
   it('lets the presenter continue fixture-only after a checkpoint result is not confirmed', () => {
@@ -146,6 +225,8 @@ describe('Kit 5 fixture provider checkpoint', () => {
   });
 
   it('keeps pure Fixture advancing the same Bloom event without checkpoint resolution', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
     let dashboard = renderDashboard();
     dashboard.selectScenario('kit5-target');
     dashboard = renderDashboard();
@@ -159,5 +240,6 @@ describe('Kit 5 fixture provider checkpoint', () => {
     expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
     expect(dashboard.state.cursor).toBe(1);
     expect(dashboard.state.queue.filter((row) => row.id === 'txn_bloom_supplier_001')).toHaveLength(1);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

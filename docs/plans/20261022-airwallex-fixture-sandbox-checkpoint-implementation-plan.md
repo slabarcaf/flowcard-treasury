@@ -254,15 +254,15 @@ create another provider attempt; a new provider run gets a new run UUID.
 - Modify: `tests/kit5/fixture-checkpoint.test.ts`
 - Modify: `tests/kit5/dashboard-live-state.test.ts`
 
-- [ ] Add an end-to-end fake-gateway scenario for one provider-confirmed
+- [x] Add an end-to-end fake-gateway scenario for one provider-confirmed
       Bloom decline followed by fixture-driven handling of the same event.
-- [ ] Assert the checkpoint creates one issuing attempt and no bridge
+- [x] Assert the checkpoint creates one issuing attempt and no bridge
       transfer, retry, fee charge, or repayment-deposit operation.
-- [ ] Assert later fixture customers continue in arrival order and Bloom's
+- [x] Assert later fixture customers continue in arrival order and Bloom's
       existing evidence-review gate remains fail-closed.
-- [ ] Assert pure Fixture mode remains provider-free and Sandbox live retains
+- [x] Assert pure Fixture mode remains provider-free and Sandbox live retains
       its existing full live behavior.
-- [ ] Run the focused cross-mode tests before starting Task 6.
+- [x] Run the focused cross-mode tests before starting Task 6.
 
 ### Task 6: Verify acceptance criteria
 

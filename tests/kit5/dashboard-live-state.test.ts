@@ -72,15 +72,50 @@ function completedCheckpoint(result: {
   };
 }
 
+function persistCheckpointRun(input: {
+  runId?: string;
+  activity?: FixtureCheckpointActivity | null;
+  resolution?: 'awaiting' | 'confirmed' | 'fixture-only';
+  enabled?: boolean;
+}) {
+  const runId = input.runId ?? '00000000-0000-4000-8000-000000000001';
+  window.sessionStorage.setItem('flowcard-kit5-fixture-checkpoint:kit5-target', JSON.stringify({
+    runId,
+    activity: input.activity ?? null,
+    resolution: input.resolution ?? 'awaiting',
+    ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+  }));
+  return runId;
+}
+
+function checkpointActivity(
+  runId: string,
+  status: FixtureCheckpointActivity['status'],
+  result?: FixtureCheckpointActivity['result'],
+): FixtureCheckpointActivity {
+  const scenarioId = `kit5-target:${runId}`;
+  return {
+    scenarioId,
+    customerId: 'acct_bloom001',
+    actionId: `${scenarioId}:txn_bloom_supplier_001`,
+    status,
+    attemptId: `${scenarioId}:txn_bloom_supplier_001`,
+    lifecycleId: 'lifecycle-bloom',
+    attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+    ...(result ? { result } : {}),
+  };
+}
+
 describe('Kit 5 live dashboard recovery state', () => {
   beforeEach(() => {
     runtime.values = [];
     runtime.refs = [];
-    try {
-      window.sessionStorage.clear();
-    } catch {
-      // Browser storage is optional for the live dashboard.
-    }
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', { sessionStorage: {
+      clear: () => storage.clear(),
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    } });
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'authenticated' }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({
@@ -95,6 +130,18 @@ describe('Kit 5 live dashboard recovery state', () => {
   });
 
   it('clears live order, action, history, and errors when the scenario changes', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'authenticated' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        status: 'completed',
+        attemptId: 'original:txn_bloom_payroll_001',
+        attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+        result: {
+          processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS',
+          cardTransactionEventId: 'event', cardTransactionId: 'transaction', cardTransactionLifecycleId: 'lifecycle',
+        },
+      }) });
+    vi.stubGlobal('fetch', fetchMock);
     let dashboard = useDashboardForTest();
     await dashboard.authenticateOperator('runtime-only-token');
     dashboard = useDashboardForTest();
@@ -104,6 +151,11 @@ describe('Kit 5 live dashboard recovery state', () => {
     dashboard = useDashboardForTest();
     expect(dashboard.liveHistory).toHaveLength(1);
     expect(dashboard.liveAction?.status).toBe('completed');
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:8000/api/kit5/session',
+      'http://localhost:8000/api/kit5/next-customer',
+    ]);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body))).toMatchObject({ customerId: 'acct_bloom001' });
 
     dashboard.selectScenario(loadScenarios()[1]!.id);
     dashboard = useDashboardForTest();
@@ -251,6 +303,70 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(dashboard.state.cursor).toBe(0);
     expect(dashboard.state.queue).toHaveLength(0);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('restores checkpoint mode after reload when the presenter enabled it before the provider attempt', () => {
+    let dashboard = useDashboardForTest();
+    dashboard.selectScenario('kit5-target');
+    dashboard = useDashboardForTest();
+    dashboard.selectMode('fixture-checkpoint');
+
+    const saved = JSON.parse(window.sessionStorage.getItem('flowcard-kit5-fixture-checkpoint:kit5-target') ?? '{}') as Record<string, unknown>;
+    expect(saved.enabled).toBe(true);
+    const runId = saved.runId;
+
+    runtime.values = [];
+    runtime.refs = [];
+    dashboard = useDashboardForTest();
+    dashboard.selectScenario('kit5-target');
+    dashboard = useDashboardForTest();
+
+    expect(dashboard.mode).toBe('fixture-checkpoint');
+    expect(dashboard.fixtureCheckpointRunId).toBe(runId);
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+    expect(dashboard.state.cursor).toBe(0);
+  });
+
+  it.each([
+    ['an unresolved provider result', 'ambiguous' as const, undefined, 'awaiting' as const, false],
+    ['a completed result awaiting presenter choice', 'completed' as const,
+      completedCheckpoint({ processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS' }).result, 'awaiting' as const, false],
+  ])('restores the saved pause for %s after reload', (_description, status, result, resolution, enabled) => {
+    const runId = '00000000-0000-4000-8000-000000000002';
+    persistCheckpointRun({ runId, activity: checkpointActivity(runId, status, result), resolution, enabled });
+
+    let dashboard = useDashboardForTest();
+    dashboard.selectScenario('kit5-target');
+    dashboard = useDashboardForTest();
+
+    expect(dashboard.mode).toBe('fixture-checkpoint');
+    expect(dashboard.fixtureCheckpointRunId).toBe(runId);
+    expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+    expect(dashboard.state.cursor).toBe(0);
+    dashboard.advance();
+    dashboard = useDashboardForTest();
+    expect(dashboard.state.cursor).toBe(0);
+    dashboard.selectMode('fixture');
+    dashboard = useDashboardForTest();
+    expect(dashboard.mode).toBe('fixture-checkpoint');
+  });
+
+  it('restores a resolved checkpoint receipt and preserves the presenter choice after reload', () => {
+    const runId = '00000000-0000-4000-8000-000000000003';
+    const activity = checkpointActivity(runId, 'completed', completedCheckpoint({
+      processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS',
+    }).result);
+    persistCheckpointRun({ runId, activity, resolution: 'confirmed' });
+
+    let dashboard = useDashboardForTest();
+    dashboard.selectScenario('kit5-target');
+    dashboard = useDashboardForTest();
+
+    expect(dashboard.mode).toBe('fixture-checkpoint');
+    expect(dashboard.fixtureCheckpointActivity).toEqual(activity);
+    expect(dashboard.fixtureCheckpointResolution).toBe('confirmed');
+    expect(dashboard.fixtureCheckpointPaused).toBe(false);
   });
 
   it('keeps provider receipt provenance separate and exposes only checkpoint-safe controls', () => {

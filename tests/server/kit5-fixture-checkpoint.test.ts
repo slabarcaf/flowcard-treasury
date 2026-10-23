@@ -1,10 +1,11 @@
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
-import type { IssuingSimulationGateway } from "../../server/src/airwallex/client.js";
+import type { AirwallexGateway, IssuingSimulationGateway } from "../../server/src/airwallex/client.js";
 import type { DatabaseClient, DatabasePool, QueryResult } from "../../server/src/db/pool.js";
 import type { Kit5CardAttempt } from "../../server/src/db/repositories.js";
 import type { Kit5BridgeFundingBoundary } from "../../server/src/demo/next-customer.js";
+import type { Kit5DemoRouteDependencies } from "../../server/src/http/routes/kit5-demo.js";
 import { createKit5FixtureCheckpointResolver } from "../../server/src/demo/kit5-scenario-resolver.js";
 import type { Kit5CustomerFixture } from "../../server/src/demo/next-customer.js";
 import { createRequestHandler } from "../../server/src/http/server.js";
@@ -206,7 +207,13 @@ function fixture(): Kit5CustomerFixture {
   };
 }
 
-function route(pool: MemoryPool, gateway: IssuingSimulationGateway, resolveFixtureCheckpoint = createKit5FixtureCheckpointResolver(pool), bridgeFunding?: Kit5BridgeFundingBoundary) {
+function route(
+  pool: MemoryPool,
+  gateway: IssuingSimulationGateway,
+  resolveFixtureCheckpoint = createKit5FixtureCheckpointResolver(pool),
+  bridgeFunding?: Kit5BridgeFundingBoundary,
+  extra: Partial<Kit5DemoRouteDependencies> = {},
+) {
   const dependencies = {
     pool,
     gateway,
@@ -214,6 +221,7 @@ function route(pool: MemoryPool, gateway: IssuingSimulationGateway, resolveFixtu
     resolveFixtureCheckpoint,
     operatorAuth: { operatorToken, allowedOrigins: [origin] },
     bridgeFunding,
+    ...extra,
   };
   return createRequestHandler({
     port: 8000,
@@ -295,7 +303,17 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
       reserveAndWaitForSettlement: vi.fn(),
       retryCardAfterSettlement: vi.fn(),
     };
-    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() }, undefined, boundary);
+    const chargeFee = vi.fn();
+    const createDeposit = vi.fn();
+    const resolveRepaymentDepositTarget = vi.fn();
+    const repaymentDepositGateway = {
+      createCharge: chargeFee,
+      createGlobalAccountDepositSimulation: createDeposit,
+    } as unknown as AirwallexGateway;
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() }, undefined, boundary, {
+      repaymentDepositGateway,
+      resolveRepaymentDepositTarget,
+    });
     const input = { scenarioId, customerId, actionId };
 
     const first = await send(handler, input);
@@ -335,6 +353,9 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     expect(boundary.evaluate).not.toHaveBeenCalled();
     expect(boundary.reserveAndWaitForSettlement).not.toHaveBeenCalled();
     expect(boundary.retryCardAfterSettlement).not.toHaveBeenCalled();
+    expect(chargeFee).not.toHaveBeenCalled();
+    expect(createDeposit).not.toHaveBeenCalled();
+    expect(resolveRepaymentDepositTarget).not.toHaveBeenCalled();
     expect(pool.attempts.size).toBe(1);
   });
 
