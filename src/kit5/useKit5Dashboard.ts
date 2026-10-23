@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Scenario, ScenarioInputs, Kit5State } from './types.js';
-import type { Kit5FixtureCheckpointRequest, Kit5FixtureCheckpointResponse, Kit5PolicyDecisionSummary, Kit5ProviderTransaction, Kit5RepaymentDepositResponse, LedgerProjectionResponse } from '../services/types.js';
+import type { Kit5FixtureCheckpointLifecycleRequest, Kit5FixtureCheckpointRequest, Kit5FixtureCheckpointResponse, Kit5PolicyDecisionSummary, Kit5ProviderTransaction, Kit5RepaymentDepositResponse, LedgerProjectionResponse } from '../services/types.js';
 import { BridgeApiClient, BridgeApiError } from '../services/http/BridgeApiClient.js';
 import { loadScenarios } from './scenarios.js';
 import {
@@ -45,7 +45,7 @@ export interface LiveProviderActivity {
 
 export type FixtureCheckpointResolution = 'awaiting' | 'confirmed' | 'fixture-only';
 
-export type FixtureCheckpointControl = 'run-attempt' | 'reconcile-attempt' | 'continue-fixture' | 'continue-fixture-only';
+export type FixtureCheckpointControl = 'run-attempt' | 'reconcile-attempt' | 'resolve-lifecycle' | 'continue-fixture' | 'continue-fixture-only';
 
 export interface FixtureCheckpointActivity {
   scenarioId: string;
@@ -65,8 +65,22 @@ export function isFixtureCheckpointEventNext(
 ): boolean {
   const checkpoint = scenario.providerCheckpoint;
   const next = state.events[state.cursor];
-  return checkpoint?.provider === 'airwallex' && next?.type === 'decline' &&
+  return checkpoint?.provider === 'airwallex' && fixtureCheckpointTermsMatch(scenario, state.inputs) && next?.type === 'decline' &&
     next.requestId === checkpoint.eventRequestId;
+}
+
+export function fixtureCheckpointTermsMatch(scenario: Scenario, inputs: ScenarioInputs): boolean {
+  const checkpoint = scenario.providerCheckpoint;
+  if (!checkpoint) return false;
+  const expected = scenario.inputs.events.find((event) => event.type === 'decline' && event.requestId === checkpoint.eventRequestId);
+  const configured = inputs.events.find((event) => event.type === 'decline' && event.requestId === checkpoint.eventRequestId);
+  if (!expected || !configured || expected.type !== 'decline' || configured.type !== 'decline') return false;
+  const expectedCustomer = scenario.inputs.customers.find((customer) => customer.key === checkpoint.customerKey);
+  const configuredCustomer = inputs.customers.find((customer) => customer.key === checkpoint.customerKey);
+  return expectedCustomer?.id === configuredCustomer?.id &&
+    expected.customerKey === configured.customerKey && expected.day === configured.day &&
+    expected.time === configured.time && expected.paymentDescription === configured.paymentDescription &&
+    expected.paymentAmount === configured.paymentAmount && expected.walletBalance === configured.walletBalance;
 }
 
 export function shouldPauseForFixtureCheckpoint(
@@ -75,7 +89,7 @@ export function shouldPauseForFixtureCheckpoint(
   state: Kit5State,
   resolution: FixtureCheckpointResolution,
 ): boolean {
-  return mode === 'fixture-checkpoint' && resolution === 'awaiting' &&
+  return mode === 'fixture-checkpoint' && state.phase !== 'idle' && resolution === 'awaiting' &&
     isFixtureCheckpointEventNext(scenario, state);
 }
 
@@ -91,6 +105,14 @@ interface PersistedFixtureCheckpointRun {
   activity: FixtureCheckpointActivity | null;
   resolution: FixtureCheckpointResolution;
   enabled: boolean;
+  identityKnown: boolean;
+  identityPersisted: boolean;
+}
+
+const SELECTED_SCENARIO_STORAGE_KEY = 'flowcard-kit5-selected-scenario';
+
+function newFixtureCheckpointRun(): Omit<PersistedFixtureCheckpointRun, 'identityKnown' | 'identityPersisted'> {
+  return { runId: globalThis.crypto.randomUUID(), activity: null, resolution: 'awaiting', enabled: false };
 }
 
 function shouldRestoreFixtureCheckpointMode(run: PersistedFixtureCheckpointRun): boolean {
@@ -114,18 +136,29 @@ function isFixtureCheckpointActivity(value: unknown): value is FixtureCheckpoint
     typeof result.cardTransactionLifecycleId === 'string';
 }
 
-function persistFixtureCheckpointRun(scenarioId: string, run: PersistedFixtureCheckpointRun): void {
+function persistFixtureCheckpointRun(scenarioId: string, run: PersistedFixtureCheckpointRun): boolean {
   try {
-    window.sessionStorage.setItem(`${FIXTURE_CHECKPOINT_STORAGE_PREFIX}${scenarioId}`, JSON.stringify(run));
+    window.sessionStorage.setItem(`${FIXTURE_CHECKPOINT_STORAGE_PREFIX}${scenarioId}`, JSON.stringify({
+      runId: run.runId,
+      activity: run.activity,
+      resolution: run.resolution,
+      enabled: run.enabled,
+    }));
+    return true;
   } catch {
-    // The stable identity remains available for the lifetime of this hook.
+    return false;
   }
 }
 
 function loadFixtureCheckpointRun(scenarioId: string): PersistedFixtureCheckpointRun {
+  let stored: string | null;
   try {
-    const stored = window.sessionStorage.getItem(`${FIXTURE_CHECKPOINT_STORAGE_PREFIX}${scenarioId}`);
-    if (stored) {
+    stored = window.sessionStorage.getItem(`${FIXTURE_CHECKPOINT_STORAGE_PREFIX}${scenarioId}`);
+  } catch {
+    return { ...newFixtureCheckpointRun(), identityKnown: false, identityPersisted: false };
+  }
+  if (stored) {
+    try {
       const parsed = JSON.parse(stored) as Partial<PersistedFixtureCheckpointRun>;
       if (typeof parsed.runId === 'string' && LIVE_RUN_ID_PATTERN.test(parsed.runId) &&
           (parsed.activity === null || isFixtureCheckpointActivity(parsed.activity)) &&
@@ -134,20 +167,37 @@ function loadFixtureCheckpointRun(scenarioId: string): PersistedFixtureCheckpoin
         const enabled = typeof parsed.enabled === 'boolean'
           ? parsed.enabled
           : activity !== null || parsed.resolution !== 'awaiting';
-        return { runId: parsed.runId, activity, resolution: parsed.resolution, enabled };
+        return { runId: parsed.runId, activity, resolution: parsed.resolution, enabled, identityKnown: true, identityPersisted: true };
       }
+      return { ...newFixtureCheckpointRun(), identityKnown: false, identityPersisted: false };
+    } catch {
+      return { ...newFixtureCheckpointRun(), identityKnown: false, identityPersisted: false };
     }
-  } catch {
-    // Ignore unavailable or malformed session storage and start a fresh run.
   }
   const run: PersistedFixtureCheckpointRun = {
-    runId: globalThis.crypto.randomUUID(),
-    activity: null,
-    resolution: 'awaiting',
-    enabled: false,
+    ...newFixtureCheckpointRun(),
+    identityKnown: true,
+    identityPersisted: false,
   };
-  persistFixtureCheckpointRun(scenarioId, run);
+  run.identityPersisted = persistFixtureCheckpointRun(scenarioId, run);
   return run;
+}
+
+function loadSelectedScenarioId(scenarios: readonly Scenario[]): string {
+  try {
+    const selected = window.sessionStorage.getItem(SELECTED_SCENARIO_STORAGE_KEY);
+    return selected && scenarios.some((scenario) => scenario.id === selected) ? selected : scenarios[0]!.id;
+  } catch {
+    return scenarios[0]!.id;
+  }
+}
+
+function persistSelectedScenarioId(scenarioId: string): void {
+  try {
+    window.sessionStorage.setItem(SELECTED_SCENARIO_STORAGE_KEY, scenarioId);
+  } catch {
+    // Checkpoint submission separately requires a durable run identity.
+  }
 }
 
 export function isFixtureCheckpointProviderConfirmed(activity: FixtureCheckpointActivity | null): boolean {
@@ -166,12 +216,14 @@ export function fixtureCheckpointControls(input: {
   pending: boolean;
   resolution: FixtureCheckpointResolution;
   activity: FixtureCheckpointActivity | null;
-}): FixtureCheckpointControl[] {
-  if (input.mode !== 'fixture-checkpoint' || !input.paused || input.pending || input.resolution !== 'awaiting') return [];
-  if (fixtureCheckpointNeedsReconciliation(input.activity)) return ['reconcile-attempt'];
-  if (isFixtureCheckpointProviderConfirmed(input.activity)) return ['continue-fixture'];
-  if (input.activity) return ['continue-fixture-only'];
-  return ['run-attempt'];
+}): FixtureCheckpointControl | null {
+  if (input.mode !== 'fixture-checkpoint' || !input.paused || input.pending || input.resolution !== 'awaiting') return null;
+  if (fixtureCheckpointNeedsReconciliation(input.activity)) {
+    return input.activity?.lifecycleId ? 'reconcile-attempt' : 'resolve-lifecycle';
+  }
+  if (isFixtureCheckpointProviderConfirmed(input.activity)) return 'continue-fixture';
+  if (input.activity) return 'continue-fixture-only';
+  return 'run-attempt';
 }
 
 export function fixtureCheckpointReceipt(activity: FixtureCheckpointActivity | null) {
@@ -194,7 +246,11 @@ export function fixtureCheckpointRecoveryState(
   paused: boolean,
 ): string {
   if (pending) return 'Waiting for Airwallex. The scenario clock and fixture decision are paused.';
-  if (fixtureCheckpointNeedsReconciliation(activity)) return 'Reconciliation required. Keep the fixture paused until this same attempt is resolved.';
+  if (activity && fixtureCheckpointNeedsReconciliation(activity)) {
+    return activity.lifecycleId
+      ? 'Reconciliation required. Refresh the same Airwallex lifecycle before continuing.'
+      : 'Airwallex returned no lifecycle ID. Find this attempt in the provider dashboard, then verify its lifecycle ID here. Do not run another provider attempt.';
+  }
   if (resolution === 'confirmed') return 'The provider confirmed DECLINED / INSUFFICIENT_FUNDS. The presenter resumed the fixture sequence.';
   if (resolution === 'fixture-only') return 'The presenter chose fixture-only continuation. The provider result did not determine the fixture decision.';
   if (!paused) return 'The fixture sequence is running toward Bloom’s checkpoint.';
@@ -283,19 +339,22 @@ export function canCreateNovaRepaymentDeposit(
 
 export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_URL ?? '') {
   const scenarios = useMemo<Scenario[]>(() => loadScenarios(), []);
-  const [scenarioId, setScenarioId] = useState(scenarios[0].id);
+  const [scenarioId, setScenarioId] = useState(() => loadSelectedScenarioId(scenarios));
   const scenario = scenarios.find((s) => s.id === scenarioId) ?? scenarios[0];
-  const [initialLiveRun] = useState(() => loadLiveRun(scenarios[0].id));
-  const [initialFixtureCheckpointRun] = useState(() => loadFixtureCheckpointRun(scenarios[0].id));
+  const [initialLiveRun] = useState(() => loadLiveRun(scenario.id));
+  const [initialFixtureCheckpointRun] = useState(() => loadFixtureCheckpointRun(scenario.id));
   const [inputs, setInputs] = useState<ScenarioInputs>(() => structuredClone(scenario.inputs));
   const [state, setState] = useState<Kit5State>(() => initialKit5State(scenario.inputs));
   const [ledgerProjectionResult, setLedgerProjectionResult] = useState<{ url: string; data: LedgerProjectionResponse } | null>(null);
   const [ledgerProjectionFailure, setLedgerProjectionFailure] = useState<{ url: string; message: string } | null>(null);
   const [ledgerProjectionLoadedUrl, setLedgerProjectionLoadedUrl] = useState('');
-  const [mode, setMode] = useState<'fixture' | 'fixture-checkpoint' | 'sandbox-live'>('fixture');
+  const [mode, setMode] = useState<'fixture' | 'fixture-checkpoint' | 'sandbox-live'>(() =>
+    scenario.providerCheckpoint && shouldRestoreFixtureCheckpointMode(initialFixtureCheckpointRun) ? 'fixture-checkpoint' : 'fixture');
   const [fixtureCheckpointRunId, setFixtureCheckpointRunId] = useState(initialFixtureCheckpointRun.runId);
   const [fixtureCheckpointActivity, setFixtureCheckpointActivity] = useState<FixtureCheckpointActivity | null>(initialFixtureCheckpointRun.activity);
   const [fixtureCheckpointResolution, setFixtureCheckpointResolution] = useState<FixtureCheckpointResolution>(initialFixtureCheckpointRun.resolution);
+  const [fixtureCheckpointIdentityKnown, setFixtureCheckpointIdentityKnown] = useState(initialFixtureCheckpointRun.identityKnown);
+  const [fixtureCheckpointIdentityPersisted, setFixtureCheckpointIdentityPersisted] = useState(initialFixtureCheckpointRun.identityPersisted);
   const [fixtureCheckpointError, setFixtureCheckpointError] = useState<string | null>(null);
   const [fixtureCheckpointPending, setFixtureCheckpointPending] = useState(false);
   const [liveRunId, setLiveRunId] = useState(initialLiveRun.runId);
@@ -314,13 +373,14 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const fixtureCheckpointCustomer = scenario.providerCheckpoint
     ? scenario.inputs.customers.find((customer) => customer.key === scenario.providerCheckpoint?.customerKey)
     : undefined;
-  const fixtureCheckpointRequest: Kit5FixtureCheckpointRequest | null = scenario.providerCheckpoint && fixtureCheckpointCustomer
+  const fixtureCheckpointRequest = useMemo<Kit5FixtureCheckpointRequest | null>(() => scenario.providerCheckpoint && fixtureCheckpointCustomer
     ? {
       scenarioId: fixtureCheckpointScenarioId,
       customerId: fixtureCheckpointCustomer.id,
       actionId: `${fixtureCheckpointScenarioId}:${scenario.providerCheckpoint.eventRequestId}`,
     }
-    : null;
+    : null, [fixtureCheckpointCustomer, fixtureCheckpointScenarioId, scenario.providerCheckpoint]);
+  const fixtureCheckpointTermsCompatible = fixtureCheckpointTermsMatch(scenario, inputs);
 
   useEffect(() => {
     persistLiveRun(scenario.id, {
@@ -332,13 +392,16 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   }, [liveAction, liveCustomerIndex, liveHistory, liveRunId, scenario.id]);
 
   useEffect(() => {
+    if (!fixtureCheckpointIdentityKnown) return;
     persistFixtureCheckpointRun(scenario.id, {
       runId: fixtureCheckpointRunId,
       activity: fixtureCheckpointActivity,
       resolution: fixtureCheckpointResolution,
       enabled: mode === 'fixture-checkpoint',
+      identityKnown: fixtureCheckpointIdentityKnown,
+      identityPersisted: fixtureCheckpointIdentityPersisted,
     });
-  }, [fixtureCheckpointActivity, fixtureCheckpointResolution, fixtureCheckpointRunId, mode, scenario.id]);
+  }, [fixtureCheckpointActivity, fixtureCheckpointIdentityKnown, fixtureCheckpointIdentityPersisted, fixtureCheckpointResolution, fixtureCheckpointRunId, mode, scenario.id]);
 
   // Optional read-only server projection. It is deliberately separate from the
   // deterministic scenario state, which remains the demo's source of behavior.
@@ -384,7 +447,8 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const selectScenario = useCallback((id: string) => {
     if (fixtureCheckpointPending || fixtureCheckpointSubmissionRef.current ||
         fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity) ||
-        (fixtureCheckpointActivity !== null && fixtureCheckpointResolution === 'awaiting')) return;
+        (fixtureCheckpointActivity !== null && fixtureCheckpointResolution === 'awaiting') ||
+        (fixtureCheckpointPaused && id !== scenario.id)) return;
     const next = scenarios.find((s) => s.id === id);
     if (!next) return;
     const liveRun = loadLiveRun(id);
@@ -396,6 +460,8 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setFixtureCheckpointRunId(checkpointRun.runId);
     setFixtureCheckpointActivity(checkpointRun.activity);
     setFixtureCheckpointResolution(checkpointRun.resolution);
+    setFixtureCheckpointIdentityKnown(checkpointRun.identityKnown);
+    setFixtureCheckpointIdentityPersisted(checkpointRun.identityPersisted);
     setFixtureCheckpointError(null);
     setFixtureCheckpointPending(false);
     setLiveRunId(liveRun.runId);
@@ -406,12 +472,13 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setLivePending(false);
     setInputs(structuredClone(next.inputs));
     setState(initialKit5State(next.inputs));
+    persistSelectedScenarioId(id);
     if (next.providerCheckpoint && shouldRestoreFixtureCheckpointMode(checkpointRun)) {
       setMode('fixture-checkpoint');
-    } else if (!next.providerCheckpoint && mode === 'fixture-checkpoint') {
+    } else if (mode === 'fixture-checkpoint') {
       setMode('fixture');
     }
-  }, [fixtureCheckpointActivity, fixtureCheckpointPending, fixtureCheckpointResolution, mode, scenarioId, scenarios]);
+  }, [fixtureCheckpointActivity, fixtureCheckpointPaused, fixtureCheckpointPending, fixtureCheckpointResolution, mode, scenario.id, scenarios]);
 
   const applyInputs = useCallback((next: ScenarioInputs) => {
     if (fixtureCheckpointPending || fixtureCheckpointSubmissionRef.current ||
@@ -420,8 +487,16 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     liveGenerationRef.current += 1;
     liveSubmissionRef.current = false;
     fixtureCheckpointSubmissionRef.current = false;
-    const nextCheckpointRunId = globalThis.crypto.randomUUID();
-    setFixtureCheckpointRunId(nextCheckpointRunId);
+    const nextCheckpointRun = {
+      ...newFixtureCheckpointRun(),
+      enabled: mode === 'fixture-checkpoint' && fixtureCheckpointTermsMatch(scenario, next),
+      identityKnown: fixtureCheckpointIdentityKnown,
+      identityPersisted: false,
+    };
+    nextCheckpointRun.identityPersisted = fixtureCheckpointIdentityKnown &&
+      persistFixtureCheckpointRun(scenario.id, nextCheckpointRun);
+    setFixtureCheckpointRunId(nextCheckpointRun.runId);
+    setFixtureCheckpointIdentityPersisted(nextCheckpointRun.identityPersisted);
     setFixtureCheckpointActivity(null);
     setLiveCustomerIndex(0);
     setLiveAction(null);
@@ -433,7 +508,8 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setFixtureCheckpointPending(false);
     setInputs(structuredClone(next));
     setState(initialKit5State(next));
-  }, [fixtureCheckpointActivity, fixtureCheckpointPending, fixtureCheckpointResolution]);
+    if (mode === 'fixture-checkpoint' && !fixtureCheckpointTermsMatch(scenario, next)) setMode('fixture');
+  }, [fixtureCheckpointActivity, fixtureCheckpointIdentityKnown, fixtureCheckpointPending, fixtureCheckpointResolution, mode, scenario]);
 
   const scan = useCallback(() => setState((s) => start(s)), []);
   const advance = useCallback(() => setState((s) => (
@@ -485,16 +561,20 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const selectMode = useCallback((next: 'fixture' | 'fixture-checkpoint' | 'sandbox-live') => {
     if (liveSubmissionRef.current || liveActivityNeedsReconciliation(liveAction) ||
         fixtureCheckpointSubmissionRef.current || fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity) ||
+        (fixtureCheckpointPaused && next !== 'fixture-checkpoint') ||
         (fixtureCheckpointActivity !== null && fixtureCheckpointResolution === 'awaiting')) return;
-    if (next === 'fixture-checkpoint' && !scenario.providerCheckpoint) return;
+    if (next === 'fixture-checkpoint' && (!scenario.providerCheckpoint || !fixtureCheckpointTermsCompatible)) return;
     setMode(next);
-    persistFixtureCheckpointRun(scenario.id, {
+    const persisted = fixtureCheckpointIdentityKnown && persistFixtureCheckpointRun(scenario.id, {
       runId: fixtureCheckpointRunId,
       activity: fixtureCheckpointActivity,
       resolution: fixtureCheckpointResolution,
       enabled: next === 'fixture-checkpoint',
+      identityKnown: fixtureCheckpointIdentityKnown,
+      identityPersisted: fixtureCheckpointIdentityPersisted,
     });
-  }, [fixtureCheckpointActivity, fixtureCheckpointResolution, fixtureCheckpointRunId, liveAction, scenario.id, scenario.providerCheckpoint]);
+    if (persisted) setFixtureCheckpointIdentityPersisted(true);
+  }, [fixtureCheckpointActivity, fixtureCheckpointIdentityKnown, fixtureCheckpointIdentityPersisted, fixtureCheckpointPaused, fixtureCheckpointResolution, fixtureCheckpointRunId, fixtureCheckpointTermsCompatible, liveAction, scenario.id, scenario.providerCheckpoint]);
 
   const confirmFixtureCheckpoint = useCallback(() => {
     if (!shouldPauseForFixtureCheckpoint(mode, scenario, state, fixtureCheckpointResolution) ||
@@ -512,7 +592,27 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const submitFixtureCheckpoint = useCallback(async () => {
     if (mode !== 'fixture-checkpoint' || !apiBaseUrl || !operatorAuthenticated || !fixtureCheckpointRequest ||
         !fixtureCheckpointPaused || fixtureCheckpointResolution !== 'awaiting' || fixtureCheckpointPending ||
-        fixtureCheckpointSubmissionRef.current || fixtureCheckpointActivity?.status === 'completed') return;
+        fixtureCheckpointSubmissionRef.current || fixtureCheckpointActivity?.status === 'completed' ||
+        !fixtureCheckpointTermsCompatible) return;
+    if (!fixtureCheckpointIdentityKnown) {
+      setFixtureCheckpointError('Checkpoint recovery data could not be read from session storage. Keep this run blocked until the prior provider attempt can be reconciled.');
+      return;
+    }
+    if (!fixtureCheckpointIdentityPersisted) {
+      const persisted = persistFixtureCheckpointRun(scenario.id, {
+        runId: fixtureCheckpointRunId,
+        activity: fixtureCheckpointActivity,
+        resolution: fixtureCheckpointResolution,
+        enabled: true,
+        identityKnown: true,
+        identityPersisted: false,
+      });
+      if (!persisted) {
+        setFixtureCheckpointError('Session storage is unavailable. The Airwallex checkpoint was not submitted because its identity must survive a reload.');
+        return;
+      }
+      setFixtureCheckpointIdentityPersisted(true);
+    }
     const generation = liveGenerationRef.current;
     fixtureCheckpointSubmissionRef.current = true;
     setFixtureCheckpointPending(true);
@@ -543,6 +643,8 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
         setFixtureCheckpointError(isFixtureCheckpointProviderConfirmed(activity)
           ? null
           : `Airwallex returned ${response.result.processResult}${response.result.failureReason ? ` / ${response.result.failureReason}` : ''}; this does not confirm an insufficient-funds decline.`);
+      } else if (response.status === 'failed') {
+        setFixtureCheckpointError('The provider attempt failed before returning a transaction result. Fixture-only continuation is available.');
       } else {
         setFixtureCheckpointError(`Airwallex checkpoint status is ${response.status}; reconcile the same attempt before continuing.`);
       }
@@ -554,15 +656,15 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
         attemptId: fixtureCheckpointRequest.actionId,
       });
       setFixtureCheckpointError(error instanceof Error
-        ? `${error.message}. Reconcile this same checkpoint before continuing.`
-        : 'Airwallex checkpoint result is unresolved. Reconcile this same checkpoint before continuing.');
+        ? `${error.message}. The result is unresolved. Find the provider lifecycle ID and verify it before starting another attempt.`
+        : 'Airwallex checkpoint result is unresolved. Find the provider lifecycle ID and verify it before starting another attempt.');
     } finally {
       if (generation === liveGenerationRef.current) {
         fixtureCheckpointSubmissionRef.current = false;
         setFixtureCheckpointPending(false);
       }
     }
-  }, [apiBaseUrl, fixtureCheckpointActivity?.status, fixtureCheckpointPaused, fixtureCheckpointPending, fixtureCheckpointRequest, fixtureCheckpointResolution, mode, operatorAuthenticated]);
+  }, [apiBaseUrl, fixtureCheckpointActivity, fixtureCheckpointIdentityKnown, fixtureCheckpointIdentityPersisted, fixtureCheckpointPaused, fixtureCheckpointPending, fixtureCheckpointRequest, fixtureCheckpointResolution, fixtureCheckpointRunId, fixtureCheckpointTermsCompatible, mode, operatorAuthenticated, scenario.id]);
 
   const runFixtureCheckpoint = useCallback(async () => {
     if (fixtureCheckpointActivity?.status === 'completed') return;
@@ -576,23 +678,76 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     await submitFixtureCheckpoint();
   }, [fixtureCheckpointActivity, submitFixtureCheckpoint]);
 
+  const reconcileFixtureCheckpointLifecycle = useCallback(async (lifecycleId: string) => {
+    const normalizedLifecycleId = lifecycleId.trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalizedLifecycleId) ||
+        !fixtureCheckpointRequest || !operatorAuthenticated || !apiBaseUrl ||
+        !fixtureCheckpointIdentityKnown || !fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity) || fixtureCheckpointPending ||
+        fixtureCheckpointSubmissionRef.current) return;
+    const generation = liveGenerationRef.current;
+    fixtureCheckpointSubmissionRef.current = true;
+    setFixtureCheckpointPending(true);
+    setFixtureCheckpointError(null);
+    try {
+      const response = await new BridgeApiClient(apiBaseUrl).reconcileFixtureCheckpointLifecycle({
+        ...fixtureCheckpointRequest,
+        lifecycleId: normalizedLifecycleId,
+      } satisfies Kit5FixtureCheckpointLifecycleRequest);
+      if (generation !== liveGenerationRef.current) return;
+      if (response.status === 'rejected') {
+        setFixtureCheckpointError(`Airwallex lifecycle was not accepted: ${response.reason}. The original attempt remains unresolved.`);
+        return;
+      }
+      const activity: FixtureCheckpointActivity = {
+        ...fixtureCheckpointRequest,
+        status: response.status,
+        attemptId: response.attemptId,
+        lifecycleId: response.lifecycleId,
+        attemptedAmount: response.attemptedAmount,
+        result: response.result,
+      };
+      setFixtureCheckpointActivity(activity);
+      setFixtureCheckpointError(response.status === 'completed'
+        ? (isFixtureCheckpointProviderConfirmed(activity) ? null : 'Lifecycle verified, but the result does not confirm DECLINED / INSUFFICIENT_FUNDS.')
+        : 'Airwallex did not return a verifiable lifecycle result. The original attempt remains unresolved; no new provider attempt was created.');
+    } catch (error) {
+      if (generation !== liveGenerationRef.current) return;
+      setFixtureCheckpointError(error instanceof Error ? error.message : 'Airwallex lifecycle could not be verified.');
+    } finally {
+      if (generation === liveGenerationRef.current) {
+        fixtureCheckpointSubmissionRef.current = false;
+        setFixtureCheckpointPending(false);
+      }
+    }
+  }, [apiBaseUrl, fixtureCheckpointActivity, fixtureCheckpointIdentityKnown, fixtureCheckpointPending, fixtureCheckpointRequest, operatorAuthenticated]);
+
   const startNewFixtureCheckpointRun = useCallback(() => {
     if (fixtureCheckpointPending || fixtureCheckpointSubmissionRef.current ||
-        fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity)) return;
+        !fixtureCheckpointActivity || fixtureCheckpointResolution === 'awaiting' ||
+        fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity) || !fixtureCheckpointIdentityKnown) return;
     liveGenerationRef.current += 1;
     const nextRun: PersistedFixtureCheckpointRun = {
       runId: globalThis.crypto.randomUUID(),
       activity: null,
       resolution: 'awaiting',
       enabled: mode === 'fixture-checkpoint',
+      identityKnown: true,
+      identityPersisted: false,
     };
-    persistFixtureCheckpointRun(scenario.id, nextRun);
+    nextRun.identityPersisted = persistFixtureCheckpointRun(scenario.id, nextRun);
+    if (!nextRun.identityPersisted) {
+      setFixtureCheckpointError('Session storage is unavailable. A new Airwallex run was not started because its identity must survive a reload.');
+      return;
+    }
     setFixtureCheckpointRunId(nextRun.runId);
+    setFixtureCheckpointIdentityKnown(true);
+    setFixtureCheckpointIdentityPersisted(true);
     setFixtureCheckpointActivity(null);
     setFixtureCheckpointResolution('awaiting');
     setFixtureCheckpointError(null);
     setFixtureCheckpointPending(false);
-  }, [fixtureCheckpointActivity, fixtureCheckpointPending, mode, scenario.id]);
+    setState(initialKit5State(inputs));
+  }, [fixtureCheckpointActivity, fixtureCheckpointIdentityKnown, fixtureCheckpointPending, fixtureCheckpointResolution, inputs, mode, scenario.id]);
 
   const authenticateOperator = useCallback(async (token: string) => {
     if (!apiBaseUrl) throw new Error('Set VITE_BRIDGE_API_URL to enable operator login.');
@@ -852,6 +1007,9 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     fixtureCheckpointRunId,
     fixtureCheckpointScenarioId,
     fixtureCheckpointActivity,
+    fixtureCheckpointTermsCompatible,
+    fixtureCheckpointIdentityKnown,
+    fixtureCheckpointIdentityPersisted,
     fixtureCheckpointProviderConfirmed,
     fixtureCheckpointUnresolved,
     fixtureCheckpointPending,
@@ -880,6 +1038,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     continueFixtureOnly,
     runFixtureCheckpoint,
     reconcileFixtureCheckpoint,
+    reconcileFixtureCheckpointLifecycle,
     startNewFixtureCheckpointRun,
     selectMode,
     submitNextCustomer,

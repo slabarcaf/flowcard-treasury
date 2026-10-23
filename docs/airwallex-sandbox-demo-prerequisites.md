@@ -22,18 +22,27 @@ acceptance gates.
   sequence**; a different definite response may proceed only through the
   clearly labeled **Continue fixture-only** action. In-progress, ambiguous,
   or unresolved results stay paused and reconcile by replaying the same
-  provider-only request with the same run/action identity. This checkpoint
+  provider-only request with the same run/action identity when a lifecycle ID
+  was saved. If Airwallex returned no lifecycle ID, the operator can find the
+  ID in Airwallex and submit it to the authenticated reconciliation route,
+  which verifies the result under Bloom's mapped account without another
+  create. A missing or invalid lifecycle keeps the attempt unresolved. Checkpoint
+  submission is blocked unless the run identity is safely stored. Edited Bloom
+  amount, wallet, or scheduled event terms disable checkpoint mode. This mode
   makes no bridge transfer, card retry, fee charge, or repayment deposit.
   **Reset** restarts visual fixture state and does not create another provider
-  attempt.
+  attempt. After choosing a continuation, **Start new Airwallex checkpoint
+  run** begins a fresh provider run.
 - **Sandbox live** is the separate per-customer full provider path. It requires
   active connected-account and card mappings for all five Kit 5 customers and
   retains the existing funding, transfer, retry, and Nova deposit/collection
   behavior where applicable.
 
-Credentials and provider IDs remain server-side. Fixture aliases below are
-documentation aliases, not provider IDs. No provider mappings, provider
-success, or webhook acceptance are verified by this note.
+Credentials and connected-account/card IDs remain server-side. The
+authenticated dashboard displays provider event, transaction, and lifecycle
+IDs as receipt data. Fixture aliases below are documentation aliases, not
+provider IDs. No provider mappings, provider success, or webhook acceptance
+are verified by this note.
 
 ## Fixture customer mapping
 

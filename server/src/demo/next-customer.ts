@@ -7,6 +7,7 @@ import {
   claimKit5ProviderCreate,
   finishKit5Attempt,
   getKit5CardAttempt,
+  resolveKit5AttemptLifecycle,
   setKit5AttemptLifecycle,
   type Kit5CardAttempt,
 } from "../db/repositories.js";
@@ -207,6 +208,60 @@ export async function reconcileKit5CustomerAction(
   } catch {
     return attempt;
   }
+}
+
+/** Resolve an attempt with no saved lifecycle by verifying an operator-found lifecycle in Airwallex. */
+export async function reconcileKit5CheckpointLifecycle(
+  pool: DatabasePool,
+  gateway: IssuingSimulationGateway,
+  input: Pick<NextCustomerInput, "scenarioId" | "customerId" | "actionId"> & { lifecycleId: string },
+  fixture: Kit5CustomerFixture | null,
+): Promise<NextCustomerOutcome> {
+  if (!fixture) return { status: "rejected", reason: "unknown_scenario" };
+  const customer = fixture.resolveCustomer(input.customerId);
+  if (!customer) return { status: "rejected", reason: "customer_fixture_unmapped" };
+  let attempt = await getKit5CardAttempt(pool, input.scenarioId, input.actionId);
+  if (!attempt || attempt.customerId !== input.customerId) {
+    return { status: "rejected", reason: "checkpoint_attempt_not_found" };
+  }
+  if (attempt.status === "completed" && attempt.result) {
+    return { status: "completed", attempt, result: decodeResult(attempt.result) };
+  }
+  if (!["submitting", "in_progress", "ambiguous"].includes(attempt.status)) {
+    return { status: "rejected", reason: "checkpoint_attempt_not_unresolved" };
+  }
+  if (attempt.lifecycleId && attempt.lifecycleId !== input.lifecycleId) {
+    return { status: "rejected", reason: "checkpoint_lifecycle_conflict" };
+  }
+
+  let lifecycle: unknown | null;
+  try {
+    lifecycle = await gateway.getIssuingLifecycle(input.lifecycleId, customer.accountId);
+  } catch {
+    return { status: attempt.status === "ambiguous" ? "ambiguous" : "in_progress", attempt };
+  }
+  if (lifecycle === null) {
+    return { status: attempt.status === "ambiguous" ? "ambiguous" : "in_progress", attempt };
+  }
+
+  let result: IssuingSimulationResponse;
+  try {
+    result = normalizeIssuingResponse(lifecycle, input.lifecycleId);
+  } catch {
+    return { status: "ambiguous", attempt };
+  }
+  if (!attempt.lifecycleId) {
+    const saved = await resolveKit5AttemptLifecycle(pool, input);
+    if (!saved) {
+      attempt = await requiredAttempt(pool, input);
+      if (attempt.status === "completed" && attempt.result) {
+        return { status: "completed", attempt, result: decodeResult(attempt.result) };
+      }
+      return { status: attempt.status === "ambiguous" ? "ambiguous" : "in_progress", attempt };
+    }
+  }
+  await finishKit5Attempt(pool, { ...input, status: "completed", result: resultRecord(result) });
+  return { status: "completed", attempt: await requiredAttempt(pool, input), result };
 }
 
 async function maybeFundAndRetry(

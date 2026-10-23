@@ -67,10 +67,17 @@ Only exact `DECLINED` plus `INSUFFICIENT_FUNDS` confirms the checkpoint, and the
 presenter must click **Continue fixture sequence**. Other definite results are
 shown accurately and allow only **Continue fixture-only**. In-progress,
 ambiguous, or unresolved attempts stay paused and reconcile by replaying the
-same provider-only request with the same run/action identity. This checkpoint
-creates no bridge transfer, card retry, fee charge, or repayment deposit.
-**Reset** restarts visual fixture state and does not create another Airwallex
-attempt. The remaining policy outcomes, including Bloom's evidence-review
+same provider-only request with the same run/action identity when a lifecycle
+ID is saved. If Airwallex returns no lifecycle ID, an operator can paste the
+ID found in Airwallex; the server verifies it against Bloom's mapped account
+without another create. Provider status remains unresolved until verification
+succeeds. Session storage must preserve the run identity before submission.
+Edited Bloom amount, wallet, or scheduled event terms disable checkpoint mode.
+This checkpoint creates no bridge transfer, card retry, fee charge, or
+repayment deposit. **Reset** restarts visual fixture state and does not create
+another Airwallex attempt. After choosing a continuation, **Start new Airwallex
+checkpoint run** resets the fixture and uses a fresh provider attempt identity.
+The remaining policy outcomes, including Bloom's evidence-review
 block, and other customers' outcomes remain fixture data. **Sandbox live** is
 the separate per-customer provider flow, including its existing bridge
 funding, transfer, retry, and Nova deposit/collection behavior where applicable.

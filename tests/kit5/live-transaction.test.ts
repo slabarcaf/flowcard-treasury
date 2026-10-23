@@ -166,6 +166,47 @@ describe('Kit 5 sandbox-live transaction client', () => {
     expect(receiptHtml).not.toContain('Next customer');
     expect(receiptHtml).not.toContain('Create Nova');
     expect(receiptHtml).not.toContain('Card retry');
+    expect(receiptHtml).not.toContain('Start new Airwallex checkpoint run');
+  });
+
+  it('renders a separate action for starting a new provider run after continuation', () => {
+    const activity: FixtureCheckpointActivity = {
+      scenarioId: 'kit5-target:run',
+      customerId: 'acct_bloom001',
+      actionId: 'kit5-target:run:txn_bloom_supplier_001',
+      status: 'completed',
+      lifecycleId: 'lifecycle-demo',
+      result: {
+        processResult: 'DECLINED',
+        failureReason: 'INSUFFICIENT_FUNDS',
+        cardTransactionEventId: 'event-demo',
+        cardTransactionId: 'transaction-demo',
+        cardTransactionLifecycleId: 'lifecycle-demo',
+      },
+    };
+    useKit5DashboardMock.mockReturnValue(dashboardHookValue('fixture-checkpoint', [], activity, 'confirmed'));
+    const html = renderToStaticMarkup(createElement(Kit5Dashboard, { versionToggle: null }));
+
+    expect(html).toContain('Start new Airwallex checkpoint run');
+    expect(html).not.toContain('Run Airwallex Sandbox attempt');
+  });
+
+  it('does not expose the new provider run action while the checkpoint result is unresolved', () => {
+    const hook = dashboardHookValue('fixture-checkpoint', [], {
+      status: 'ambiguous',
+      actionId: 'run:txn_bloom_supplier_001',
+      scenarioId: 'kit5-target:run',
+      customerId: 'acct_bloom001',
+      lifecycleId: null,
+    });
+    hook.fixtureCheckpointUnresolved = true;
+    hook.fixtureCheckpointPaused = true;
+    useKit5DashboardMock.mockReturnValue(hook);
+    const html = renderToStaticMarkup(createElement(Kit5Dashboard, { versionToggle: null }));
+
+    expect(html).not.toContain('Start new Airwallex checkpoint run');
+    expect(html).toContain('Lifecycle ID from Airwallex');
+    expect(html).toContain('Verify lifecycle');
   });
 });
 
@@ -175,7 +216,8 @@ function dashboardHookValue(mode: 'fixture' | 'fixture-checkpoint' | 'sandbox-li
   result?: Kit5ProviderTransaction;
   amount?: number;
   customerName?: string;
-}> = [], fixtureCheckpointActivity: FixtureCheckpointActivity | null = null) {
+}> = [], fixtureCheckpointActivity: FixtureCheckpointActivity | null = null,
+fixtureCheckpointResolution: 'awaiting' | 'confirmed' | 'fixture-only' = 'awaiting') {
   const scenarios = loadScenarios();
   const scenario = scenarios.find((item) => item.id === (mode === 'fixture-checkpoint' ? 'kit5-target' : 'original'))!;
   return {
@@ -187,11 +229,14 @@ function dashboardHookValue(mode: 'fixture' | 'fixture-checkpoint' | 'sandbox-li
     ledgerProjectionLoading: false,
     ledgerProjectionError: null,
     mode,
-    fixtureCheckpointResolution: 'awaiting',
+    fixtureCheckpointResolution,
     fixtureCheckpointPaused: false,
     fixtureCheckpointRunId: 'run-demo',
     fixtureCheckpointScenarioId: `${scenario.id}:run-demo`,
     fixtureCheckpointActivity,
+    fixtureCheckpointTermsCompatible: true,
+    fixtureCheckpointIdentityKnown: true,
+    fixtureCheckpointIdentityPersisted: true,
     fixtureCheckpointProviderConfirmed: false,
     fixtureCheckpointUnresolved: false,
     fixtureCheckpointPending: false,
@@ -220,6 +265,7 @@ function dashboardHookValue(mode: 'fixture' | 'fixture-checkpoint' | 'sandbox-li
     continueFixtureOnly: vi.fn(),
     runFixtureCheckpoint: vi.fn(),
     reconcileFixtureCheckpoint: vi.fn(),
+    reconcileFixtureCheckpointLifecycle: vi.fn(),
     startNewFixtureCheckpointRun: vi.fn(),
     selectMode: vi.fn(),
     authenticateOperator: vi.fn(),

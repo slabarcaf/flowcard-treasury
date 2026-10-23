@@ -104,6 +104,39 @@ describe('Kit 5 ledger API client', () => {
       .resolves.toEqual(checkpoint);
   });
 
+  it('verifies an operator-supplied lifecycle without retrying the checkpoint create', async () => {
+    const lifecycleId = '33333333-3333-4333-8333-333333333333';
+    const responseBody = {
+      status: 'completed',
+      attemptId: 'action-demo',
+      lifecycleId,
+      attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+      result: {
+        processResult: 'DECLINED',
+        failureReason: 'INSUFFICIENT_FUNDS',
+        cardTransactionEventId: 'event-demo',
+        cardTransactionId: 'transaction-demo',
+        cardTransactionLifecycleId: lifecycleId,
+      },
+    } as const;
+    const input = {
+      scenarioId: 'kit5-target:00000000-0000-4000-8000-000000000001',
+      customerId: 'acct_bloom001',
+      actionId: 'kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001',
+      lifecycleId,
+    };
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => responseBody });
+    const client = new BridgeApiClient('http://localhost:8000', fetchImpl as unknown as typeof fetch);
+
+    await expect(client.reconcileFixtureCheckpointLifecycle(input)).resolves.toEqual(responseBody);
+    expect(fetchImpl).toHaveBeenCalledWith('http://localhost:8000/api/kit5/fixture-checkpoint/reconcile', {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    });
+  });
+
   it('returns a persisted failed attempt from the route’s non-success status', async () => {
     const checkpoint = {
       status: 'failed',

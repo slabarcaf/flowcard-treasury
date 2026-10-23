@@ -217,10 +217,11 @@ export interface Kit5NextCustomerRequest {
 }
 
 /** Browser input for the provider-only Bloom fixture checkpoint. */
-export interface Kit5FixtureCheckpointRequest {
-  scenarioId: string;
-  customerId: string;
-  actionId: string;
+export type Kit5FixtureCheckpointRequest = Kit5NextCustomerRequest;
+
+/** Operator-supplied lifecycle identity for resolving an ambiguous checkpoint without another create. */
+export interface Kit5FixtureCheckpointLifecycleRequest extends Kit5FixtureCheckpointRequest {
+  lifecycleId: string;
 }
 
 export type Kit5FixtureCheckpointResponse =

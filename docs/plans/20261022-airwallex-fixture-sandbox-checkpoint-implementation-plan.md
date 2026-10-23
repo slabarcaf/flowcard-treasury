@@ -45,8 +45,9 @@ their current behavior.
   `txn_bloom_supplier_001`, Bloom's $9,000 supplier attempt against the
   scenario's $2,000 opening balance.
 - Resolve account, card, amount, merchant, and currency on the server from
-  trusted scenario and roster data. Never accept provider IDs or credentials
-  from the browser.
+  trusted scenario and roster data. Never accept provider account/card IDs or
+  credentials from the browser. The separate authenticated reconciliation
+  route accepts an operator-found lifecycle ID only for a provider lookup.
 - Call the Airwallex simulation endpoint through the existing server gateway
   and durable card-attempt repository. Do not pass a bridge-funding boundary
   to the checkpoint handler.
@@ -77,8 +78,8 @@ their current behavior.
 - Test that a different provider result remains visible and cannot be labeled
   as a provider-confirmed insufficient-funds decline.
 - Test server operator authentication, checkpoint allowlisting, account/card
-  resolution, idempotency, lifecycle reconciliation, and the absence of
-  bridge funding or card retry.
+  resolution, idempotency, lifecycle reconciliation with and without a saved
+  lifecycle ID, and the absence of bridge funding or card retry.
 - Use fake `IssuingSimulationGateway` implementations for all automated
   provider tests.
 - Final repository checks: `npm test`, `npm run lint`, `npm run build`, and
@@ -125,13 +126,18 @@ uses the existing operator authentication, Airwallex gateway, and
 `kit5_card_attempts` lifecycle persistence. Reuse the provider-attempt logic
 from `processNextCustomerAction`, but pass no `Kit5BridgeFundingBoundary`.
 The route must never create a transfer, charge, repayment deposit, or card
-retry. Extend the existing attempt-status reconciliation path for ambiguous
-responses; never blindly repeat an uncertain provider create.
+retry. Reconcile saved lifecycle IDs through the provider lookup. If a create
+response is ambiguous and has no lifecycle ID, let the operator submit a
+lifecycle ID found in Airwallex; verify it under Bloom's mapped account and
+keep the attempt unresolved if it cannot be found. Never blindly repeat an
+uncertain provider create.
 
 The browser submits only the run-scoped scenario, checkpoint customer, and
-action identity. The server takes the attempt amount and provider IDs from
+action identity. The server takes the attempt amount and account/card IDs from
 trusted configuration and roster bindings, sends `x-on-behalf-of`, and keeps
-Airwallex credentials in the server environment.
+Airwallex credentials in the server environment. The authenticated dashboard
+may display the provider event, transaction, and lifecycle IDs returned as
+receipt data.
 
 ### Result provenance and fixture continuation
 
@@ -144,8 +150,11 @@ profile, credit line, capital, or repayment data.
 On an unexpected but definite provider result, offer a separate
 **Continue fixture-only** action and mark subsequent outcomes as fixture data.
 On an ambiguous result, retain the pause until lifecycle/status reconciliation
-resolves the saved attempt. Resetting the visual fixture sequence must not
-create another provider attempt; a new provider run gets a new run UUID.
+resolves the saved attempt. When the create response has no lifecycle ID, an
+operator can submit a lifecycle ID found in Airwallex for server-side
+verification. Resetting the visual fixture sequence must not create another
+provider attempt; a new provider run gets a new run UUID and an explicit
+dashboard action.
 
 ## What Goes Where
 

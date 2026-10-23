@@ -1,4 +1,4 @@
-import type { Kit5AttemptStatusResponse, Kit5FixtureCheckpointRequest, Kit5FixtureCheckpointResponse, Kit5NextCustomerRequest, Kit5NextCustomerResponse, Kit5RepaymentDepositResponse, LedgerProjectionResponse } from '../types.js';
+import type { Kit5AttemptStatusResponse, Kit5FixtureCheckpointLifecycleRequest, Kit5FixtureCheckpointRequest, Kit5FixtureCheckpointResponse, Kit5NextCustomerRequest, Kit5NextCustomerResponse, Kit5RepaymentDepositResponse, LedgerProjectionResponse } from '../types.js';
 
 export class BridgeApiError extends Error {
   readonly status: number;
@@ -103,6 +103,32 @@ export class BridgeApiClient {
     // failure that still needs reconciliation.
     if (!response.ok && body.status !== 'failed' && body.status !== 'rejected') {
       throw new BridgeApiError(`Kit 5 fixture checkpoint failed (${response.status})`, response.status);
+    }
+    return body;
+  }
+
+  /** Verify a lifecycle found by an operator, without repeating the provider create. */
+  async reconcileFixtureCheckpointLifecycle(input: Kit5FixtureCheckpointLifecycleRequest): Promise<Kit5FixtureCheckpointResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/kit5/fixture-checkpoint/reconcile`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    });
+    let body: unknown;
+    try {
+      body = await response.json() as unknown;
+    } catch {
+      throw new BridgeApiError(`Kit 5 fixture checkpoint reconciliation failed (${response.status})`, response.status);
+    }
+    if (!isFixtureCheckpointResponse(body)) {
+      const message = typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string'
+        ? body.error
+        : `Kit 5 fixture checkpoint reconciliation failed (${response.status})`;
+      throw new BridgeApiError(message, response.status);
+    }
+    if (!response.ok && body.status !== 'failed' && body.status !== 'rejected') {
+      throw new BridgeApiError(`Kit 5 fixture checkpoint reconciliation failed (${response.status})`, response.status);
     }
     return body;
   }

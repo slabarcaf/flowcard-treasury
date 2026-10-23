@@ -25,6 +25,11 @@ Kit 5 offers three modes:
   clearly labeled **Continue fixture-only** action. In-progress, ambiguous, or
   unresolved attempts stay paused; reconcile by replaying the same
   provider-only request with the same run/action identity before any new
+  provider attempt. When Airwallex returns no lifecycle ID, the presenter can
+  find the ID in the Airwallex dashboard and submit it through the authenticated
+  reconciliation form. The server retrieves it under Bloom's mapped account
+  and records the result only when the provider confirms that exact lifecycle.
+  A missing or invalid lifecycle remains unresolved and cannot start a new
   provider attempt.
 - **Sandbox live** remains the separate per-customer full provider path. Each
   **Next customer** action creates one simulated card transaction for that
@@ -40,11 +45,13 @@ customers remain in the five-customer ordered scenario, but the checkpoint
 resolves provider mappings only for Bloom. Full Sandbox live requires mappings
 for all five Kit 5 customers.
 
-The checkpoint route uses the existing operator session and keeps credentials
-and provider IDs server-side. Local implementation tests use fixture aliases
-and a mocked Airwallex gateway; they do not establish provider success,
-verified mappings, webhook acceptance, or end-to-end live readiness. No
-customer or card is created by this demo.
+The checkpoint route uses the existing operator session. Credentials and
+connected-account/card IDs stay server-side. The authenticated dashboard
+receives the provider event, transaction, and lifecycle IDs as receipt data.
+Local implementation tests use fixture aliases and a mocked Airwallex
+gateway; they do not establish provider success, verified mappings, webhook
+acceptance, or end-to-end live readiness. No customer or card is created by
+this demo.
 
 ## Kit 5 target story
 
@@ -86,14 +93,18 @@ an $8,000 settled deposit and collects the $27 fee before the $6,000 principal.
    review.
 5. **Handle other provider results accurately.** For a different definite
    result, show the returned status and reason and offer only **Continue
-   fixture-only**. Keep in-progress, ambiguous, or unresolved results paused.
-   Use the reconcile control to replay the same provider-only request with the
-   same run/action identity before any new provider attempt.
+   fixture-only**. For an ambiguous result with a saved lifecycle ID, use the
+   reconcile control to refresh that same lifecycle. If no lifecycle ID was
+   returned, find the transaction in Airwallex and submit its lifecycle ID in
+   the operator reconciliation form. The server verifies it under Bloom's
+   account and never repeats the create. Keep unresolved attempts paused.
 6. **Finish with fixture outcomes.** Atlas, Nova, Pixel, Juniper, and Bloom's
    policy outcome remain scripted fixture data after the checkpoint. No bridge
    transfer, card retry, fee charge, or repayment deposit is created by this
    checkpoint. **Reset** returns the visual fixture sequence to its start and
-   does not issue another Airwallex attempt.
+   does not issue another Airwallex attempt. After choosing a continuation, use
+   **Start new Airwallex checkpoint run** to reset the fixture and intentionally
+   create a new provider attempt. The new run ID is persisted before submission.
 
 ## Full Sandbox live presenter sequence
 
@@ -159,18 +170,20 @@ token with `POST /api/v1/authentication/login`, sending `x-client-id` and
 
 | Operation | Endpoint | Required behavior |
 | --- | --- | --- |
-| Create a card attempt | `POST /api/v1/simulation/issuing/create` | Send the mapped `card_id`, scenario amount, USD currency, merchant data, `x-on-behalf-of: <connected_account_id>`, and `x-api-version: 2026-08-21`. Store the lifecycle ID before the call. |
-| Retrieve a card lifecycle | `GET /api/v1/issuing/lifecycles/{id}` | Reconcile an ambiguous create response using the saved lifecycle ID before any authorized retry. |
+| Create a card attempt | `POST /api/v1/simulation/issuing/create` | Persist the run/action identity before sending the mapped `card_id`, scenario amount, USD currency, merchant data, `x-on-behalf-of: <connected_account_id>`, and `x-api-version: 2026-08-21`. Save the lifecycle ID as soon as Airwallex returns a valid response. |
+| Retrieve a card lifecycle | `GET /api/v1/issuing/lifecycles/{id}` | Reconcile with a saved lifecycle ID, or verify an operator-found lifecycle ID when the create response was ambiguous and did not return one. Keep the attempt unresolved if lookup fails. Never blindly repeat the create. |
 | Retrieve card transactions/events | `GET /api/v1/issuing/card_transactions` and current issuing event retrieval | Reconcile provider records with FlowCard. |
 | Transfer an approved bridge | `POST /api/v1/connected_account_transfers/create` | Use the durable bridge ledger and stable request ID. Count funding only after provider settlement. |
 | Simulate Nova's deposit | `POST /api/v1/simulation/deposit/create` | Sandbox only. Use Nova's USD `global_account_id`, $8,000, and `x-on-behalf-of` where applicable. The global account determines the destination. |
 | Collect fee and principal | `POST /api/v1/charges/create` | Use separate, stable ledger outbox operations, fee first and principal second, capped at the triggering settled deposit. |
 
 Normalize the issuing result, failure reason, and provider event, transaction,
-and lifecycle IDs. Airwallex does not return the attempted amount in the
-simulation response; display the server-resolved scenario amount with that
-limitation labeled. Do not retry an ambiguous create blindly: the lifecycle ID
-is a correlation identifier, not a documented idempotency key.
+and lifecycle IDs. The authenticated dashboard displays these receipt IDs;
+credentials and connected-account/card IDs remain server-side. Airwallex does
+not return the attempted amount in the simulation response; display the
+server-resolved scenario amount with that limitation labeled. Do not retry an
+ambiguous create blindly: the lifecycle ID is a correlation identifier, not a
+documented idempotency key.
 
 Airwallex documents the [authentication endpoint](https://www.airwallex.com/docs/api/authentication/api_access_token),
 [Issuing simulation](https://www.airwallex.com/docs/api/simulation/issuing/create),

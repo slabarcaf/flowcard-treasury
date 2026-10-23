@@ -307,6 +307,21 @@ export async function setKit5AttemptLifecycle(
   if (result.rowCount !== 1) throw new Error("Kit 5 attempt lifecycle could not be persisted before provider call");
 }
 
+/** Attach a lifecycle found during operator reconciliation; this never creates a provider attempt. */
+export async function resolveKit5AttemptLifecycle(
+  pool: Pick<DatabasePool, "query">,
+  input: { scenarioId: string; actionId: string; lifecycleId: string },
+): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE kit5_card_attempts
+        SET lifecycle_id = $3, status = 'in_progress', updated_at = now()
+      WHERE scenario_id = $1 AND action_id = $2
+        AND status IN ('submitting', 'ambiguous') AND lifecycle_id IS NULL`,
+    [input.scenarioId, input.actionId, input.lifecycleId],
+  );
+  return result.rowCount === 1;
+}
+
 export async function finishKit5Attempt(
   pool: Pick<DatabasePool, "query">,
   input: { scenarioId: string; actionId: string; status: Extract<Kit5AttemptStatus, "completed" | "ambiguous" | "failed">; result?: Record<string, unknown>; error?: string },

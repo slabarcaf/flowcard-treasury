@@ -22,6 +22,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
   const { state } = k;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [operatorToken, setOperatorToken] = useState('');
+  const [checkpointLifecycleId, setCheckpointLifecycleId] = useState('');
 
   const upcoming = nextEvent(state);
   const awaitingCollection = state.phase !== 'idle' && !state.pause && upcoming?.type === 'repayment';
@@ -54,7 +55,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
   });
   const fixtureMode = k.mode !== 'sandbox-live';
   const checkpointChoiceRequired = k.mode === 'fixture-checkpoint' &&
-    k.fixtureCheckpointActivity !== null && k.fixtureCheckpointResolution === 'awaiting';
+    k.fixtureCheckpointPaused && k.fixtureCheckpointResolution === 'awaiting';
 
   let statusLine = k.scenario.summary;
   if (autoApproved) statusLine = `${autoApproved.customerName} was auto-approved. Continue when you're ready for the next request.`;
@@ -106,7 +107,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 className="text-sm text-gray-900 bg-white border border-gray-300 rounded-md px-2 py-1.5 cursor-pointer"
               >
                 <option value="fixture">Fixture</option>
-                <option value="fixture-checkpoint" disabled={!k.scenario.providerCheckpoint}>Fixture + Airwallex checkpoint</option>
+                <option value="fixture-checkpoint" disabled={!k.scenario.providerCheckpoint || !k.fixtureCheckpointTermsCompatible}>Fixture + Airwallex checkpoint</option>
                 <option value="sandbox-live">Sandbox live</option>
               </select>
             </label>
@@ -153,7 +154,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
             {fixtureMode && state.phase !== 'idle' && (
               <button
                 onClick={k.reset}
-                disabled={checkpointChoiceRequired}
+                disabled={checkpointChoiceRequired || k.fixtureCheckpointPending || k.fixtureCheckpointUnresolved}
                 className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-300 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer"
               >
                 Reset
@@ -183,6 +184,11 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                   Edited inputs
                 </span>
               )}
+              {k.scenario.providerCheckpoint && !k.fixtureCheckpointTermsCompatible && (
+                <span className="ml-2 text-[11px] font-medium text-amber-800">
+                  Checkpoint unavailable: restore Bloom’s approved event terms.
+                </span>
+              )}
             </div>
 
             {k.mode === 'fixture-checkpoint' && (
@@ -194,6 +200,9 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                   </p>
                 </div>
                 {!k.ledgerApiEnabled && <p role="alert" className="text-sm text-amber-700">Set VITE_BRIDGE_API_URL to enable the Airwallex checkpoint API.</p>}
+                {!k.fixtureCheckpointTermsCompatible && <p role="alert" className="text-sm text-amber-800">The Bloom checkpoint is disabled because its payment, wallet, or scheduled event differs from the server-approved $9,000 scenario. Continue in Fixture mode or restore those terms.</p>}
+                {!k.fixtureCheckpointIdentityKnown && <p role="alert" className="text-sm text-amber-800">Checkpoint recovery identity could not be read from session storage. Provider submissions are blocked to avoid creating a duplicate transaction.</p>}
+                {k.fixtureCheckpointIdentityKnown && !k.fixtureCheckpointIdentityPersisted && <p role="alert" className="text-sm text-amber-800">Session storage is unavailable. Provider submission will remain blocked until this run identity can be saved.</p>}
                 {!k.operatorAuthenticated && (
                   <form
                     className="flex items-end gap-2"
@@ -225,17 +234,17 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 {k.fixtureCheckpointError && <p role="alert" className="text-sm text-amber-800">{k.fixtureCheckpointError}</p>}
                 {k.fixtureCheckpointPaused && (
                   <div className="flex flex-wrap gap-2">
-                    {checkpointControls.includes('run-attempt') && (
+                    {checkpointControls === 'run-attempt' && (
                       <button
                         type="button"
                         onClick={() => void k.runFixtureCheckpoint()}
-                        disabled={!k.operatorAuthenticated || !k.ledgerApiEnabled || k.fixtureCheckpointPending}
+                        disabled={!k.operatorAuthenticated || !k.ledgerApiEnabled || k.fixtureCheckpointPending || !k.fixtureCheckpointIdentityKnown}
                         className="px-4 py-2 text-sm font-medium bg-[#e04e2f] hover:bg-[#c9442a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors cursor-pointer"
                       >
                         Run Airwallex Sandbox attempt
                       </button>
                     )}
-                    {checkpointControls.includes('reconcile-attempt') && (
+                    {checkpointControls === 'reconcile-attempt' && (
                       <button
                         type="button"
                         onClick={() => void k.reconcileFixtureCheckpoint()}
@@ -245,7 +254,33 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                         Reconcile Airwallex checkpoint
                       </button>
                     )}
-                    {checkpointControls.includes('continue-fixture') && (
+                    {checkpointControls === 'resolve-lifecycle' && (
+                      <form
+                        className="flex flex-wrap items-end gap-2"
+                        onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                          event.preventDefault();
+                          void k.reconcileFixtureCheckpointLifecycle(checkpointLifecycleId);
+                        }}
+                      >
+                        <label className="flex flex-col gap-1 text-xs text-gray-600">
+                          Lifecycle ID from Airwallex
+                          <input
+                            value={checkpointLifecycleId}
+                            onChange={(event) => setCheckpointLifecycleId(event.target.value)}
+                            placeholder="Paste the lifecycle ID"
+                            className="border border-gray-300 rounded-md px-2 py-1.5 text-sm font-mono"
+                          />
+                        </label>
+                        <button
+                          type="submit"
+                          disabled={!k.operatorAuthenticated || !k.ledgerApiEnabled || k.fixtureCheckpointPending || !checkpointLifecycleId.trim()}
+                          className="px-3 py-1.5 text-sm border border-sky-300 text-sky-800 rounded-md disabled:opacity-50"
+                        >
+                          Verify lifecycle
+                        </button>
+                      </form>
+                    )}
+                    {checkpointControls === 'continue-fixture' && (
                       <button
                         type="button"
                         onClick={k.confirmFixtureCheckpoint}
@@ -254,7 +289,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                         Continue fixture sequence
                       </button>
                     )}
-                    {checkpointControls.includes('continue-fixture-only') && (
+                    {checkpointControls === 'continue-fixture-only' && (
                       <button
                         type="button"
                         onClick={k.continueFixtureOnly}
@@ -265,6 +300,20 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                     )}
                   </div>
                 )}
+                {k.mode === 'fixture-checkpoint' && k.fixtureCheckpointActivity &&
+                  k.fixtureCheckpointResolution !== 'awaiting' && !k.fixtureCheckpointUnresolved && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const confirmed = window.confirm('Start a new Airwallex Sandbox checkpoint run? This creates a new provider attempt. The previous attempt remains recorded.');
+                        if (confirmed) k.startNewFixtureCheckpointRun();
+                      }}
+                      disabled={k.fixtureCheckpointPending || !k.fixtureCheckpointIdentityKnown}
+                      className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 hover:border-gray-400 disabled:opacity-50 rounded-lg"
+                    >
+                      Start new Airwallex checkpoint run
+                    </button>
+                  )}
                 <p role="status" className="text-sm text-gray-700">Recovery state: {checkpointRecoveryState}</p>
 
                 <section aria-label="Airwallex provider receipt" className="border-t border-gray-100 pt-3">

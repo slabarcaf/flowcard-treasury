@@ -20,6 +20,7 @@ import { initialKit5State } from '../../src/kit5/engine.js';
 import { loadScenarios } from '../../src/kit5/scenarios.js';
 import {
   isFixtureCheckpointEventNext,
+  fixtureCheckpointTermsMatch,
   shouldPauseForFixtureCheckpoint,
   useKit5Dashboard,
 } from '../../src/kit5/useKit5Dashboard.js';
@@ -79,12 +80,42 @@ describe('Kit 5 fixture provider checkpoint', () => {
     });
   });
 
+  it('rejects checkpoint use when Bloom event amount, wallet, date, or time differs from server terms', () => {
+    const scenario = loadScenarios().find((candidate) => candidate.id === 'kit5-target')!;
+    const edits: Array<(inputs: typeof scenario.inputs) => void> = [
+      (inputs) => {
+        const event = inputs.events.find((item) => item.type === 'decline' && item.requestId === scenario.providerCheckpoint?.eventRequestId);
+        if (event?.type === 'decline') event.paymentAmount += 1;
+      },
+      (inputs) => {
+        const event = inputs.events.find((item) => item.type === 'decline' && item.requestId === scenario.providerCheckpoint?.eventRequestId);
+        if (event?.type === 'decline') event.walletBalance += 1;
+      },
+      (inputs) => {
+        const event = inputs.events.find((item) => item.type === 'decline' && item.requestId === scenario.providerCheckpoint?.eventRequestId);
+        if (event?.type === 'decline') event.time = '9:03';
+      },
+      (inputs) => {
+        const event = inputs.events.find((item) => item.type === 'decline' && item.requestId === scenario.providerCheckpoint?.eventRequestId);
+        if (event?.type === 'decline') event.day += 1;
+      },
+    ];
+    for (const change of edits) {
+      const inputs = structuredClone(scenario.inputs);
+      change(inputs);
+      expect(fixtureCheckpointTermsMatch(scenario, inputs)).toBe(false);
+    }
+    expect(fixtureCheckpointTermsMatch(scenario, structuredClone(scenario.inputs))).toBe(true);
+  });
+
   it('pauses only the configured event in checkpoint mode while pure Fixture and Sandbox live remain unpaused', () => {
     const target = loadScenarios().find((scenario) => scenario.id === 'kit5-target')!;
     const state = initialKit5State(target.inputs);
 
     expect(isFixtureCheckpointEventNext(target, state)).toBe(true);
-    expect(shouldPauseForFixtureCheckpoint('fixture-checkpoint', target, state, 'awaiting')).toBe(true);
+    expect(shouldPauseForFixtureCheckpoint('fixture-checkpoint', target, state, 'awaiting')).toBe(false);
+    const running = { ...state, phase: 'scanned' as const };
+    expect(shouldPauseForFixtureCheckpoint('fixture-checkpoint', target, running, 'awaiting')).toBe(true);
     expect(shouldPauseForFixtureCheckpoint('fixture', target, state, 'awaiting')).toBe(false);
     expect(shouldPauseForFixtureCheckpoint('sandbox-live', target, state, 'awaiting')).toBe(false);
     expect(shouldPauseForFixtureCheckpoint('fixture-checkpoint', target, state, 'confirmed')).toBe(false);

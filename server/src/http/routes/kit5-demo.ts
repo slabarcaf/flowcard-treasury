@@ -3,13 +3,14 @@ import type { IssuingSimulationGateway, IssuingSimulationResponse } from "../../
 import type { AirwallexGateway } from "../../airwallex/client.js";
 import type { DatabasePool } from "../../db/pool.js";
 import { createKit5RepaymentDeposit, type Kit5DepositTarget } from "../../collections/kit5-repayment-deposit.js";
-import { processNextCustomerAction, reconcileKit5CustomerAction, type Kit5BridgeFundingBoundary, type Kit5CustomerFixture, type NextCustomerInput } from "../../demo/next-customer.js";
+import { processNextCustomerAction, reconcileKit5CheckpointLifecycle, reconcileKit5CustomerAction, type Kit5BridgeFundingBoundary, type Kit5CustomerFixture, type NextCustomerInput } from "../../demo/next-customer.js";
 import { isKit5FixtureCheckpointInput } from "../../demo/kit5-scenario-resolver.js";
 import { authenticatedKit5OperatorActor, authorizeKit5OperatorRequest, type Kit5OperatorAuthConfig } from "../kit5-operator-auth.js";
 
 const MAX_REQUEST_BYTES = 16_384;
 const ACTION_ID_PATTERN = /^[A-Za-z0-9._:-]{1,120}$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9._:-]{1,100}$/;
+const LIFECYCLE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface Kit5PolicyDecisionSummary {
   outcome: "human_review" | "auto_approved" | "declined" | "blocked";
@@ -83,6 +84,64 @@ export async function handleKit5FixtureCheckpoint(
       ...(outcome.status === "completed" ? { result: outcome.result } : {}),
     };
     send(response, outcome.status === "completed" ? 200 : outcome.status === "failed" ? 502 : 202, body);
+  } catch {
+    send(response, 503, { error: "kit5_fixture_checkpoint_unavailable" });
+  }
+}
+
+/** Verify an operator-found lifecycle for an unresolved checkpoint without creating a transaction. */
+export async function handleKit5FixtureCheckpointReconcile(
+  request: IncomingMessage,
+  response: ServerResponse,
+  dependencies: Kit5DemoRouteDependencies,
+): Promise<void> {
+  if (!authorizeKit5OperatorRequest(request, response, dependencies.operatorAuth)) return;
+  let body: unknown;
+  try {
+    body = JSON.parse((await readBody(request)).toString("utf8"));
+  } catch {
+    send(response, 400, { error: "invalid_request" });
+    return;
+  }
+  const input = validateFixtureCheckpointLifecycleInput(body);
+  if (!input) {
+    send(response, 400, { error: "invalid_fixture_checkpoint_reconciliation" });
+    return;
+  }
+  const { lifecycleId, ...identity } = input;
+  if (!isKit5FixtureCheckpointInput(identity)) {
+    send(response, 409, { status: "rejected", reason: "fixture_checkpoint_not_allowed" });
+    return;
+  }
+  if (!dependencies.resolveFixtureCheckpoint) {
+    send(response, 503, { error: "kit5_fixture_checkpoint_unavailable" });
+    return;
+  }
+
+  try {
+    const fixture = await dependencies.resolveFixtureCheckpoint(identity);
+    if (!fixture) {
+      send(response, 409, { status: "rejected", reason: "fixture_checkpoint_mapping_unavailable" });
+      return;
+    }
+    const outcome = await reconcileKit5CheckpointLifecycle(
+      dependencies.pool,
+      dependencies.gateway,
+      { ...identity, lifecycleId },
+      fixture,
+    );
+    if (outcome.status === "rejected") {
+      send(response, 409, { status: "rejected", reason: outcome.reason });
+      return;
+    }
+    const customer = fixture.resolveCustomer(identity.customerId);
+    send(response, outcome.status === "completed" ? 200 : 202, {
+      status: outcome.status,
+      attemptId: outcome.attempt.actionId,
+      lifecycleId: outcome.attempt.lifecycleId,
+      attemptedAmount: customer ? { amountCents: customer.amountCents, currency: customer.currency } : null,
+      ...(outcome.status === "completed" ? { result: outcome.result } : {}),
+    });
   } catch {
     send(response, 503, { error: "kit5_fixture_checkpoint_unavailable" });
   }
@@ -341,6 +400,24 @@ function validateFixtureCheckpointInput(value: unknown): NextCustomerInput | nul
       typeof record.customerId !== "string" || !IDENTIFIER_PATTERN.test(record.customerId) ||
       typeof record.actionId !== "string" || !ACTION_ID_PATTERN.test(record.actionId)) return null;
   return { scenarioId: record.scenarioId, customerId: record.customerId, actionId: record.actionId };
+}
+
+function validateFixtureCheckpointLifecycleInput(
+  value: unknown,
+): (NextCustomerInput & { lifecycleId: string }) | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).sort().join(",") !== "actionId,customerId,lifecycleId,scenarioId" ||
+      typeof record.scenarioId !== "string" || !IDENTIFIER_PATTERN.test(record.scenarioId) ||
+      typeof record.customerId !== "string" || !IDENTIFIER_PATTERN.test(record.customerId) ||
+      typeof record.actionId !== "string" || !ACTION_ID_PATTERN.test(record.actionId) ||
+      typeof record.lifecycleId !== "string" || !LIFECYCLE_ID_PATTERN.test(record.lifecycleId)) return null;
+  return {
+    scenarioId: record.scenarioId,
+    customerId: record.customerId,
+    actionId: record.actionId,
+    lifecycleId: record.lifecycleId,
+  };
 }
 
 function validateApprovalInput(value: unknown): { scenarioId: string; customerId: string; actionId: string; reason: string } | null {
