@@ -50,6 +50,17 @@ const SCENARIOS: Record<string, readonly DemoCustomerSpec[]> = {
 
 const NOVA_CUSTOMER_ID = "acct_nova001";
 const SAFE_PROVIDER_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
+const LIVE_RUN_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function resolveScenarioSpecs(scenarioId: string): readonly DemoCustomerSpec[] | null {
+  if (Object.prototype.hasOwnProperty.call(SCENARIOS, scenarioId)) return SCENARIOS[scenarioId] ?? null;
+  const separator = scenarioId.indexOf(":");
+  if (separator < 1 || scenarioId.indexOf(":", separator + 1) !== -1) return null;
+  const presetId = scenarioId.slice(0, separator);
+  const runId = scenarioId.slice(separator + 1);
+  if (!LIVE_RUN_ID_PATTERN.test(runId) || !Object.prototype.hasOwnProperty.call(SCENARIOS, presetId)) return null;
+  return SCENARIOS[presetId] ?? null;
+}
 
 /**
  * Resolves only known local scenarios and requires every scenario customer to
@@ -58,7 +69,7 @@ const SAFE_PROVIDER_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
  */
 export function createKit5ScenarioResolver(pool: DatabasePool) {
   return async (scenarioId: string): Promise<Kit5CustomerFixture | null> => {
-    const specs = SCENARIOS[scenarioId];
+    const specs = resolveScenarioSpecs(scenarioId);
     if (!specs) return null;
     const bindings = await loadBindings(pool, specs.map(({ customerId }) => customerId));
     if (!bindings) return null;
@@ -72,6 +83,7 @@ export function createKit5ScenarioResolver(pool: DatabasePool) {
         amountCents: spec.amountCents,
         currency: "USD",
         merchant: spec.merchant,
+        merchantCategoryCode: spec.merchantCategoryCode,
       }] as const;
     }));
     if ([...customers.values()].some((customer) => customer === null)) return null;
@@ -100,7 +112,7 @@ export function createKit5RepaymentDepositTargetResolver(
   },
 ) {
   return async (scenarioId: string, customerId: string): Promise<Kit5DepositTarget | null> => {
-    if (!SCENARIOS[scenarioId]?.some((customer) => customer.customerId === NOVA_CUSTOMER_ID) ||
+    if (!resolveScenarioSpecs(scenarioId)?.some((customer) => customer.customerId === NOVA_CUSTOMER_ID) ||
         customerId !== NOVA_CUSTOMER_ID || !isProviderId(config.globalAccountId) ||
         config.globalAccountId === customerId || !isProviderId(config.connectedAccountId) ||
         config.currency !== "USD") return null;

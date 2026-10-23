@@ -144,7 +144,7 @@ function fixture(): Kit5CustomerFixture {
   };
 }
 
-function responseFor(request: IssuingSimulationRequest, index: number): Record<string, string | null> {
+function responseFor(index: number): Record<string, string | null> {
   const results = [
     { process_result: "DECLINED", failure_reason: "INSUFFICIENT_FUNDS" },
     { process_result: "APPROVED", failure_reason: null },
@@ -156,7 +156,7 @@ function responseFor(request: IssuingSimulationRequest, index: number): Record<s
     ...results[index]!,
     card_transaction_event_id: `evt_fixture_${index + 1}`,
     card_transaction_id: `txn_fixture_${index + 1}`,
-    card_transaction_lifecycle_id: request.lifecycleId,
+    card_transaction_lifecycle_id: `life_fixture_${index + 1}`,
   };
 }
 
@@ -189,10 +189,10 @@ async function callRoute(
 describe("Kit 5 mocked sandbox-live flow", () => {
   it("does not fund Bloom while evidence is unresolved and enters the bridge boundary after reviewer release", async () => {
     const cardProvider: IssuingSimulationGateway = {
-      createIssuingSimulation: vi.fn(async (request) => ({
+      createIssuingSimulation: vi.fn(async () => ({
         process_result: "DECLINED", failure_reason: "INSUFFICIENT_FUNDS",
         card_transaction_event_id: "evt_bloom_reviewed", card_transaction_id: "txn_bloom_reviewed",
-        card_transaction_lifecycle_id: request.lifecycleId,
+        card_transaction_lifecycle_id: "life-bloom-reviewed",
       })),
       getIssuingLifecycle: vi.fn(async () => null),
     };
@@ -254,7 +254,7 @@ describe("Kit 5 mocked sandbox-live flow", () => {
     const provider: IssuingSimulationGateway = {
       createIssuingSimulation: vi.fn(async (request) => {
         const index = providerCalls.push(request) - 1;
-        return responseFor(request, index);
+        return responseFor(index);
       }),
       getIssuingLifecycle: vi.fn(async () => null),
     };
@@ -280,11 +280,11 @@ describe("Kit 5 mocked sandbox-live flow", () => {
         attemptId: actionId,
         attemptedAmount: { amountCents: customer.amountCents, currency: "USD" },
         result: {
-          processResult: responseFor(providerCalls[index]!, index).process_result,
-          failureReason: responseFor(providerCalls[index]!, index).failure_reason || null,
+          processResult: responseFor(index).process_result,
+          failureReason: responseFor(index).failure_reason || null,
           cardTransactionEventId: `evt_fixture_${index + 1}`,
           cardTransactionId: `txn_fixture_${index + 1}`,
-          cardTransactionLifecycleId: providerCalls[index]!.lifecycleId,
+          cardTransactionLifecycleId: `life_fixture_${index + 1}`,
         },
       });
       expect(result.cardTransactionLifecycleId).toBe(attempt?.lifecycleId);
@@ -303,12 +303,12 @@ describe("Kit 5 mocked sandbox-live flow", () => {
   it("does not fabricate a result for an unexpected provider status or failure reason", async () => {
     const pool = new MemoryPool();
     const provider: IssuingSimulationGateway = {
-      createIssuingSimulation: vi.fn(async (request) => ({
+      createIssuingSimulation: vi.fn(async () => ({
         process_result: "PROCESSING",
         failure_reason: "PROVIDER_REASON_UNRECOGNIZED",
         card_transaction_event_id: "evt_unexpected",
         card_transaction_id: "txn_unexpected",
-        card_transaction_lifecycle_id: request.lifecycleId,
+        card_transaction_lifecycle_id: "life-unexpected",
       })),
       getIssuingLifecycle: vi.fn(async () => null),
     };

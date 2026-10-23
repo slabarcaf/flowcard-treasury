@@ -35,6 +35,7 @@ describe('Kit 5 live history recovery', () => {
     expect(canApproveKit5Decision(true, pending.policyStatus, null)).toBe(false);
     expect(canApproveKit5Decision(true, pending.policyStatus, decision)).toBe(true);
     expect(liveActivityNeedsReconciliation({ ...pending, status: 'completed' })).toBe(true);
+    expect(liveActivityNeedsReconciliation({ ...pending, status: 'completed', policyStatus: 'blocked' })).toBe(false);
 
     const completed = upsertLiveHistory(history, {
       ...pending, status: 'completed', policyStatus: 'retry_completed', bridgeId: 'bridge-1',

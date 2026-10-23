@@ -158,12 +158,18 @@ export async function processNextCustomerAction(
   } catch (error) {
     const persisted = await requiredAttempt(pool, input);
     if (error instanceof AmbiguousIssuingResponseError
-      || (persisted.lifecycleId !== null && persisted.status === "in_progress"
-        && !(error instanceof ProviderHttpError && error.status < 500))) {
+      || (persisted.status === "submitting" && !(error instanceof ProviderHttpError && error.status < 500))) {
+      if (error instanceof AmbiguousIssuingResponseError && error.lifecycleId && !persisted.lifecycleId) {
+        await setKit5AttemptLifecycle(pool, {
+          scenarioId: input.scenarioId,
+          actionId: input.actionId,
+          lifecycleId: error.lifecycleId,
+        }).catch(() => {});
+      }
       await finishKit5Attempt(pool, { ...input, status: "ambiguous", error: "provider_result_unresolved" });
       return { status: "ambiguous", attempt: await requiredAttempt(pool, input) };
     }
-    if (persisted.lifecycleId && error instanceof ProviderHttpError && error.status < 500) {
+    if (persisted.status === "submitting" && error instanceof ProviderHttpError && error.status < 500) {
       await finishKit5Attempt(pool, { ...input, status: "failed", error: error.name });
     }
     throw error;
@@ -251,7 +257,7 @@ function validateApprovedCommand(command: ReserveBridgeInput, customerId: string
 
 function isFundingPending(attempt: Kit5CardAttempt, result: IssuingSimulationResponse): boolean {
   return result.processResult === "DECLINED" && result.failureReason === "INSUFFICIENT_FUNDS" &&
-    (["evaluating", "pending_review", "blocked", "reserving", "reserved", "settled", "retry_submitting", "retry_ambiguous", "retry_failed"].includes(attempt.policyStatus) ||
+    (["evaluating", "pending_review", "reserving", "reserved", "settled", "retry_submitting", "retry_ambiguous"].includes(attempt.policyStatus) ||
       (attempt.fundingClaimed && attempt.policyStatus === "not_started"));
 }
 

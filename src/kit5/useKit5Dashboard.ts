@@ -12,12 +12,16 @@ import {
   reEvaluateCrm,
   approve as approveRequest,
   acknowledge,
+  sortEvents,
 } from './engine.js';
 
 /** Pause between arrivals while the sequence plays itself. */
 const ARRIVAL_MS = 1400;
+const LIVE_RUN_STORAGE_PREFIX = 'flowcard-kit5-live-run:';
+const LIVE_RUN_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface LiveProviderActivity {
+  scenarioId?: string;
   status: string;
   attemptId?: string;
   customerId?: string;
@@ -38,6 +42,54 @@ export interface LiveProviderActivity {
   repaymentDepositError?: string | null;
 }
 
+interface PersistedLiveRun {
+  runId: string;
+  customerIndex: number;
+  action: LiveProviderActivity | null;
+  history: LiveProviderActivity[];
+}
+
+function isLiveProviderActivity(value: unknown): value is LiveProviderActivity {
+  return typeof value === 'object' && value !== null &&
+    typeof (value as { status?: unknown }).status === 'string';
+}
+
+function persistLiveRun(scenarioId: string, run: PersistedLiveRun): void {
+  try {
+    window.sessionStorage.setItem(`${LIVE_RUN_STORAGE_PREFIX}${scenarioId}`, JSON.stringify(run));
+  } catch {
+    // Live actions still use unique in-memory run IDs when browser storage is unavailable.
+  }
+}
+
+function loadLiveRun(scenarioId: string): PersistedLiveRun {
+  try {
+    const stored = window.sessionStorage.getItem(`${LIVE_RUN_STORAGE_PREFIX}${scenarioId}`);
+    if (stored) {
+      const parsed = JSON.parse(stored) as Partial<PersistedLiveRun>;
+      if (typeof parsed.runId === 'string' && LIVE_RUN_ID_PATTERN.test(parsed.runId) &&
+          typeof parsed.customerIndex === 'number' && Number.isSafeInteger(parsed.customerIndex) && parsed.customerIndex >= 0) {
+        const runScenarioId = `${scenarioId}:${parsed.runId}`;
+        const action = isLiveProviderActivity(parsed.action)
+          ? { ...parsed.action, scenarioId: parsed.action.scenarioId ?? runScenarioId }
+          : null;
+        const history = Array.isArray(parsed.history)
+          ? parsed.history.filter(isLiveProviderActivity).map((activity) => ({
+            ...activity,
+            scenarioId: activity.scenarioId ?? runScenarioId,
+          }))
+          : [];
+        return { runId: parsed.runId, customerIndex: parsed.customerIndex, action, history };
+      }
+    }
+  } catch {
+    // Ignore an unavailable or malformed browser snapshot and begin a new run.
+  }
+  const run = { runId: globalThis.crypto.randomUUID(), customerIndex: 0, action: null, history: [] };
+  persistLiveRun(scenarioId, run);
+  return run;
+}
+
 export function upsertLiveHistory(history: readonly LiveProviderActivity[], activity: LiveProviderActivity): LiveProviderActivity[] {
   const index = history.findIndex((entry) => entry.attemptId === activity.attemptId);
   if (index < 0) return [...history, activity];
@@ -46,7 +98,7 @@ export function upsertLiveHistory(history: readonly LiveProviderActivity[], acti
 
 export function liveActivityNeedsReconciliation(activity: LiveProviderActivity | null): boolean {
   if (!activity) return false;
-  return activity.status !== 'completed' || ['evaluating', 'pending_review', 'blocked', 'reserving', 'reserved', 'settled', 'retry_submitting', 'retry_ambiguous'].includes(activity.policyStatus ?? '');
+  return activity.status !== 'completed' || ['evaluating', 'pending_review', 'reserving', 'reserved', 'settled', 'retry_submitting', 'retry_ambiguous'].includes(activity.policyStatus ?? '');
 }
 
 export function canApproveKit5Review(authenticated: boolean, policyStatus: string | undefined): boolean {
@@ -78,21 +130,33 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const scenarios = useMemo<Scenario[]>(() => loadScenarios(), []);
   const [scenarioId, setScenarioId] = useState(scenarios[0].id);
   const scenario = scenarios.find((s) => s.id === scenarioId) ?? scenarios[0];
+  const [initialLiveRun] = useState(() => loadLiveRun(scenarios[0].id));
   const [inputs, setInputs] = useState<ScenarioInputs>(() => structuredClone(scenario.inputs));
   const [state, setState] = useState<Kit5State>(() => initialKit5State(scenario.inputs));
   const [ledgerProjectionResult, setLedgerProjectionResult] = useState<{ url: string; data: LedgerProjectionResponse } | null>(null);
   const [ledgerProjectionFailure, setLedgerProjectionFailure] = useState<{ url: string; message: string } | null>(null);
   const [ledgerProjectionLoadedUrl, setLedgerProjectionLoadedUrl] = useState('');
   const [mode, setMode] = useState<'fixture' | 'sandbox-live'>('fixture');
-  const [liveCustomerIndex, setLiveCustomerIndex] = useState(0);
-  const [liveAction, setLiveAction] = useState<LiveProviderActivity | null>(null);
-  const [liveHistory, setLiveHistory] = useState<LiveProviderActivity[]>([]);
+  const [liveRunId, setLiveRunId] = useState(initialLiveRun.runId);
+  const [liveCustomerIndex, setLiveCustomerIndex] = useState(initialLiveRun.customerIndex);
+  const [liveAction, setLiveAction] = useState<LiveProviderActivity | null>(initialLiveRun.action);
+  const [liveHistory, setLiveHistory] = useState<LiveProviderActivity[]>(initialLiveRun.history);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [livePending, setLivePending] = useState(false);
   const liveSubmissionRef = useRef(false);
   const liveGenerationRef = useRef(0);
   const [operatorAuthenticated, setOperatorAuthenticated] = useState(false);
   const [operatorApprovalAvailable, setOperatorApprovalAvailable] = useState(false);
+  const liveScenarioId = `${scenario.id}:${liveRunId}`;
+
+  useEffect(() => {
+    persistLiveRun(scenario.id, {
+      runId: liveRunId,
+      customerIndex: liveCustomerIndex,
+      action: liveAction,
+      history: liveHistory,
+    });
+  }, [liveAction, liveCustomerIndex, liveHistory, liveRunId, scenario.id]);
 
   // Optional read-only server projection. It is deliberately separate from the
   // deterministic scenario state, which remains the demo's source of behavior.
@@ -134,12 +198,14 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const selectScenario = useCallback((id: string) => {
     const next = scenarios.find((s) => s.id === id);
     if (!next) return;
+    const liveRun = loadLiveRun(id);
     setScenarioId(id);
     liveGenerationRef.current += 1;
     liveSubmissionRef.current = false;
-    setLiveCustomerIndex(0);
-    setLiveAction(null);
-    setLiveHistory([]);
+    setLiveRunId(liveRun.runId);
+    setLiveCustomerIndex(liveRun.customerIndex);
+    setLiveAction(liveRun.action);
+    setLiveHistory(liveRun.history);
     setLiveError(null);
     setLivePending(false);
     setInputs(structuredClone(next.inputs));
@@ -171,21 +237,36 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const approve = useCallback((requestId: string) => setState((s) => approveRequest(s, requestId)), []);
   const continueAfterAuto = useCallback(() => setState((s) => acknowledge(s)), []);
 
-  const liveCustomers = scenario.inputs.events
+  const liveCustomers = sortEvents(inputs.events)
     .filter((event) => event.type === 'decline')
-    .map((event) => ({ event, customer: scenario.inputs.customers.find((item) => item.key === event.customerKey) }))
+    .map((event) => ({ event, customer: inputs.customers.find((item) => item.key === event.customerKey) }))
     .filter((item): item is typeof item & { customer: NonNullable<typeof item.customer> } => Boolean(item.customer));
   const nextLiveCustomer = liveCustomers[liveCustomerIndex];
   const liveBlocked = livePending || (liveActivityNeedsReconciliation(liveAction) && liveAction?.status !== 'not_persisted');
+  const liveComplete = liveCustomerIndex >= liveCustomers.length;
+
+  const restartLiveSequence = useCallback(() => {
+    if (liveBlocked || liveAction?.status === 'not_persisted' || liveSubmissionRef.current) return;
+    liveGenerationRef.current += 1;
+    liveSubmissionRef.current = false;
+    const nextRun: PersistedLiveRun = {
+      runId: globalThis.crypto.randomUUID(),
+      customerIndex: 0,
+      action: null,
+      history: liveHistory,
+    };
+    persistLiveRun(scenario.id, nextRun);
+    setLiveRunId(nextRun.runId);
+    setLiveCustomerIndex(nextRun.customerIndex);
+    setLiveAction(nextRun.action);
+    setLiveHistory(nextRun.history);
+    setLiveError(null);
+    setLivePending(false);
+  }, [liveAction?.status, liveBlocked, liveHistory, scenario.id]);
 
   const selectMode = useCallback((next: 'fixture' | 'sandbox-live') => {
     if (liveSubmissionRef.current || liveActivityNeedsReconciliation(liveAction)) return;
     setMode(next);
-    setLiveCustomerIndex(0);
-    setLiveAction(null);
-    setLiveHistory([]);
-    setLiveError(null);
-    setLivePending(false);
   }, [liveAction]);
 
   const authenticateOperator = useCallback(async (token: string) => {
@@ -208,9 +289,9 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setLiveError(null);
     try {
       const response = await new BridgeApiClient(apiBaseUrl).nextCustomer({
-        scenarioId: scenario.id,
+        scenarioId: liveScenarioId,
         customerId: nextLiveCustomer.customer.id,
-        actionId: `${scenario.id}:${nextLiveCustomer.event.requestId}`,
+        actionId: `${liveScenarioId}:${nextLiveCustomer.event.requestId}`,
       });
       if (generation !== liveGenerationRef.current) return;
       if (response.status === 'rejected') {
@@ -219,6 +300,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
       }
       if (response.status !== 'completed') {
         const activity = {
+          scenarioId: liveScenarioId,
           status: response.status,
           attemptId: response.attemptId,
           customerId: nextLiveCustomer.customer.id,
@@ -242,6 +324,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
         return;
       }
       const activity = {
+        scenarioId: liveScenarioId,
         status: response.status,
         attemptId: response.attemptId,
         customerId: nextLiveCustomer.customer.id,
@@ -265,7 +348,8 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
       if (generation !== liveGenerationRef.current) return;
       setLiveAction({
         status: 'unresolved',
-        attemptId: `${scenario.id}:${nextLiveCustomer.event.requestId}`,
+        scenarioId: liveScenarioId,
+        attemptId: `${liveScenarioId}:${nextLiveCustomer.event.requestId}`,
         customerId: nextLiveCustomer.customer.id,
         customerName: nextLiveCustomer.customer.name,
       });
@@ -276,7 +360,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
         setLivePending(false);
       }
     }
-  }, [apiBaseUrl, liveBlocked, mode, nextLiveCustomer, operatorAuthenticated, scenario.id]);
+  }, [apiBaseUrl, liveBlocked, liveScenarioId, mode, nextLiveCustomer, operatorAuthenticated]);
 
   const refreshLiveAction = useCallback(async () => {
     if (!apiBaseUrl || !operatorAuthenticated || !liveAction?.attemptId || !liveAction.customerId || livePending) return;
@@ -285,7 +369,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setLiveError(null);
     try {
       const response = await new BridgeApiClient(apiBaseUrl).refreshAttempt({
-        scenarioId: scenario.id,
+        scenarioId: liveAction.scenarioId ?? liveScenarioId,
         customerId: liveAction.customerId,
         actionId: liveAction.attemptId,
       });
@@ -328,7 +412,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     } finally {
       if (generation === liveGenerationRef.current) setLivePending(false);
     }
-  }, [apiBaseUrl, liveAction, liveHistory, livePending, operatorAuthenticated, scenario.id]);
+  }, [apiBaseUrl, liveAction, liveHistory, livePending, liveScenarioId, operatorAuthenticated]);
 
   const refreshLiveHistoryActivity = useCallback(async (activity: LiveProviderActivity) => {
     if (!apiBaseUrl || !operatorAuthenticated || !activity.attemptId || !activity.customerId || livePending) return;
@@ -337,7 +421,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setLiveError(null);
     try {
       const response = await new BridgeApiClient(apiBaseUrl).refreshAttempt({
-        scenarioId: scenario.id, customerId: activity.customerId, actionId: activity.attemptId,
+        scenarioId: activity.scenarioId ?? liveScenarioId, customerId: activity.customerId, actionId: activity.attemptId,
       });
       if (generation !== liveGenerationRef.current) return;
       const updated = { ...activity, status: response.status, lifecycleId: response.lifecycleId ?? activity.lifecycleId,
@@ -359,22 +443,23 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     } finally {
       if (generation === liveGenerationRef.current) setLivePending(false);
     }
-  }, [apiBaseUrl, liveAction, livePending, operatorAuthenticated, scenario.id]);
+  }, [apiBaseUrl, liveAction, livePending, liveScenarioId, operatorAuthenticated]);
 
   const approveLiveReview = useCallback(async (reason: string, target?: LiveProviderActivity) => {
     const approvalTarget = target ?? liveAction;
     if (!apiBaseUrl || !operatorAuthenticated || !approvalTarget?.attemptId || !approvalTarget.customerId ||
         !canApproveKit5Review(operatorAuthenticated, approvalTarget.policyStatus) || livePending) return;
+    const approvalScenarioId = approvalTarget.scenarioId ?? liveScenarioId;
     const generation = liveGenerationRef.current;
     setLivePending(true);
     setLiveError(null);
     try {
       const response = await new BridgeApiClient(apiBaseUrl).approveHumanReview({
-        scenarioId: scenario.id, customerId: approvalTarget.customerId, actionId: approvalTarget.attemptId, reason,
+        scenarioId: approvalScenarioId, customerId: approvalTarget.customerId, actionId: approvalTarget.attemptId, reason,
       });
       if (generation !== liveGenerationRef.current) return;
       const status = await new BridgeApiClient(apiBaseUrl).refreshAttempt({
-        scenarioId: scenario.id, customerId: approvalTarget.customerId, actionId: approvalTarget.attemptId,
+        scenarioId: approvalScenarioId, customerId: approvalTarget.customerId, actionId: approvalTarget.attemptId,
       });
       if (generation !== liveGenerationRef.current) return;
       const activity = { ...approvalTarget, status: status.status, result: status.result ?? approvalTarget.result,
@@ -393,17 +478,18 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     } finally {
       if (generation === liveGenerationRef.current) setLivePending(false);
     }
-  }, [apiBaseUrl, liveAction, livePending, operatorAuthenticated, scenario.id]);
+  }, [apiBaseUrl, liveAction, livePending, liveScenarioId, operatorAuthenticated]);
 
   const createOrRefreshNovaRepaymentDeposit = useCallback(async (target: LiveProviderActivity) => {
     if (!apiBaseUrl || !operatorAuthenticated || !target.customerId || !target.attemptId ||
         !canCreateNovaRepaymentDeposit(operatorAuthenticated, target) || livePending) return;
+    const targetScenarioId = target.scenarioId ?? liveScenarioId;
     const generation = liveGenerationRef.current;
     setLivePending(true);
     setLiveError(null);
     try {
       const deposit = await new BridgeApiClient(apiBaseUrl).createOrRefreshNovaRepaymentDeposit({
-        scenarioId: scenario.id, customerId: target.customerId, actionId: target.attemptId,
+        scenarioId: targetScenarioId, customerId: target.customerId, actionId: target.attemptId,
       });
       if (generation !== liveGenerationRef.current) return;
       const updated = { ...target, repaymentDeposit: deposit, repaymentDepositError: deposit.error };
@@ -424,7 +510,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     } finally {
       if (generation === liveGenerationRef.current) setLivePending(false);
     }
-  }, [apiBaseUrl, liveAction, livePending, operatorAuthenticated, scenario.id]);
+  }, [apiBaseUrl, liveAction, livePending, liveScenarioId, operatorAuthenticated]);
 
   return {
     scenarios,
@@ -444,12 +530,13 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     operatorApprovalAvailable,
     liveBlocked,
     nextLiveCustomer,
-    liveComplete: liveCustomerIndex >= liveCustomers.length,
+    liveComplete,
     selectScenario,
     applyInputs,
     scan,
     advance,
     reset,
+    restartLiveSequence,
     selectCustomer,
     crmReveal,
     crmReEvaluate,

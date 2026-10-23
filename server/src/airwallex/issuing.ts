@@ -1,9 +1,7 @@
-import { randomUUID } from "node:crypto";
 import type { IssuingSimulationGateway, IssuingSimulationResponse } from "./client.js";
 import { ProviderHttpError } from "./client.js";
 
 const MAX_SIMULATION_AMOUNT_CENTS = 999_999;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface IssuingSimulationInput {
   accountId: string;
@@ -11,6 +9,7 @@ export interface IssuingSimulationInput {
   amountCents: number;
   currency: string;
   merchant: string;
+  merchantCategoryCode?: string;
   scenarioId: string;
 }
 
@@ -21,43 +20,44 @@ export interface IssuingSimulationResult extends IssuingSimulationResponse {
 export interface IssuingSimulationDependencies {
   gateway: IssuingSimulationGateway;
   persistLifecycleId: (scenarioId: string, lifecycleId: string) => Promise<void>;
-  createLifecycleId?: () => string;
 }
 
-/** Validate and execute one server-side simulation, recording its correlation ID first. */
+/** Validate a simulation and persist the lifecycle ID returned by Airwallex. */
 export async function simulateIssuingTransaction(
   input: IssuingSimulationInput,
   dependencies: IssuingSimulationDependencies,
 ): Promise<IssuingSimulationResult> {
   const request = validateInput(input);
-  const lifecycleId = (dependencies.createLifecycleId ?? randomUUID)();
-  if (!UUID_PATTERN.test(lifecycleId)) {
-    throw new Error("Issuing lifecycle ID generator must return a UUID");
-  }
-
-  await dependencies.persistLifecycleId(request.scenarioId, lifecycleId);
+  let response: unknown;
   try {
-    const response = await dependencies.gateway.createIssuingSimulation({ ...request, lifecycleId });
-    return { ...normalizeIssuingResponse(response, lifecycleId), scenarioId: request.scenarioId };
+    response = await dependencies.gateway.createIssuingSimulation(request);
   } catch (error) {
     if (!isAmbiguous(error)) throw error;
-
-    const lifecycle = await dependencies.gateway.getIssuingLifecycle(lifecycleId, request.accountId);
-    if (lifecycle !== null) {
-      return { ...normalizeIssuingResponse(lifecycle, lifecycleId), scenarioId: request.scenarioId };
-    }
-    throw new AmbiguousIssuingResponseError(lifecycleId, error);
+    throw new AmbiguousIssuingResponseError(null, error);
   }
+
+  let result: IssuingSimulationResponse;
+  try {
+    result = normalizeIssuingResponse(response);
+  } catch (error) {
+    throw new AmbiguousIssuingResponseError(null, error);
+  }
+  try {
+    await dependencies.persistLifecycleId(request.scenarioId, result.cardTransactionLifecycleId);
+  } catch (error) {
+    throw new AmbiguousIssuingResponseError(result.cardTransactionLifecycleId, error);
+  }
+  return { ...result, scenarioId: request.scenarioId };
 }
 
 export class AmbiguousIssuingResponseError extends Error {
-  constructor(readonly lifecycleId: string, cause: unknown) {
-    super("Airwallex issuing result is unresolved; lifecycle was checked and an operator must reconcile before retry", { cause });
+  constructor(readonly lifecycleId: string | null, cause: unknown) {
+    super("Airwallex issuing result is unresolved; an operator must reconcile before retry", { cause });
     this.name = "AmbiguousIssuingResponseError";
   }
 }
 
-export function normalizeIssuingResponse(value: unknown, expectedLifecycleId: string): IssuingSimulationResponse {
+export function normalizeIssuingResponse(value: unknown, expectedLifecycleId?: string): IssuingSimulationResponse {
   if (typeof value !== "object" || value === null) {
     throw new Error("Airwallex issuing simulation returned a malformed response");
   }
@@ -73,7 +73,7 @@ export function normalizeIssuingResponse(value: unknown, expectedLifecycleId: st
   const cardTransactionEventId = requiredProviderId(response.card_transaction_event_id, "card_transaction_event_id");
   const cardTransactionId = requiredProviderId(response.card_transaction_id, "card_transaction_id");
   const cardTransactionLifecycleId = requiredProviderId(response.card_transaction_lifecycle_id, "card_transaction_lifecycle_id");
-  if (cardTransactionLifecycleId !== expectedLifecycleId) {
+  if (expectedLifecycleId && cardTransactionLifecycleId !== expectedLifecycleId) {
     throw new Error("Airwallex issuing simulation returned a different lifecycle ID");
   }
 
@@ -121,12 +121,19 @@ function validateInput(input: IssuingSimulationInput): Omit<IssuingSimulationInp
   const cardId = requiredInput(input.cardId, "card ID");
   const merchant = requiredInput(input.merchant, "merchant");
   const scenarioId = requiredInput(input.scenarioId, "scenario ID");
+  const merchantCategoryCode = input.merchantCategoryCode?.trim();
+  if (merchantCategoryCode && !/^\d{4}$/.test(merchantCategoryCode)) {
+    throw new Error("Issuing simulation merchant category code must contain four digits");
+  }
   if (!Number.isSafeInteger(input.amountCents) || input.amountCents < 1 || input.amountCents > MAX_SIMULATION_AMOUNT_CENTS) {
     throw new Error("Issuing simulation amount must be between 1 cent and 999999 cents");
   }
   const currency = requiredInput(input.currency, "currency").toUpperCase();
   if (currency !== "USD") throw new Error("Issuing simulation currency must be USD");
-  return { accountId, cardId, amountCents: input.amountCents, currency, merchant, scenarioId };
+  return {
+    accountId, cardId, amountCents: input.amountCents, currency, merchant, scenarioId,
+    ...(merchantCategoryCode ? { merchantCategoryCode } : {}),
+  };
 }
 
 function requiredInput(value: string, label: string): string {

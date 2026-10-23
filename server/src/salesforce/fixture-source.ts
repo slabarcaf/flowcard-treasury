@@ -1,5 +1,6 @@
 import atlas from "./fixtures/atlas.json" with { type: "json" };
 import bloom from "./fixtures/bloom.json" with { type: "json" };
+import juniper from "./fixtures/juniper.json" with { type: "json" };
 import nova from "./fixtures/nova.json" with { type: "json" };
 import pixel from "./fixtures/pixel.json" with { type: "json" };
 import type { SalesforceCustomerSnapshot } from "./types.js";
@@ -9,6 +10,7 @@ const fixtures: Readonly<Record<string, SalesforceCustomerSnapshot>> = {
   acct_atlas001: atlas as SalesforceCustomerSnapshot,
   acct_nova001: nova as SalesforceCustomerSnapshot,
   acct_pixel001: pixel as SalesforceCustomerSnapshot,
+  acct_juniper001: juniper as SalesforceCustomerSnapshot,
 };
 
 /** Return a complete synthetic snapshot without constructing a provider client. */

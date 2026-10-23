@@ -141,7 +141,7 @@ export async function acceptKit5CardAttempt(
       const priorAttempt = previous.rows[0];
       const fundingPending = priorAttempt?.provider_result?.processResult === "DECLINED" &&
         priorAttempt.provider_result.failureReason === "INSUFFICIENT_FUNDS" &&
-        !["rejected", "retry_completed", "retry_failed"].includes(priorAttempt.policy_status);
+        !["blocked", "rejected", "retry_completed", "retry_failed"].includes(priorAttempt.policy_status);
       if (priorAttempt?.status !== "completed" || fundingPending) {
         await client.query("ROLLBACK");
         return { accepted: false, reason: "previous_attempt_unresolved" };

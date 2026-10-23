@@ -143,7 +143,7 @@ export async function handleKit5AttemptStatus(
     return;
   }
   const fundingPending = attempt.result?.processResult === "DECLINED" && attempt.result.failureReason === "INSUFFICIENT_FUNDS" &&
-    ["evaluating", "pending_review", "blocked", "reserving", "reserved", "settled", "retry_submitting", "retry_ambiguous"].includes(attempt.policyStatus);
+    ["evaluating", "pending_review", "reserving", "reserved", "settled", "retry_submitting", "retry_ambiguous"].includes(attempt.policyStatus);
   send(response, 200, {
     status: attempt.status === "accepted" || attempt.status === "submitting" || fundingPending ? "in_progress" : attempt.status,
     attemptId: attempt.actionId,

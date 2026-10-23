@@ -5,12 +5,36 @@ import type { SalesforceMcpQueryResults } from "../../server/src/salesforce/mcp-
 import type { CustomerRosterEntry } from "../../server/src/roster/types.js";
 import { scheduleDailySnapshotSync, snapshotDailyRunTime } from "../../server/src/snapshots/scheduler.js";
 import { startDemoSnapshotSync } from "../../server/src/snapshots/runtime.js";
-import { mapRecordsInBatches, SnapshotSyncWorker, type SnapshotSyncSource } from "../../server/src/snapshots/sync-worker.js";
+import { createDemoSnapshotSource, mapRecordsInBatches, SnapshotSyncWorker, type SnapshotSyncSource } from "../../server/src/snapshots/sync-worker.js";
 
 const textLimits = { maxCaseTextLength: 200, maxActivityTextLength: 200 };
 const now = new Date("2026-10-21T12:00:00.000Z");
 
 describe("Salesforce daily snapshot worker", () => {
+  it("verifies canonical synthetic demo mappings while leaving MCP mappings unverified", async () => {
+    const demoSource = createDemoSnapshotSource();
+    const demoResult = await demoSource.fetchCustomer(roster("acct_atlas001"));
+    expect(demoSource.mode).toBe("demo");
+    expect(demoResult.kind).toBe("fixture");
+    if (demoResult.kind === "fixture") {
+      expect(demoResult.payload).toMatchObject({
+        mappingVersion: "salesforce-demo-fixture-v1",
+        mappingVerified: true,
+      });
+    }
+
+    let published: { payload: { mappingVerified: boolean } } | undefined;
+    const worker = new SnapshotSyncWorker({
+      pool: rosterPool([roster("mcp-mapping")]),
+      source: sourceFor(async () => ({ kind: "mcp", queries: queryResults({ accountId: "sf-mcp-mapping" }) })),
+      textLimits,
+      now: () => now,
+      publish: async (_pool, candidate) => { published = candidate; return {} as never; },
+    });
+    await worker.run();
+    expect(published?.payload.mappingVerified).toBe(false);
+  });
+
   it("uses only active internal roster entries and maps more than 1,000 records in bounded batches", async () => {
     const customers = [roster("active-1"), roster("inactive", false)];
     const pool = rosterPool(customers);

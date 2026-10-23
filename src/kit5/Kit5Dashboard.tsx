@@ -80,14 +80,28 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
               </select>
             </label>
             {k.mode === 'sandbox-live' && (
-              <button
-                type="button"
-                onClick={() => void k.submitNextCustomer()}
-                disabled={!k.operatorAuthenticated || k.livePending || k.liveBlocked || !k.nextLiveCustomer || !k.ledgerApiEnabled}
-                className="px-4 py-2 text-sm font-medium bg-[#e04e2f] hover:bg-[#c9442a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors cursor-pointer"
-              >
-                {k.livePending ? 'Submitting…' : k.liveComplete ? 'Sequence complete' : k.liveAction?.status === 'not_persisted' ? 'Retry same customer' : 'Next customer'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => void k.submitNextCustomer()}
+                  disabled={!k.operatorAuthenticated || k.livePending || k.liveBlocked || !k.nextLiveCustomer || !k.ledgerApiEnabled}
+                  className="px-4 py-2 text-sm font-medium bg-[#e04e2f] hover:bg-[#c9442a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  {k.livePending ? 'Submitting…' : k.liveComplete ? 'Sequence complete' : k.liveAction?.status === 'not_persisted' ? 'Retry same customer' : 'Next customer'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const confirmed = window.confirm('Start a fresh Sandbox live sequence? Previous provider attempts will remain recorded. Each Next customer click will create a new Sandbox transaction.');
+                    if (confirmed) k.restartLiveSequence();
+                  }}
+                  disabled={k.livePending || k.liveBlocked || k.liveAction?.status === 'not_persisted'}
+                  title="Start a new live run. Previous attempts remain recorded."
+                  className="px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer"
+                >
+                  Restart sequence
+                </button>
+              </>
             )}
             {k.mode === 'fixture' && state.phase === 'idle' && (
               <button
@@ -172,7 +186,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 )}
                 {k.livePending && <p role="status" className="text-sm text-sky-700">Waiting for the provider result…</p>}
                 {k.liveError && <p role="alert" className="text-sm text-red-700">{k.liveError}</p>}
-                {k.liveHistory.map((activity) => (
+                {k.liveHistory.filter((activity) => activity.attemptId !== k.liveAction?.attemptId).map((activity) => (
                   <div key={activity.attemptId} className="border-t border-gray-100 pt-2">
                   <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs text-gray-600">
                     <dt>Customer</dt><dd>{activity.customerName}</dd>
@@ -259,7 +273,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                     {k.livePending ? 'Refreshing…' : 'Refresh provider status'}
                   </button>
                 )}
-                {k.liveComplete && <p role="status" className="text-sm text-gray-500">All customer actions have provider results.</p>}
+                {k.liveComplete && <p role="status" className="text-sm text-gray-500">All customer actions have provider results. Restart starts a new run and keeps these provider attempts recorded.</p>}
               </section>
             )}
 

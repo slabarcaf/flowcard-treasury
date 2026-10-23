@@ -11,6 +11,7 @@ import { createOperatorSessionCookie } from "../../server/src/http/kit5-operator
 
 const scenarioId = "kit5-target";
 const customerIds = ["bloom-fixture", "atlas-fixture"];
+const providerLifecycleId = "life-provider-generated";
 function providerResponse(id: string) {
   return {
   process_result: "DECLINED",
@@ -90,7 +91,7 @@ class MemoryPool implements DatabasePool {
     }
     if (sql.includes("WHERE scenario_id = $1 AND sequence_index = $2")) {
       const attempt = [...this.attempts.values()].find((item) => item.scenarioId === values[0] && item.sequenceIndex === values[1]);
-      return { rows: attempt ? [{ status: attempt.status } as Row] : [], rowCount: attempt ? 1 : 0 };
+      return { rows: attempt ? [{ status: attempt.status, policy_status: attempt.policyStatus, provider_result: attempt.result } as Row] : [], rowCount: attempt ? 1 : 0 };
     }
     if (sql.includes("INSERT INTO kit5_card_attempts")) {
       const attempt: Kit5CardAttempt = {
@@ -147,7 +148,7 @@ function fixture(): Kit5CustomerFixture {
 }
 
 function gateway(
-  create: (request: IssuingSimulationRequest) => Promise<unknown> = async (request) => providerResponse(request.lifecycleId),
+  create: (request: IssuingSimulationRequest) => Promise<unknown> = async () => providerResponse(providerLifecycleId),
   lookup: (id: string, account: string) => Promise<unknown | null> = async () => null,
 ): IssuingSimulationGateway {
   return {
@@ -318,13 +319,14 @@ describe("Kit 5 next-customer persistence", () => {
     expect(migration).toContain("pending_policy_decision_id uuid");
   });
 
-  it("persists action and lifecycle before exactly one provider create", async () => {
+  it("claims the action before one provider create and persists Airwallex's returned lifecycle", async () => {
     const pool = new MemoryPool();
     const provider = gateway(async (request) => {
       const attempt = pool.attempts.get(`${scenarioId}/action-1`);
-      expect(attempt?.status).toBe("in_progress");
-      expect(attempt?.lifecycleId).toBe(request.lifecycleId);
-      return providerResponse(request.lifecycleId);
+      expect(attempt?.status).toBe("submitting");
+      expect(attempt?.lifecycleId).toBeNull();
+      expect(request.lifecycleId).toBeUndefined();
+      return providerResponse(providerLifecycleId);
     });
     const outcome = await processNextCustomerAction(pool, provider, {
       scenarioId, customerId: customerIds[0]!, actionId: "action-1",
@@ -332,7 +334,7 @@ describe("Kit 5 next-customer persistence", () => {
 
     expect(outcome.status).toBe("completed");
     expect(provider.createIssuingSimulation).toHaveBeenCalledOnce();
-    expect(pool.attempts.get(`${scenarioId}/action-1`)?.status).toBe("completed");
+    expect(pool.attempts.get(`${scenarioId}/action-1`)).toMatchObject({ status: "completed", lifecycleId: providerLifecycleId });
   });
 
   it("returns a repeated action result without a second create", async () => {
@@ -355,7 +357,7 @@ describe("Kit 5 next-customer persistence", () => {
     const provider = gateway(async (request) => {
       signalStarted();
       await held;
-      return providerResponse(request.lifecycleId);
+      return providerResponse(providerLifecycleId);
     });
     const input = { scenarioId, customerId: customerIds[0]!, actionId: "concurrent-action" };
     const first = processNextCustomerAction(pool, provider, input, fixture());
@@ -479,7 +481,29 @@ describe("Kit 5 next-customer persistence", () => {
     expect(provider.createIssuingSimulation).toHaveBeenCalledOnce();
   });
 
-  it("checks an ambiguous lifecycle on repeated action and never resubmits create", async () => {
+  it("allows the next customer after a prior customer's policy is blocked", async () => {
+    const pool = new MemoryPool();
+    pool.states.set(scenarioId, 1);
+    pool.attempts.set(`${scenarioId}/blocked-bloom`, {
+      scenarioId, customerId: customerIds[0]!, actionId: "blocked-bloom", sequenceIndex: 0,
+      lifecycleId: "life-bloom", status: "completed", result: {
+        processResult: "DECLINED", failureReason: "INSUFFICIENT_FUNDS",
+      }, error: null, fundingClaimed: true, requestFacts: null,
+      policyStatus: "blocked", policyError: "active_binding_or_fresh_policy_inputs_unavailable",
+      policyDecisionId: null, pendingPolicyDecisionId: null, policyActorId: null,
+      policyApprovalReason: null, bridgeId: null, retryLifecycleId: null,
+      retryRequestId: null, retryResult: null, retryError: null,
+    });
+    const provider = gateway();
+    const result = await processNextCustomerAction(pool, provider, {
+      scenarioId, customerId: customerIds[1]!, actionId: "atlas-after-blocked-bloom",
+    }, fixture());
+
+    expect(result.status).toBe("completed");
+    expect(provider.createIssuingSimulation).toHaveBeenCalledOnce();
+  });
+
+  it("keeps an ambiguous attempt unresolved without a provider lifecycle and never resubmits", async () => {
     const pool = new MemoryPool();
     const provider = gateway(async () => { throw new DOMException("fixture timeout", "TimeoutError"); });
     const input = { scenarioId, customerId: customerIds[0]!, actionId: "action-timeout" };
@@ -489,10 +513,10 @@ describe("Kit 5 next-customer persistence", () => {
     expect(first.status).toBe("ambiguous");
     expect(repeated.status).toBe("ambiguous");
     expect(provider.createIssuingSimulation).toHaveBeenCalledOnce();
-    expect(provider.getIssuingLifecycle).toHaveBeenCalledTimes(2);
+    expect(provider.getIssuingLifecycle).not.toHaveBeenCalled();
   });
 
-  it("recovers an ambiguous result from the stored lifecycle without another create", async () => {
+  it("does not reconcile an ambiguous attempt until Airwallex has returned a lifecycle", async () => {
     const pool = new MemoryPool();
     const provider = gateway(
       async () => { throw new DOMException("fixture timeout", "TimeoutError"); },
@@ -502,8 +526,8 @@ describe("Kit 5 next-customer persistence", () => {
     await processNextCustomerAction(pool, provider, input, fixture());
     const recovered = await processNextCustomerAction(pool, provider, input, fixture());
 
-    expect(recovered.status).toBe("completed");
+    expect(recovered.status).toBe("ambiguous");
     expect(provider.createIssuingSimulation).toHaveBeenCalledOnce();
-    expect(provider.getIssuingLifecycle).toHaveBeenCalledOnce();
+    expect(provider.getIssuingLifecycle).not.toHaveBeenCalled();
   });
 });

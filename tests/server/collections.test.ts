@@ -67,8 +67,14 @@ describe("bridge collection fees", () => {
     const rawBody = Buffer.from(JSON.stringify({
       id: eventId,
       name: "deposit.settled",
+      account_id: deposit.accountId,
       created_at: deposit.settledAt.toISOString(),
-      data: { object: { id: deposit.depositId, account_id: deposit.accountId, global_account_id: "verified-global-account" } },
+      data: {
+        id: deposit.depositId,
+        global_account_id: "verified-global-account",
+        status: "SETTLED",
+        currency: "USD",
+      },
     }));
     const pool: DatabasePool = {
       ...db.pool,

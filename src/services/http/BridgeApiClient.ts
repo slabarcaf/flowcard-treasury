@@ -15,9 +15,9 @@ export class BridgeApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
 
-  constructor(baseUrl = '', fetchImpl: typeof fetch = fetch) {
+  constructor(baseUrl = '', fetchImpl?: typeof fetch) {
     this.baseUrl = baseUrl;
-    this.fetchImpl = fetchImpl;
+    this.fetchImpl = fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
   async getLedgerProjection(): Promise<LedgerProjectionResponse> {

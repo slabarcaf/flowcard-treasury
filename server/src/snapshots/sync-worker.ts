@@ -45,6 +45,7 @@ export interface SnapshotSyncRunResult {
 const INTERNAL_BATCH_SIZE = 1_000;
 const ACTIVITY_LOOKBACK_DAYS = 90;
 const MAX_CALL_ACTIVITIES = 5;
+const DEMO_FIXTURE_MAPPING_VERSION = "salesforce-demo-fixture-v1";
 
 /** Runs the daily snapshot once, isolating failures to the affected customer. */
 export class SnapshotSyncWorker {
@@ -282,7 +283,14 @@ export function createDemoSnapshotSource(): SnapshotSyncSource {
     async fetchCustomer(customer) {
       const payload = getDemoSalesforceSnapshot(customer.customerId);
       if (!payload) throw new Error(`No synthetic Salesforce snapshot fixture for ${customer.customerId}`);
-      return { kind: "fixture", payload };
+      // Demo fixtures are authored in the canonical schema, so this verification
+      // applies only to the synthetic source. Production MCP snapshots remain
+      // unverified until the Salesforce org field and picklist mappings are approved.
+      return { kind: "fixture", payload: {
+        ...payload,
+        mappingVersion: DEMO_FIXTURE_MAPPING_VERSION,
+        mappingVerified: true,
+      } };
     },
   };
 }

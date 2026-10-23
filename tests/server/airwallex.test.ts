@@ -47,18 +47,23 @@ describe("Airwallex gateway", () => {
   it("uses the documented balance, deposit, charge, and sandbox routes", async () => {
     const paths: string[] = [];
     const queryIds: Array<string | null> = [];
+    const balanceAccountTypes: Array<string | null> = [];
     const headers: Headers[] = [];
     const gateway = new HttpAirwallexGateway({ baseUrl: "https://airwallex.invalid", clientId: "id", apiKey: "key", fetcher: async (input, init = {}) => {
       const url = String(input);
       paths.push(new URL(url).pathname);
       queryIds.push(new URL(url).searchParams.get("request_id"));
+      balanceAccountTypes.push(new URL(url).searchParams.get("account_type"));
       headers.push(new Headers(init.headers));
       if (url.endsWith("/authentication/login")) return new Response(JSON.stringify({ token: "access" }));
-      if (url.includes("/balances/current")) return new Response(JSON.stringify({ available_amount: 12.34, currency: "USD" }));
+      if (url.includes("/balances/current")) return new Response(JSON.stringify([
+        { account_type: "cash", available_amount: 99.99, currency: "AUD" },
+        { account_type: "cash", available_amount: 12.34, currency: "USD" },
+      ]));
       if (url.includes("/deposits/dep_1")) return new Response(JSON.stringify({ id: "dep_1", amount: 12.34, currency: "USD", status: "SETTLED", settled_at: "2026-10-21T12:30:00Z" }));
       return new Response(JSON.stringify({ id: "op_1", status: "PENDING", request_id: request.requestId }));
     } });
-    await gateway.getBalance("acct_1", "USD");
+    await expect(gateway.getBalance("acct_1", "USD")).resolves.toEqual({ availableCents: 1234, currency: "USD" });
     await expect(gateway.getDeposit("dep_1", "acct_1")).resolves.toMatchObject({ settledAt: new Date("2026-10-21T12:30:00Z") });
     await gateway.getTransferByRequestId(request.requestId);
     await gateway.createCharge(request);
@@ -68,9 +73,48 @@ describe("Airwallex gateway", () => {
       "/api/v1/connected_account_transfers", "/api/v1/charges/create", "/api/v1/simulation/issuing/create",
     ]);
     expect(queryIds[3]).toBe(request.requestId);
+    expect(balanceAccountTypes[1]).toBe("cash");
     expect(headers[1].get("x-on-behalf-of")).toBe("acct_1");
     expect(headers[2].get("x-on-behalf-of")).toBe("acct_1");
     expect(headers[5].get("x-on-behalf-of")).toBe("acct_1");
+  });
+
+  it("sends the documented Sandbox Issuing simulation fields and MCC", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const headers: Headers[] = [];
+    const gateway = new HttpAirwallexGateway({
+      baseUrl: "https://airwallex.invalid",
+      clientId: "id",
+      apiKey: "key",
+      fetcher: async (input, init = {}) => {
+        const url = String(input);
+        headers.push(new Headers(init.headers));
+        if (url.endsWith("/authentication/login")) return new Response(JSON.stringify({ token: "access" }));
+        requestBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify({ status: "DECLINED" }));
+      },
+    });
+
+    await gateway.createIssuingSimulation({
+      accountId: "acct_bloom",
+      cardId: "card_bloom",
+      amountCents: 900_000,
+      currency: "USD",
+      merchant: "Supplier",
+      merchantCategoryCode: "5411",
+      lifecycleId: "d8af1614-a6a1-4d45-aae7-6858fc6d9ede",
+    });
+
+    expect(requestBody).toEqual({
+      card_id: "card_bloom",
+      transaction_amount: 9000,
+      transaction_currency: "USD",
+      merchant_category_code: "5411",
+      card_transaction_lifecycle_id: "d8af1614-a6a1-4d45-aae7-6858fc6d9ede",
+    });
+    expect(requestBody).not.toHaveProperty("transaction_failure_reason");
+    expect(headers[1].get("x-on-behalf-of")).toBe("acct_bloom");
+    expect(headers[1].get("x-api-version")).toBe("2026-08-21");
   });
 
   it("creates a settled Global Account deposit simulation on behalf of a connected account", async () => {

@@ -102,7 +102,7 @@ function gateway(failureReason: string | null = "INSUFFICIENT_FUNDS"): IssuingSi
       failure_reason: failureReason,
       card_transaction_event_id: "event-fixture",
       card_transaction_id: "transaction-fixture",
-      card_transaction_lifecycle_id: request.lifecycleId,
+      card_transaction_lifecycle_id: request.lifecycleId ?? "life-provider-nova",
     })),
     getIssuingLifecycle: vi.fn(async () => null),
   };

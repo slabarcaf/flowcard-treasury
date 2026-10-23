@@ -11,7 +11,9 @@ export interface IssuingSimulationRequest {
   amountCents: number;
   currency: string;
   merchant: string;
-  lifecycleId: string;
+  merchantCategoryCode?: string;
+  /** Set only when associating a new authorization with an existing lifecycle. */
+  lifecycleId?: string;
 }
 
 export interface IssuingSimulationResponse {
@@ -151,8 +153,20 @@ export class HttpAirwallexGateway implements AirwallexGateway, IssuingSimulation
   getTransferByRequestId(requestId: string) { return this.lookup("/api/v1/connected_account_transfers", requestId); }
   getChargeByRequestId(requestId: string) { return this.lookup("/api/v1/charges", requestId); }
   async getBalance(accountId: string, currency: "USD") {
-    const result = await this.get<{ available_amount: number; currency: "USD" }>(`/api/v1/balances/current?currency=${currency}`, { "x-on-behalf-of": accountId });
-    return { availableCents: Math.round(result.available_amount * 100), currency };
+    const result = await this.get<Array<{ account_type?: string; available_amount?: number; currency?: string }>>(
+      "/api/v1/balances/current?account_type=cash",
+      { "x-on-behalf-of": accountId },
+    );
+    if (!Array.isArray(result)) throw new Error("Airwallex current balances response was not a list");
+    const balance = result.find((entry) => entry.currency === currency &&
+      (!entry.account_type || entry.account_type.toLowerCase() === "cash"));
+    const availableCents = balance && typeof balance.available_amount === "number"
+      ? Math.round(balance.available_amount * 100)
+      : Number.NaN;
+    if (!Number.isSafeInteger(availableCents) || availableCents < 0) {
+      throw new Error(`Airwallex did not return a valid available ${currency} cash balance`);
+    }
+    return { availableCents, currency };
   }
   async getDeposit(depositId: string, accountId: string) {
     const result = await this.get<{ id: string; amount: number; currency: "USD"; status: string; settled_at?: string | null }>(`/api/v1/deposits/${encodeURIComponent(depositId)}`, { "x-on-behalf-of": accountId });
@@ -190,10 +204,10 @@ export class HttpAirwallexGateway implements AirwallexGateway, IssuingSimulation
       method: "POST",
       body: JSON.stringify({
         card_id: request.cardId,
-        amount: request.amountCents / 100,
-        currency: request.currency,
-        merchant_name: request.merchant,
-        card_transaction_lifecycle_id: request.lifecycleId,
+        transaction_amount: request.amountCents / 100,
+        transaction_currency: request.currency,
+        ...(request.merchantCategoryCode ? { merchant_category_code: request.merchantCategoryCode } : {}),
+        ...(request.lifecycleId ? { card_transaction_lifecycle_id: request.lifecycleId } : {}),
       }),
     }, { "x-on-behalf-of": request.accountId, "x-api-version": AIRWALLEX_ISSUING_API_VERSION });
   }

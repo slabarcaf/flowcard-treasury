@@ -9,6 +9,7 @@ const input = {
   amountCents: 900_000,
   currency: "USD",
   merchant: "Fixture Supplier",
+  merchantCategoryCode: "5411",
   scenarioId: "kit5-bloom",
 };
 const response = {
@@ -30,12 +31,11 @@ function gateway(
 }
 
 describe("issuing simulation operation", () => {
-  it("persists a UUID lifecycle before creating and normalizes an approved result", async () => {
+  it("persists Airwallex's returned lifecycle after creating and normalizes an approved result", async () => {
     const order: string[] = [];
     const provider = gateway(async () => { order.push("create"); return response; });
     const result = await simulateIssuingTransaction(input, {
       gateway: provider,
-      createLifecycleId: () => lifecycleId,
       persistLifecycleId: async (scenarioId, id) => {
         order.push("persist");
         expect(scenarioId).toBe(input.scenarioId);
@@ -43,7 +43,7 @@ describe("issuing simulation operation", () => {
       },
     });
 
-    expect(order).toEqual(["persist", "create"]);
+    expect(order).toEqual(["create", "persist"]);
     expect(result).toEqual({
       scenarioId: input.scenarioId,
       processResult: "APPROVED",
@@ -58,7 +58,6 @@ describe("issuing simulation operation", () => {
     const provider = gateway(async () => ({ ...response, process_result: "DECLINED", failure_reason: "NEW_PROVIDER_REASON" }));
     const result = await simulateIssuingTransaction(input, {
       gateway: provider,
-      createLifecycleId: () => lifecycleId,
       persistLifecycleId: async () => {},
     });
     expect(result.processResult).toBe("DECLINED");
@@ -78,7 +77,6 @@ describe("issuing simulation operation", () => {
     for (const [invalid, message] of cases) {
       await expect(simulateIssuingTransaction(invalid, {
         gateway: provider,
-        createLifecycleId: () => lifecycleId,
         persistLifecycleId: persist,
       })).rejects.toThrow(message);
     }
@@ -86,27 +84,24 @@ describe("issuing simulation operation", () => {
     expect(provider.createIssuingSimulation).not.toHaveBeenCalled();
   });
 
-  it("looks up a timed-out create by lifecycle and never resubmits", async () => {
+  it("leaves a timed-out create unresolved when Airwallex has not returned a lifecycle", async () => {
     const provider = gateway(async () => { throw new DOMException("timed out", "TimeoutError"); },
       vi.fn(async (_id: string, _accountId: string): Promise<unknown | null> => response));
-    const result = await simulateIssuingTransaction(input, {
+    await expect(simulateIssuingTransaction(input, {
       gateway: provider,
-      createLifecycleId: () => lifecycleId,
       persistLifecycleId: async () => {},
-    });
-    expect(result.cardTransactionId).toBe("txn_fixture_1");
-    expect(provider.getIssuingLifecycle).toHaveBeenCalledWith(lifecycleId, input.accountId);
+    })).rejects.toMatchObject({ name: "AmbiguousIssuingResponseError", lifecycleId: null });
+    expect(provider.getIssuingLifecycle).not.toHaveBeenCalled();
     expect(provider.createIssuingSimulation).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves an unresolved timeout for operator reconciliation without retrying", async () => {
+  it("does not retry or look up a timeout without a provider lifecycle", async () => {
     const provider = gateway(async () => { throw new DOMException("timed out", "TimeoutError"); });
     await expect(simulateIssuingTransaction(input, {
       gateway: provider,
-      createLifecycleId: () => lifecycleId,
       persistLifecycleId: async () => {},
     })).rejects.toBeInstanceOf(AmbiguousIssuingResponseError);
-    expect(provider.getIssuingLifecycle).toHaveBeenCalledTimes(1);
+    expect(provider.getIssuingLifecycle).not.toHaveBeenCalled();
     expect(provider.createIssuingSimulation).toHaveBeenCalledTimes(1);
   });
 
@@ -114,16 +109,14 @@ describe("issuing simulation operation", () => {
     const provider = gateway(async () => ({ process_result: "APPROVED" }));
     await expect(simulateIssuingTransaction(input, {
       gateway: provider,
-      createLifecycleId: () => lifecycleId,
       persistLifecycleId: async () => {},
-    })).rejects.toThrow("missing card_transaction_event_id");
+    })).rejects.toMatchObject({ name: "AmbiguousIssuingResponseError", lifecycleId: null });
   });
 
   it("does not reconcile definitive provider rejections", async () => {
     const provider = gateway(async () => { throw new ProviderHttpError(400, "rejected"); });
     await expect(simulateIssuingTransaction(input, {
       gateway: provider,
-      createLifecycleId: () => lifecycleId,
       persistLifecycleId: async () => {},
     })).rejects.toBeInstanceOf(ProviderHttpError);
     expect(provider.getIssuingLifecycle).not.toHaveBeenCalled();
@@ -147,7 +140,7 @@ describe("issuing simulation operation", () => {
       amountCents: input.amountCents,
       currency: input.currency,
       merchant: input.merchant,
-      lifecycleId,
+      merchantCategoryCode: input.merchantCategoryCode,
     };
     await provider.createIssuingSimulation(request);
     expect(requests[1]?.url).toBe("https://airwallex.invalid/api/v1/simulation/issuing/create");
@@ -156,10 +149,9 @@ describe("issuing simulation operation", () => {
     expect(headers.get("x-api-version")).toBe("2026-08-21");
     expect(JSON.parse(String(requests[1]?.init.body))).toEqual({
       card_id: input.cardId,
-      amount: 9000,
-      currency: "USD",
-      merchant_name: input.merchant,
-      card_transaction_lifecycle_id: lifecycleId,
+      transaction_amount: 9000,
+      transaction_currency: "USD",
+      merchant_category_code: "5411",
     });
     expect(headers.get("x-api-key")).toBeNull();
   });
