@@ -323,6 +323,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                     <dt>Attempt status</dt><dd>{checkpointReceipt.attemptStatus}</dd>
                     <dt>Server-resolved amount</dt><dd>{checkpointReceipt.amountCents === null ? 'Unavailable' : `$${(checkpointReceipt.amountCents / 100).toLocaleString('en-US')} ${checkpointReceipt.currency}`}</dd>
                     <dt>Failure reason</dt><dd>{checkpointReceipt.failureReason}</dd>
+                    <dt>Provider error</dt><dd>{checkpointReceipt.providerError}</dd>
                     <dt>Provider event ID</dt><dd className="font-mono break-all">{checkpointReceipt.eventId}</dd>
                     <dt>Provider transaction ID</dt><dd className="font-mono break-all">{checkpointReceipt.transactionId}</dd>
                     <dt>Lifecycle ID</dt><dd className="font-mono break-all">{checkpointReceipt.lifecycleId}</dd>

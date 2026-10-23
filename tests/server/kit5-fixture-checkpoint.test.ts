@@ -466,39 +466,53 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     expect(recovery.body).toMatchObject({ status: "completed", scenarioId, actionId });
   });
 
-  it("marks a definitive Airwallex 4xx failed after lifecycle correlation was saved", async () => {
+  it("persists and returns only a sanitized provider HTTP status for a definitive 4xx", async () => {
     const pool = new MemoryPool();
-    const createIssuingSimulation = vi.fn(async () => { throw new ProviderHttpError(400, "invalid issuing request"); });
+    const createIssuingSimulation = vi.fn(async () => {
+      throw new ProviderHttpError(403, "permission denied: response body included API token and card/account IDs");
+    });
     const getIssuingLifecycleEvents = vi.fn();
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn(), getIssuingLifecycleEvents });
 
     const first = await send(handler, { scenarioId, customerId, actionId });
     const replay = await send(handler, { scenarioId, customerId, actionId });
+    const safeMessage = "Airwallex rejected the sandbox request (HTTP 403)";
 
-    expect(first).toMatchObject({ statusCode: 502, body: { status: "failed", lifecycleId: expect.any(String) } });
-    expect(replay).toMatchObject({ statusCode: 502, body: { status: "failed", lifecycleId: expect.any(String) } });
-    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({ status: "failed", lifecycleId: expect.any(String) });
+    expect(first).toMatchObject({
+      statusCode: 502,
+      body: { status: "failed", lifecycleId: expect.any(String), providerError: safeMessage },
+    });
+    expect(replay).toMatchObject({
+      statusCode: 502,
+      body: { status: "failed", lifecycleId: expect.any(String), providerError: safeMessage },
+    });
+    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({
+      status: "failed",
+      lifecycleId: expect.any(String),
+      error: safeMessage,
+    });
+    expect(JSON.stringify({ first, replay, saved: pool.attempts.get(`${scenarioId}/${actionId}`) })).not.toMatch(/permission denied|response body|API token|card\/account IDs/);
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
     expect(getIssuingLifecycleEvents).not.toHaveBeenCalled();
   });
 
-  it("marks a failed lifecycle-ID persistence terminal before calling Airwallex", async () => {
+  it("keeps the provider result ambiguous if its returned lifecycle cannot be persisted", async () => {
     const pool = new MemoryPool();
     pool.failLifecyclePersistence = true;
-    const createIssuingSimulation = vi.fn();
+    const createIssuingSimulation = vi.fn(async () => matchingCheckpointSimulation(providerLifecycleId));
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() });
 
     const first = await send(handler, { scenarioId, customerId, actionId });
     const replay = await send(handler, { scenarioId, customerId, actionId });
 
-    expect(first).toMatchObject({ statusCode: 502, body: { status: "failed", lifecycleId: null } });
-    expect(replay).toMatchObject({ statusCode: 502, body: { status: "failed", lifecycleId: null } });
+    expect(first).toMatchObject({ statusCode: 202, body: { status: "ambiguous", lifecycleId: null } });
+    expect(replay).toMatchObject({ statusCode: 202, body: { status: "ambiguous", lifecycleId: null } });
     expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({
-      status: "failed",
+      status: "ambiguous",
       lifecycleId: null,
-      error: "checkpoint_create_not_started",
+      error: "provider_result_unresolved",
     });
-    expect(createIssuingSimulation).not.toHaveBeenCalled();
+    expect(createIssuingSimulation).toHaveBeenCalledOnce();
   });
 
   it("adopts the unresolved server attempt across fresh run UUIDs without another create", async () => {

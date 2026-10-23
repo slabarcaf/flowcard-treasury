@@ -401,6 +401,7 @@ describe('Kit 5 live dashboard recovery state', () => {
       providerResult: 'DECLINED',
       attemptStatus: 'completed',
       failureReason: 'INSUFFICIENT_FUNDS',
+      providerError: 'None returned',
       amountCents: 900_000,
       currency: 'USD',
       eventId: 'event-demo',
@@ -691,6 +692,28 @@ describe('Kit 5 live dashboard recovery state', () => {
     dashboard = renderDashboard();
     expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
     expect(dashboard.fixtureCheckpointError).toContain('does not confirm an insufficient-funds decline');
+  });
+
+  it('surfaces only the sanitized provider HTTP status in the checkpoint error and receipt', async () => {
+    const providerError = 'Airwallex rejected the sandbox request (HTTP 403)';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ status: 'authenticated' }) })
+      .mockResolvedValueOnce({ ok: false, status: 502, json: async () => ({
+        status: 'failed',
+        attemptId: 'attempt-403',
+        lifecycleId: 'lifecycle-demo',
+        attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+        providerError,
+      }) });
+    let dashboard = await prepareFixtureCheckpoint(fetchMock);
+
+    await dashboard.runFixtureCheckpoint();
+    dashboard = renderDashboard();
+
+    expect(dashboard.fixtureCheckpointActivity).toMatchObject({ status: 'failed', providerError });
+    expect(dashboard.fixtureCheckpointError).toBe(providerError);
+    expect(fixtureCheckpointReceipt(dashboard.fixtureCheckpointActivity).providerError).toBe(providerError);
+    expect(JSON.stringify(dashboard.fixtureCheckpointActivity)).not.toMatch(/response body|credential|token|card|account|header/i);
   });
 
   it('reconciles an ambiguous checkpoint by replaying the same provider-only request', async () => {

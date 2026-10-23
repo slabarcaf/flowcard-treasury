@@ -55,8 +55,14 @@ export interface FixtureCheckpointActivity {
   attemptId?: string;
   lifecycleId?: string | null;
   attemptedAmount?: { amountCents: number; currency: string } | null;
+  providerError?: string;
   result?: Kit5ProviderTransaction;
   reason?: string;
+}
+
+function isSafeProviderError(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 420 &&
+    /^Airwallex rejected the sandbox request \(HTTP 4\d{2}(?:; phase=(?:authentication|issuing_simulation|provider_request))?(?:; code=[A-Za-z0-9_.-]{1,80})?(?:; source=[A-Za-z0-9_.\[\]/-]{1,120})?(?:; message=[A-Za-z0-9_ .,:()'\/\[\]-]{1,160})?\)$/.test(value);
 }
 
 export function isFixtureCheckpointEventNext(
@@ -133,6 +139,7 @@ function isFixtureCheckpointActivity(value: unknown): value is FixtureCheckpoint
   if (typeof activity.scenarioId !== 'string' || typeof activity.customerId !== 'string' ||
       typeof activity.actionId !== 'string' ||
       !['completed', 'in_progress', 'ambiguous', 'failed', 'rejected', 'unresolved'].includes(String(activity.status))) return false;
+  if (activity.providerError !== undefined && (activity.status !== 'failed' || !isSafeProviderError(activity.providerError))) return false;
   if (activity.result === undefined) return true;
   if (typeof activity.result !== 'object' || activity.result === null) return false;
   const result = activity.result as Record<string, unknown>;
@@ -238,6 +245,7 @@ export function fixtureCheckpointReceipt(activity: FixtureCheckpointActivity | n
     providerResult: activity?.result?.processResult ?? 'Unavailable',
     attemptStatus: activity?.status ?? 'not_started',
     failureReason: activity?.result ? activity.result.failureReason ?? 'None returned' : 'Unavailable',
+    providerError: activity?.providerError ?? 'None returned',
     amountCents: activity?.attemptedAmount?.amountCents ?? null,
     currency: activity?.attemptedAmount?.currency ?? null,
     eventId: activity?.result?.cardTransactionEventId ?? 'Unavailable',
@@ -557,6 +565,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
       attemptId: recovered.attemptId,
       lifecycleId: recovered.lifecycleId,
       attemptedAmount: recovered.attemptedAmount,
+      ...('providerError' in recovered ? { providerError: recovered.providerError } : {}),
       result: recovered.result,
     };
     const recoveredInputs = structuredClone(checkpointScenario.inputs);
@@ -697,6 +706,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
         attemptId: response.attemptId,
         lifecycleId: response.lifecycleId,
         attemptedAmount: response.attemptedAmount,
+        ...('providerError' in response ? { providerError: response.providerError } : {}),
         result: response.result,
       };
       const adoptedRunId = response.scenarioId
@@ -717,7 +727,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
           ? null
           : `Airwallex returned ${response.result.processResult}${response.result.failureReason ? ` / ${response.result.failureReason}` : ''}; this does not confirm an insufficient-funds decline.`);
       } else if (response.status === 'failed') {
-        setFixtureCheckpointError('The provider attempt failed before returning a transaction result. Fixture-only continuation is available.');
+        setFixtureCheckpointError(response.providerError ?? 'The provider attempt failed before returning a transaction result. Fixture-only continuation is available.');
       } else {
         setFixtureCheckpointError(`Airwallex checkpoint status is ${response.status}; reconcile the same attempt before continuing.`);
       }

@@ -1,9 +1,17 @@
-import { ProviderHttpError } from "./errors.js";
+import { providerHttpErrorDetails, ProviderHttpError, type ProviderHttpErrorPhase } from "./errors.js";
 
 /** Typed boundary for server-side Airwallex calls. Tests inject a fake gateway. */
 import { AIRWALLEX_ISSUING_API_VERSION } from "../config.js";
 
 export type ProviderOperationKind = "transfer" | "charge";
+
+async function readProviderHttpErrorDetails(response: Response, phase: ProviderHttpErrorPhase) {
+  try {
+    return providerHttpErrorDetails(await response.clone().json() as unknown, phase);
+  } catch {
+    return { phase };
+  }
+}
 
 export interface IssuingSimulationRequest {
   accountId: string;
@@ -290,7 +298,12 @@ export class HttpAirwallexGateway implements AirwallexGateway, IssuingSimulation
     });
     if (!response.ok) {
       if (response.status === 409 && init.method === "POST") return await response.json() as T;
-      throw new ProviderHttpError(response.status, `Airwallex request failed (${response.status})`);
+      const phase = path === "/api/v1/simulation/issuing/create" ? "issuing_simulation" : "provider_request";
+      throw new ProviderHttpError(
+        response.status,
+        `Airwallex request failed (${response.status})`,
+        await readProviderHttpErrorDetails(response, phase),
+      );
     }
     return await response.json() as T;
   }
@@ -303,7 +316,13 @@ export class HttpAirwallexGateway implements AirwallexGateway, IssuingSimulation
       body: JSON.stringify({}),
       signal: AbortSignal.timeout(15_000),
     });
-    if (!response.ok) throw new ProviderHttpError(response.status, `Airwallex login failed (${response.status})`);
+    if (!response.ok) {
+      throw new ProviderHttpError(
+        response.status,
+        `Airwallex login failed (${response.status})`,
+        await readProviderHttpErrorDetails(response, "authentication"),
+      );
+    }
     const data = await response.json() as { token?: string; expires_at?: string; expires_in?: number };
     if (!data.token) throw new Error("Airwallex login response did not contain a token");
     this.accessToken = data.token;

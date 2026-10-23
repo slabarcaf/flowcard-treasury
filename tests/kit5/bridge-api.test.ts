@@ -132,6 +132,27 @@ describe('Kit 5 ledger API client', () => {
     expect(JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body))).toEqual(input);
   });
 
+  it('accepts only the allowlisted provider HTTP status label for a failed checkpoint', async () => {
+    const response = {
+      status: 'failed',
+      scenarioId: 'kit5-target:00000000-0000-4000-8000-000000000001',
+      customerId: 'acct_bloom001',
+      actionId: 'kit5-target:00000000-0000-4000-8000-000000000001:fixture-checkpoint:txn_bloom_supplier_001',
+      attemptId: 'kit5-target:00000000-0000-4000-8000-000000000001:fixture-checkpoint:txn_bloom_supplier_001',
+      lifecycleId: '33333333-3333-4333-8333-333333333333',
+      attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+      providerError: 'Airwallex rejected the sandbox request (HTTP 403)',
+    } as const;
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 502, json: async () => response });
+    const client = new BridgeApiClient('', fetchImpl as unknown as typeof fetch);
+
+    await expect(client.fixtureCheckpoint({
+      scenarioId: response.scenarioId,
+      customerId: response.customerId,
+      actionId: response.actionId,
+    })).resolves.toEqual(response);
+  });
+
   it('preserves an ambiguous response for same-identity recovery', async () => {
     const checkpoint = {
       status: 'ambiguous',

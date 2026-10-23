@@ -20,6 +20,11 @@ function isProviderTransaction(value: unknown): boolean {
     typeof transaction.cardTransactionLifecycleId === 'string';
 }
 
+function isSafeProviderError(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 420 &&
+    /^Airwallex rejected the sandbox request \(HTTP 4\d{2}(?:; phase=(?:authentication|issuing_simulation|provider_request))?(?:; code=[A-Za-z0-9_.-]{1,80})?(?:; source=[A-Za-z0-9_.\[\]/-]{1,120})?(?:; message=[A-Za-z0-9_ .,:()'\/\[\]-]{1,160})?\)$/.test(value);
+}
+
 function isFixtureCheckpointResponse(value: unknown): value is Kit5FixtureCheckpointResponse {
   if (typeof value !== 'object' || value === null) return false;
   const result = value as Record<string, unknown>;
@@ -30,6 +35,7 @@ function isFixtureCheckpointResponse(value: unknown): value is Kit5FixtureCheckp
       (result.actionId !== undefined && typeof result.actionId !== 'string') ||
       typeof result.attemptId !== 'string' ||
       (typeof result.lifecycleId !== 'string' && result.lifecycleId !== null)) return false;
+  if (result.providerError !== undefined && (result.status !== 'failed' || !isSafeProviderError(result.providerError))) return false;
   const amount = result.attemptedAmount;
   if (amount !== null && (typeof amount !== 'object' || amount === null ||
       !Number.isSafeInteger((amount as Record<string, unknown>).amountCents) ||

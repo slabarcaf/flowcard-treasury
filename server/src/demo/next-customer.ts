@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import type { IssuingSimulationGateway, IssuingSimulationResponse } from "../airwallex/client.js";
 import { ProviderHttpError } from "../airwallex/client.js";
+import { formatCheckpointProviderError } from "../airwallex/errors.js";
 import { AmbiguousIssuingResponseError, normalizeIssuingResponse, simulateIssuingTransaction, type IssuingSimulationInput } from "../airwallex/issuing.js";
 import {
   acceptKit5CardAttempt,
@@ -183,13 +183,13 @@ export async function processNextCustomerAction(
   }
 
   let result: IssuingSimulationResponse;
-  const checkpointLifecycleId = options.requireCheckpointIdentity ? randomUUID() : undefined;
   let providerCreateInvoked = false;
   try {
+    // The Sandbox create API treats a supplied lifecycle ID as an existing transaction reference.
+    // Let Airwallex create the initial lifecycle, then persist its returned ID before completing this action.
     result = await simulateIssuingTransaction({
       ...customer,
       scenarioId: input.scenarioId,
-      ...(checkpointLifecycleId ? { lifecycleId: checkpointLifecycleId } : {}),
     }, {
       gateway: options.requireCheckpointIdentity
         ? observingCreate(gateway, () => { providerCreateInvoked = true; })
@@ -200,7 +200,13 @@ export async function processNextCustomerAction(
     });
   } catch (error) {
     if (error instanceof ProviderHttpError && error.status < 500) {
-      await finishKit5Attempt(pool, { ...input, status: "failed", error: error.name });
+      await finishKit5Attempt(pool, {
+        ...input,
+        status: "failed",
+        error: options.requireCheckpointIdentity && Number.isInteger(error.status) && error.status >= 400 && error.status < 500
+          ? formatCheckpointProviderError(error)
+          : error.name,
+      });
       if (options.requireCheckpointIdentity) {
         return { status: "failed", attempt: await requiredAttempt(pool, input) };
       }
@@ -500,15 +506,23 @@ function matchesCheckpointResult(
   scopedAccountId: string,
   expectedLifecycleId: string | null,
 ): boolean {
-  return facts != null && expectedLifecycleId !== null && facts.accountId === scopedAccountId &&
-    (result.accountId === undefined || result.accountId === scopedAccountId) && result.cardId === facts.cardId &&
-    result.transactionAmountCents === facts.amountCents &&
-    result.transactionCurrency?.toUpperCase() === facts.currency.toUpperCase() &&
-    result.merchantName === facts.merchant &&
-    result.merchantCategoryCode === facts.merchantCategoryCode &&
-    result.transactionType === facts.transactionType &&
-    result.transactionCategory === facts.transactionCategory &&
-    result.cardTransactionLifecycleId === expectedLifecycleId;
+  if (facts === null || expectedLifecycleId === null || facts.accountId !== scopedAccountId ||
+      result.cardTransactionLifecycleId !== expectedLifecycleId) return false;
+
+  // The simulation create response omits some documented-optional transaction fields.
+  // Validate every field it does return, while keeping the provider lifecycle ID mandatory.
+  return optionalFactMatches(result.accountId, scopedAccountId) &&
+    optionalFactMatches(result.cardId, facts.cardId) &&
+    optionalFactMatches(result.transactionAmountCents, facts.amountCents) &&
+    optionalFactMatches(result.transactionCurrency?.toUpperCase(), facts.currency.toUpperCase()) &&
+    optionalFactMatches(result.merchantName, facts.merchant) &&
+    optionalFactMatches(result.merchantCategoryCode, facts.merchantCategoryCode) &&
+    optionalFactMatches(result.transactionType, facts.transactionType) &&
+    optionalFactMatches(result.transactionCategory, facts.transactionCategory);
+}
+
+function optionalFactMatches<T>(actual: T | undefined, expected: T): boolean {
+  return actual === undefined || actual === expected;
 }
 
 async function maybeFundAndRetry(

@@ -254,6 +254,7 @@ export type Kit5FixtureCheckpointResponse =
     attemptId: string;
     lifecycleId: string | null;
     attemptedAmount: { amountCents: number; currency: string } | null;
+    providerError?: string;
     result?: Kit5ProviderTransaction;
   }
   | { status: 'rejected'; reason: string };

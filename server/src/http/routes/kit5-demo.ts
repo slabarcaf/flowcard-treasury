@@ -497,8 +497,13 @@ function sendCheckpointAttempt(
     attemptId: attempt.actionId,
     lifecycleId: attempt.lifecycleId,
     attemptedAmount: customer ? { amountCents: customer.amountCents, currency: customer.currency } : null,
+    ...(status === "failed" && isSafeProviderHttpErrorLabel(attempt.error) ? { providerError: attempt.error } : {}),
     ...(status === "completed" && result ? { result } : {}),
   });
+}
+
+function isSafeProviderHttpErrorLabel(value: string | null): value is string {
+  return value !== null && value.length <= 420 && /^Airwallex rejected the sandbox request \(HTTP 4\d{2}(?:; phase=(?:authentication|issuing_simulation|provider_request))?(?:; code=[A-Za-z0-9_.-]{1,80})?(?:; source=[A-Za-z0-9_.\[\]/-]{1,120})?(?:; message=[A-Za-z0-9_ .,:()'\/\[\]-]{1,160})?\)$/.test(value);
 }
 
 function validateFixtureCheckpointLifecycleInput(
