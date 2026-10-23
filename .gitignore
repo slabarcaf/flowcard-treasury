@@ -24,3 +24,4 @@ worktrees/
 *.sln
 *.sw?
 .vercel
+xcrun_db
