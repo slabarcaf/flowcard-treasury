@@ -216,6 +216,30 @@ export interface Kit5NextCustomerRequest {
   actionId: string;
 }
 
+/** Browser input for the provider-only Bloom fixture checkpoint. */
+export interface Kit5FixtureCheckpointRequest {
+  scenarioId: string;
+  customerId: string;
+  actionId: string;
+}
+
+export type Kit5FixtureCheckpointResponse =
+  | {
+    status: 'completed';
+    attemptId: string;
+    lifecycleId: string | null;
+    attemptedAmount: { amountCents: number; currency: string } | null;
+    result: Kit5ProviderTransaction;
+  }
+  | {
+    status: 'in_progress' | 'ambiguous' | 'failed';
+    attemptId: string;
+    lifecycleId: string | null;
+    attemptedAmount: { amountCents: number; currency: string } | null;
+    result?: Kit5ProviderTransaction;
+  }
+  | { status: 'rejected'; reason: string };
+
 export interface AirwallexClient {
   simulateCardSpend(params: {
     accountId: string;

@@ -33,10 +33,48 @@ function useDashboardForTest() {
   return useKit5Dashboard('http://localhost:8000');
 }
 
+async function prepareFixtureCheckpoint(fetchMock: ReturnType<typeof vi.fn>) {
+  vi.stubGlobal('fetch', fetchMock);
+  let dashboard = useDashboardForTest();
+  await dashboard.authenticateOperator('runtime-only-token');
+  dashboard = useDashboardForTest();
+  dashboard.selectScenario('kit5-target');
+  dashboard = useDashboardForTest();
+  dashboard.selectMode('fixture-checkpoint');
+  dashboard = useDashboardForTest();
+  dashboard.scan();
+  dashboard = useDashboardForTest();
+  dashboard.advance();
+  return useDashboardForTest();
+}
+
+function completedCheckpoint(result: {
+  processResult: 'APPROVED' | 'DECLINED';
+  failureReason: string | null;
+}) {
+  return {
+    status: 'completed',
+    attemptId: 'attempt-demo',
+    lifecycleId: 'lifecycle-demo',
+    attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+    result: {
+      ...result,
+      cardTransactionEventId: 'event-demo',
+      cardTransactionId: 'transaction-demo',
+      cardTransactionLifecycleId: 'lifecycle-demo',
+    },
+  };
+}
+
 describe('Kit 5 live dashboard recovery state', () => {
   beforeEach(() => {
     runtime.values = [];
     runtime.refs = [];
+    try {
+      window.sessionStorage.clear();
+    } catch {
+      // Browser storage is optional for the live dashboard.
+    }
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'authenticated' }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({
@@ -207,5 +245,123 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(dashboard.state.cursor).toBe(0);
     expect(dashboard.state.queue).toHaveLength(0);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('requires the exact provider insufficient-funds decline and reuses one action identity per run', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => completedCheckpoint({ processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS' }) });
+    let dashboard = await prepareFixtureCheckpoint(fetchMock);
+
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+    await dashboard.runFixtureCheckpoint();
+    dashboard = useDashboardForTest();
+    expect(dashboard.fixtureCheckpointProviderConfirmed).toBe(true);
+    expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+
+    const postCalls = fetchMock.mock.calls.filter(([url]) => url === 'http://localhost:8000/api/kit5/fixture-checkpoint');
+    expect(postCalls).toHaveLength(1);
+    const input = JSON.parse(String(postCalls[0]![1]?.body)) as Record<string, string>;
+    expect(Object.keys(input).sort()).toEqual(['actionId', 'customerId', 'scenarioId']);
+    expect(input.customerId).toBe('acct_bloom001');
+    expect(input.scenarioId).toMatch(/^kit5-target:[0-9a-f-]{36}$/i);
+    expect(input.actionId).toBe(`${input.scenarioId}:txn_bloom_supplier_001`);
+
+    dashboard.reset();
+    dashboard = useDashboardForTest();
+    expect(dashboard.fixtureCheckpointRunId).toBe(input.scenarioId.split(':')[1]);
+    await dashboard.runFixtureCheckpoint();
+    expect(fetchMock.mock.calls.filter(([url]) => url === 'http://localhost:8000/api/kit5/fixture-checkpoint')).toHaveLength(1);
+
+    dashboard.confirmFixtureCheckpoint();
+    dashboard = useDashboardForTest();
+    expect(dashboard.fixtureCheckpointResolution).toBe('confirmed');
+  });
+
+  it.each([
+    ['approved', { processResult: 'APPROVED', failureReason: null }],
+    ['declined for a different reason', { processResult: 'DECLINED', failureReason: 'DO_NOT_HONOR' }],
+  ] as const)('does not confirm the fixture checkpoint for an %s provider result', async (_label, result) => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => completedCheckpoint(result) });
+    let dashboard = await prepareFixtureCheckpoint(fetchMock);
+    await dashboard.runFixtureCheckpoint();
+    dashboard = useDashboardForTest();
+
+    expect(dashboard.fixtureCheckpointProviderConfirmed).toBe(false);
+    expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+    dashboard.confirmFixtureCheckpoint();
+    dashboard = useDashboardForTest();
+    expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
+    expect(dashboard.fixtureCheckpointError).toContain('does not confirm an insufficient-funds decline');
+  });
+
+  it('reconciles an ambiguous checkpoint by replaying the same provider-only request', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
+      .mockResolvedValueOnce({ ok: true, status: 202, json: async () => ({
+        status: 'ambiguous',
+        attemptId: 'attempt-demo',
+        lifecycleId: 'lifecycle-demo',
+        attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+      }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => completedCheckpoint({ processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS' }) });
+    let dashboard = await prepareFixtureCheckpoint(fetchMock);
+    await dashboard.runFixtureCheckpoint();
+    dashboard = useDashboardForTest();
+
+    expect(dashboard.fixtureCheckpointUnresolved).toBe(true);
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+    dashboard.continueFixtureOnly();
+    dashboard = useDashboardForTest();
+    expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
+
+    await dashboard.reconcileFixtureCheckpoint();
+    dashboard = useDashboardForTest();
+    expect(dashboard.fixtureCheckpointUnresolved).toBe(false);
+    expect(dashboard.fixtureCheckpointProviderConfirmed).toBe(true);
+    expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
+
+    const checkpointCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/kit5/fixture-checkpoint'));
+    expect(checkpointCalls).toHaveLength(2);
+    expect(checkpointCalls.map((call) => call[0])).toEqual([
+      'http://localhost:8000/api/kit5/fixture-checkpoint',
+      'http://localhost:8000/api/kit5/fixture-checkpoint',
+    ]);
+    expect(checkpointCalls.map((call) => call[1]?.body)).toEqual([checkpointCalls[0]![1]?.body, checkpointCalls[0]![1]?.body]);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/kit5/attempt-status'))).toBe(false);
+  });
+
+  it('deduplicates concurrent checkpoint submissions and gives an explicit new run a new identity', async () => {
+    let finishCreate: ((value: { ok: boolean; status: number; json: () => Promise<unknown> }) => void) | undefined;
+    const pendingResponse = new Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>((resolve) => {
+      finishCreate = resolve;
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
+      .mockReturnValueOnce(pendingResponse)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => completedCheckpoint({ processResult: 'APPROVED', failureReason: null }) });
+    let dashboard = await prepareFixtureCheckpoint(fetchMock);
+    const firstRunId = dashboard.fixtureCheckpointRunId;
+    const firstSubmit = dashboard.runFixtureCheckpoint();
+    await dashboard.runFixtureCheckpoint();
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/kit5/fixture-checkpoint'))).toHaveLength(1);
+    finishCreate?.({ ok: true, status: 200, json: async () => completedCheckpoint({ processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS' }) });
+    await firstSubmit;
+
+    dashboard = useDashboardForTest();
+    dashboard.startNewFixtureCheckpointRun();
+    dashboard = useDashboardForTest();
+    expect(dashboard.fixtureCheckpointRunId).not.toBe(firstRunId);
+    await dashboard.runFixtureCheckpoint();
+    const checkpointCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/kit5/fixture-checkpoint'));
+    expect(checkpointCalls).toHaveLength(2);
+    const firstRequest = JSON.parse(String(checkpointCalls[0]![1]?.body)) as { scenarioId: string; actionId: string };
+    const nextRequest = JSON.parse(String(checkpointCalls[1]![1]?.body)) as { scenarioId: string; actionId: string };
+    expect(nextRequest.scenarioId).not.toBe(firstRequest.scenarioId);
+    expect(nextRequest.actionId).not.toBe(firstRequest.actionId);
   });
 });

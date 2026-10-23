@@ -24,14 +24,19 @@ import {
   useKit5Dashboard,
 } from '../../src/kit5/useKit5Dashboard.js';
 
-function renderDashboard() {
+function renderDashboard(apiBaseUrl = '') {
   runtime.index = 0;
-  return useKit5Dashboard();
+  return useKit5Dashboard(apiBaseUrl);
 }
 
 describe('Kit 5 fixture provider checkpoint', () => {
   beforeEach(() => {
     runtime.values = [];
+    try {
+      window.sessionStorage.clear();
+    } catch {
+      // The hook supports unavailable browser storage.
+    }
   });
 
   it('marks only Bloom’s Kit 5 target event as the Airwallex checkpoint', () => {
@@ -68,33 +73,56 @@ describe('Kit 5 fixture provider checkpoint', () => {
     expect(isFixtureCheckpointEventNext(original, initialKit5State(original.inputs))).toBe(false);
   });
 
-  it('blocks the marked event until confirmation, then processes it once in the existing fixture queue', () => {
-    let dashboard = renderDashboard();
+  it('blocks the marked event until an exact provider decline is confirmed, then processes it once', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({
+        status: 'completed',
+        attemptId: 'kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001',
+        lifecycleId: 'lifecycle-demo',
+        attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+        result: {
+          processResult: 'DECLINED',
+          failureReason: 'INSUFFICIENT_FUNDS',
+          cardTransactionEventId: 'event-demo',
+          cardTransactionId: 'transaction-demo',
+          cardTransactionLifecycleId: 'lifecycle-demo',
+        },
+      })});
+    vi.stubGlobal('fetch', fetchMock);
+    let dashboard = renderDashboard('http://localhost:8000');
+    await dashboard.authenticateOperator('runtime-only-token');
+    dashboard = renderDashboard('http://localhost:8000');
     dashboard.selectScenario('kit5-target');
-    dashboard = renderDashboard();
+    dashboard = renderDashboard('http://localhost:8000');
     dashboard.selectMode('fixture-checkpoint');
-    dashboard = renderDashboard();
+    dashboard = renderDashboard('http://localhost:8000');
     dashboard.scan();
-    dashboard = renderDashboard();
+    dashboard = renderDashboard('http://localhost:8000');
 
     expect(dashboard.fixtureCheckpointPaused).toBe(true);
     dashboard.advance();
-    dashboard = renderDashboard();
+    dashboard = renderDashboard('http://localhost:8000');
     expect(dashboard.state.cursor).toBe(0);
     expect(dashboard.state.queue).toHaveLength(0);
 
+    await dashboard.runFixtureCheckpoint();
+    dashboard = renderDashboard('http://localhost:8000');
+    expect(dashboard.fixtureCheckpointProviderConfirmed).toBe(true);
+    expect(dashboard.fixtureCheckpointResolution).toBe('awaiting');
     dashboard.confirmFixtureCheckpoint();
-    dashboard = renderDashboard();
+    dashboard = renderDashboard('http://localhost:8000');
     expect(dashboard.fixtureCheckpointResolution).toBe('confirmed');
-    expect(dashboard.fixtureCheckpointPaused).toBe(false);
+
     dashboard.advance();
-    dashboard = renderDashboard();
+    dashboard = renderDashboard('http://localhost:8000');
     expect(dashboard.state.cursor).toBe(1);
     expect(dashboard.state.queue.filter((row) => row.id === 'txn_bloom_supplier_001')).toHaveLength(1);
 
     dashboard.advance();
-    dashboard = renderDashboard();
+    dashboard = renderDashboard('http://localhost:8000');
     expect(dashboard.state.queue.filter((row) => row.id === 'txn_bloom_supplier_001')).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('lets the presenter continue fixture-only after a checkpoint result is not confirmed', () => {

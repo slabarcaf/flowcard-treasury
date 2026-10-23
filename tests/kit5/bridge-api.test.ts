@@ -53,4 +53,88 @@ describe('Kit 5 ledger API client', () => {
     const client = new BridgeApiClient('', vi.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch);
     await expect(client.getLedgerProjection()).rejects.toThrow('Bridge ledger request failed (503)');
   });
+
+  it('sends only the run-scoped checkpoint identity with the operator session cookie', async () => {
+    const checkpoint = {
+      status: 'completed',
+      attemptId: 'kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001',
+      lifecycleId: 'lifecycle-demo',
+      attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+      result: {
+        processResult: 'DECLINED',
+        failureReason: 'INSUFFICIENT_FUNDS',
+        cardTransactionEventId: 'event-demo',
+        cardTransactionId: 'transaction-demo',
+        cardTransactionLifecycleId: 'lifecycle-demo',
+      },
+    } as const;
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => checkpoint });
+    const client = new BridgeApiClient('http://localhost:8000', fetchImpl as unknown as typeof fetch);
+    const input = {
+      scenarioId: 'kit5-target:00000000-0000-4000-8000-000000000001',
+      customerId: 'acct_bloom001',
+      actionId: 'kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001',
+    };
+
+    await expect(client.fixtureCheckpoint(input)).resolves.toEqual(checkpoint);
+    expect(fetchImpl).toHaveBeenCalledWith('http://localhost:8000/api/kit5/fixture-checkpoint', {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    });
+    const submittedBody = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body)) as Record<string, unknown>;
+    expect(Object.keys(submittedBody).sort()).toEqual(['actionId', 'customerId', 'scenarioId']);
+  });
+
+  it('preserves an ambiguous response for same-identity recovery', async () => {
+    const checkpoint = {
+      status: 'ambiguous',
+      attemptId: 'action-demo',
+      lifecycleId: null,
+      attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+    } as const;
+    const client = new BridgeApiClient('', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => checkpoint,
+    }) as unknown as typeof fetch);
+
+    await expect(client.fixtureCheckpoint({ scenarioId: 'kit5-target:run', customerId: 'acct_bloom001', actionId: 'action-demo' }))
+      .resolves.toEqual(checkpoint);
+  });
+
+  it('returns a persisted failed attempt from the route’s non-success status', async () => {
+    const checkpoint = {
+      status: 'failed',
+      attemptId: 'action-demo',
+      lifecycleId: null,
+      attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+    } as const;
+    const client = new BridgeApiClient('', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => checkpoint,
+    }) as unknown as typeof fetch);
+
+    await expect(client.fixtureCheckpoint({ scenarioId: 'kit5-target:run', customerId: 'acct_bloom001', actionId: 'action-demo' }))
+      .resolves.toEqual(checkpoint);
+  });
+
+  it('rejects malformed checkpoint responses instead of treating them as provider confirmation', async () => {
+    const client = new BridgeApiClient('', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: 'completed',
+        attemptId: 'action-demo',
+        lifecycleId: null,
+        attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+        result: { processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS' },
+      }),
+    }) as unknown as typeof fetch);
+
+    await expect(client.fixtureCheckpoint({ scenarioId: 'kit5-target:run', customerId: 'acct_bloom001', actionId: 'action-demo' }))
+      .rejects.toThrow('Kit 5 fixture checkpoint failed (200)');
+  });
 });

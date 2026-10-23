@@ -212,16 +212,16 @@ create another provider attempt; a new provider run gets a new run UUID.
 - Modify: `tests/kit5/bridge-api.test.ts`
 - Modify: `tests/kit5/dashboard-live-state.test.ts`
 
-- [ ] Add typed request and response shapes for the provider-only route.
-- [ ] Add the browser API method without exposing provider credentials or
+- [x] Add typed request and response shapes for the provider-only route.
+- [x] Add the browser API method without exposing provider credentials or
       account/card identifiers.
-- [ ] Persist a run UUID and checkpoint attempt identity so retrying within a
+- [x] Persist a run UUID and checkpoint attempt identity so retrying within a
       run reuses the same action and a restart creates a new run.
-- [ ] Reconcile an unresolved attempt through the existing status/lifecycle
+- [x] Reconcile an unresolved attempt through the existing status/lifecycle
       path before allowing a new provider create.
-- [ ] Test exact insufficient-funds gating, unexpected responses, request
+- [x] Test exact insufficient-funds gating, unexpected responses, request
       deduplication, and ambiguous recovery with mocked fetch responses.
-- [ ] Run the focused browser tests before starting Task 4.
+- [x] Run the focused browser tests before starting Task 4.
 
 ### Task 4: Present the hybrid flow and provenance in Kit 5
 

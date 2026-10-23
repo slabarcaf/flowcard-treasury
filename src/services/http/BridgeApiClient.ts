@@ -1,4 +1,4 @@
-import type { Kit5AttemptStatusResponse, Kit5NextCustomerRequest, Kit5NextCustomerResponse, Kit5RepaymentDepositResponse, LedgerProjectionResponse } from '../types.js';
+import type { Kit5AttemptStatusResponse, Kit5FixtureCheckpointRequest, Kit5FixtureCheckpointResponse, Kit5NextCustomerRequest, Kit5NextCustomerResponse, Kit5RepaymentDepositResponse, LedgerProjectionResponse } from '../types.js';
 
 export class BridgeApiError extends Error {
   readonly status: number;
@@ -8,6 +8,31 @@ export class BridgeApiError extends Error {
     this.name = 'BridgeApiError';
     this.status = status;
   }
+}
+
+function isProviderTransaction(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const transaction = value as Record<string, unknown>;
+  return (transaction.processResult === 'APPROVED' || transaction.processResult === 'DECLINED') &&
+    (typeof transaction.failureReason === 'string' || transaction.failureReason === null) &&
+    typeof transaction.cardTransactionEventId === 'string' &&
+    typeof transaction.cardTransactionId === 'string' &&
+    typeof transaction.cardTransactionLifecycleId === 'string';
+}
+
+function isFixtureCheckpointResponse(value: unknown): value is Kit5FixtureCheckpointResponse {
+  if (typeof value !== 'object' || value === null) return false;
+  const result = value as Record<string, unknown>;
+  if (result.status === 'rejected') return typeof result.reason === 'string';
+  if (!['completed', 'in_progress', 'ambiguous', 'failed'].includes(String(result.status)) ||
+      typeof result.attemptId !== 'string' ||
+      (typeof result.lifecycleId !== 'string' && result.lifecycleId !== null)) return false;
+  const amount = result.attemptedAmount;
+  if (amount !== null && (typeof amount !== 'object' || amount === null ||
+      !Number.isSafeInteger((amount as Record<string, unknown>).amountCents) ||
+      typeof (amount as Record<string, unknown>).currency !== 'string')) return false;
+  if (result.status === 'completed') return isProviderTransaction(result.result);
+  return result.result === undefined || isProviderTransaction(result.result);
 }
 
 /** Browser-safe, read-only client for the server-owned bridge ledger. */
@@ -50,6 +75,36 @@ export class BridgeApiClient {
       throw new Error(message);
     }
     return body as Kit5NextCustomerResponse;
+  }
+
+  /** Create or reconcile the allowlisted provider-only checkpoint using stable run-scoped identity. */
+  async fixtureCheckpoint(input: Kit5FixtureCheckpointRequest): Promise<Kit5FixtureCheckpointResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/kit5/fixture-checkpoint`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    });
+    let body: unknown;
+    try {
+      body = await response.json() as unknown;
+    } catch {
+      throw new BridgeApiError(`Kit 5 fixture checkpoint failed (${response.status})`, response.status);
+    }
+    if (!isFixtureCheckpointResponse(body)) {
+      const message = typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string'
+        ? body.error
+        : `Kit 5 fixture checkpoint failed (${response.status})`;
+      throw new BridgeApiError(message, response.status);
+    }
+    // The provider-only route uses 502 for a persisted terminal failure and
+    // 409 for a definitive rejection. Preserve both response bodies so the
+    // dashboard can show the saved attempt and distinguish it from a network
+    // failure that still needs reconciliation.
+    if (!response.ok && body.status !== 'failed' && body.status !== 'rejected') {
+      throw new BridgeApiError(`Kit 5 fixture checkpoint failed (${response.status})`, response.status);
+    }
+    return body;
   }
 
   async createOperatorSession(token: string): Promise<{ approvalAvailable: boolean }> {
