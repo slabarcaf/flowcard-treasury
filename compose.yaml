@@ -5,6 +5,8 @@ services:
       POSTGRES_DB: flowcard_treasury
       POSTGRES_USER: flowcard
       POSTGRES_PASSWORD: demo-local-only
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - ledger-data:/var/lib/postgresql/data
       - ./server/src/db/migrations/001_bridge_ledger.sql:/docker-entrypoint-initdb.d/001_bridge_ledger.sql:ro

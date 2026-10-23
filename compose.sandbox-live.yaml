@@ -15,5 +15,5 @@ services:
       AI_EVIDENCE_REVIEWER_ID: "${AI_EVIDENCE_REVIEWER_ID:?AI_EVIDENCE_REVIEWER_ID is required}"
       AI_EVIDENCE_REVIEW_ENABLED: "${AI_EVIDENCE_REVIEW_ENABLED:-true}"
       SALESFORCE_SNAPSHOT_MODE: demo
-    ports:
+    ports: !override
       - "8000:3000"
