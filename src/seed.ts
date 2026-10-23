@@ -1,4 +1,5 @@
-import type { FacilityConfig, CustomerProfile, Signals } from './policy/types.js';
+import type { DemoPolicyReadiness, FacilityConfig, CustomerProfile, Signals } from './policy/types.js';
+import { getDemoSalesforceSnapshot } from '../server/src/salesforce/fixture-source.js';
 
 // ---------------------------------------------------------------------------
 // Facility config
@@ -50,6 +51,7 @@ export const CUSTOMERS: Record<string, CustomerProfile> = {
     monthlyInflow: 40_000,
     signals: bloomSignals,
     historyDays: 730, // 2 years
+    fullyRepaidOnTimeBridges: 0,
     noGo: {
       excludedIndustry: false,
       fraudFlag: false,
@@ -64,6 +66,7 @@ export const CUSTOMERS: Record<string, CustomerProfile> = {
     monthlyInflow: 20_000,
     signals: atlasSignals,
     historyDays: 365,
+    fullyRepaidOnTimeBridges: 3,
     noGo: {
       excludedIndustry: false,
       fraudFlag: false,
@@ -78,6 +81,7 @@ export const CUSTOMERS: Record<string, CustomerProfile> = {
     monthlyInflow: 35_000,
     signals: novaSignals,
     historyDays: 180,
+    fullyRepaidOnTimeBridges: 3,
     noGo: {
       excludedIndustry: false,
       fraudFlag: false,
@@ -97,6 +101,7 @@ export const CUSTOMERS: Record<string, CustomerProfile> = {
       trackRecord: 'yellow',
     },
     historyDays: 41,
+    fullyRepaidOnTimeBridges: 0,
     noGo: {
       excludedIndustry: false,
       fraudFlag: false,
@@ -105,6 +110,33 @@ export const CUSTOMERS: Record<string, CustomerProfile> = {
       monoClient: false,
     },
   },
+};
+
+/** Resolve deterministic gates from the same static Salesforce and evidence fixture cases used by mock clients. */
+export function demoPolicyReadiness(customerId: string): DemoPolicyReadiness {
+  const snapshot = getDemoSalesforceSnapshot(customerId);
+  if (!snapshot) return { snapshot: 'missing', evidence: 'no_signal', creditReview: 'unknown', priorDefault: 'unknown' };
+  const creditReview = snapshot.account.creditReviewStatus.value;
+  const priorDefault = snapshot.account.priorDefaultStatus.value;
+  const hasEvidenceNote = snapshot.callActivities.some((activity) => activity.note.value !== null);
+  const evidenceFixture = hasEvidenceNote ? AI_EVIDENCE_DEMO_FIXTURES.multi_signal : AI_EVIDENCE_DEMO_FIXTURES.no_signal;
+  const evidence: DemoPolicyReadiness['evidence'] = evidenceFixture.status === 'success'
+    ? ('signals' in evidenceFixture && evidenceFixture.signals.length > 0 ? 'review_required' : 'ready')
+    : evidenceFixture.status;
+  return {
+    snapshot: 'fresh',
+    evidence,
+    creditReview: creditReview === 'approved' || creditReview === 'watch' || creditReview === 'hold' || creditReview === 'review_required' ? creditReview : 'unknown',
+    priorDefault: priorDefault === 'yes' || priorDefault === 'no' ? priorDefault : 'unknown',
+  };
+}
+
+/** Approved caps copied from the synthetic Salesforce account fixtures. */
+export const DEMO_APPROVED_BRIDGE_CAPS: Readonly<Record<string, number>> = {
+  acct_bloom001: 10_000,
+  acct_atlas001: 8_000,
+  acct_nova001: 7_000,
+  acct_pixel001: 0,
 };
 
 /** Bloom's signals after the Salesforce CRM note is discovered. */
@@ -126,7 +158,6 @@ export interface DeclinedTransaction {
   merchantCategory: string;
 }
 
-// Synthetic fixture events; sandbox-live mode uses the provider's returned reason.
 export const DECLINED_TRANSACTIONS: DeclinedTransaction[] = [
   {
     customerId: 'acct_bloom001',
@@ -210,7 +241,7 @@ export const AI_EXTRACTED_SIGNALS = [
   },
 ];
 
-// Deterministic, synthetic-only scenarios for the demo evidence panel.
+// Deterministic synthetic-only scenarios for the demo evidence panel.
 export const AI_EVIDENCE_DEMO_FIXTURES = {
   no_signal: {
     status: 'no_signal', message: 'No qualifying signal found; deterministic profile data remains available.', signals: [], unmapped: [],
@@ -269,6 +300,9 @@ export const AI_PROPOSED_PLAN = {
 // ---------------------------------------------------------------------------
 export const NOVA_APPROVAL_TERMS = {
   amount: 6_000,
+  creditLine: 7_000,
+  door: 'human' as const,
+  reviewRequirement: 'Credit review status is watch; approval remains demo-only.',
   currency: 'USD',
   to: 'Nova Agency (acct_nova001)',
   covers: 'Declined card transaction txn_nova_contractor_001',

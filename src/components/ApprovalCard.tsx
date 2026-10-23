@@ -36,6 +36,15 @@ export function ApprovalCard({ visible, terms, awaitingApproval, onApprove }: Pr
           {fmt(t.amount)} {t.currency}
         </span>
 
+        <span className="text-gray-500">Credit line</span>
+        <span className="font-mono text-gray-800">{fmt(t.creditLine)}</span>
+
+        <span className="text-gray-500">Door</span>
+        <span className="text-gray-800">{t.door === 'human' ? 'Human review' : t.door}</span>
+
+        <span className="text-gray-500">Review requirement</span>
+        <span className="text-gray-800">{t.reviewRequirement}</span>
+
         <span className="text-gray-500">To</span>
         <span className="text-gray-800">{t.to}</span>
 
@@ -60,13 +69,13 @@ export function ApprovalCard({ visible, terms, awaitingApproval, onApprove }: Pr
           onClick={onApprove}
           className="w-full bg-[#e04e2f] hover:bg-[#c9442a] active:bg-[#b33d25] text-white text-sm font-medium py-2.5 rounded-lg transition-colors cursor-pointer"
         >
-          Approve Bridge
+          Approve in demo
         </button>
       )}
 
       {!awaitingApproval && (
         <div className="text-center text-emerald-600 text-sm font-medium py-2">
-          Approved
+          Approved in demo simulation
         </div>
       )}
     </div>

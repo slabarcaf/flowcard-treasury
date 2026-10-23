@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "mappingVersion": "salesforce-proposed-v1",
+  "mappingVerified": false,
+  "account": {
+    "recordId": "demo-sf-bounded001",
+    "sourceUpdatedAt": "2026-10-20T16:40:00Z",
+    "customerStatus": { "value": "active", "source": { "recordId": "demo-sf-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "kybStatus": { "value": "verified", "source": { "recordId": "demo-sf-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "creditReviewStatus": { "value": "approved", "source": { "recordId": "demo-sf-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "approvedBridgeCap": { "value": 1000, "source": { "recordId": "demo-sf-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "priorDefaultStatus": { "value": "no", "source": { "recordId": "demo-sf-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "loyaltyTier": { "value": "standard", "source": { "recordId": "demo-sf-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } }
+  },
+  "contract": {
+    "recordId": "demo-contract-bounded001",
+    "sourceUpdatedAt": "2026-10-20T16:40:00Z",
+    "status": { "value": "active", "source": { "recordId": "demo-contract-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+    "endDate": { "value": null, "source": { "recordId": "demo-contract-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } }
+  },
+  "cases": [
+    {
+      "recordId": "demo-case-bounded001",
+      "sourceUpdatedAt": "2026-10-20T16:40:00Z",
+      "status": { "value": "working", "source": { "recordId": "demo-case-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+      "priority": { "value": "medium", "source": { "recordId": "demo-case-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+      "reason": { "value": null, "source": { "recordId": "demo-case-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+      "createdAt": { "value": "2026-10-20T16:40:00Z", "source": { "recordId": "demo-case-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+      "closedAt": { "value": null, "source": { "recordId": "demo-case-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+      "isEscalated": { "value": false, "source": { "recordId": "demo-case-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+      "riskCategory": { "value": "business_continuity", "source": { "recordId": "demo-case-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+      "description": { "value": "Bounded synthetic case detail.", "source": { "recordId": "demo-case-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } }
+    }
+  ],
+  "callActivities": [
+    {
+      "recordId": "demo-call-bounded001",
+      "sourceUpdatedAt": "2026-10-20T16:40:00Z",
+      "activityAt": { "value": "2026-10-20T15:40:00Z", "source": { "recordId": "demo-call-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+      "outcome": { "value": "voicemail", "source": { "recordId": "demo-call-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } },
+      "note": { "value": "Bounded synthetic call detail.", "source": { "recordId": "demo-call-bounded001", "sourceUpdatedAt": "2026-10-20T16:40:00Z" } }
+    }
+  ]
+}

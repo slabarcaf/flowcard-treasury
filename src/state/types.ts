@@ -1,4 +1,4 @@
-import type { Band, Tier, Door } from '../policy/types.js';
+import type { Band, Tier, Door, PolicyReasonCode } from '../policy/types.js';
 
 // ---------------------------------------------------------------------------
 // Dashboard phase
@@ -33,6 +33,8 @@ export interface QueueRow {
   status: string;
   rationale: string;
   eligible: boolean;
+  reasonCodes?: PolicyReasonCode[];
+  reasonTexts?: string[];
   ineligibleReason?: string;
   // Kit 5 only: bridge dates
   fundedOn?: string;
@@ -73,6 +75,9 @@ export interface CollectionRow {
 // ---------------------------------------------------------------------------
 export interface ApprovalTerms {
   amount: number;
+  creditLine: number;
+  door: Door;
+  reviewRequirement: string;
   currency: string;
   to: string;
   covers: string;
@@ -92,6 +97,9 @@ export interface CustomerDetail {
   tierChange?: { from: Tier; to: Tier };
   door: Door;
   allocation: number;
+  creditLine?: number;
+  reasonCodes?: PolicyReasonCode[];
+  reasonTexts?: string[];
   status: string;
   rationale: string;
   policyChecks: PolicyCheck[];

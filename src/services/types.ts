@@ -65,6 +65,41 @@ export interface CrmNote {
   author: string;
   timestamp: string;
   text: string;
+  sourceRecordId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Salesforce snapshot read API
+// ---------------------------------------------------------------------------
+
+import type { SalesforceCustomerSnapshot } from '../../server/src/salesforce/types.js';
+export type { DemoPolicyReadiness } from '../../shared/policy/types.js';
+
+export type SalesforceSnapshotSourceMode = 'demo' | 'production_mcp';
+export type SalesforceSnapshotFreshness = 'fresh' | 'missing' | 'stale' | 'invalid' | 'deactivated';
+
+/** Browser-safe shape returned by the server's read-only snapshot endpoint. */
+export interface SalesforceSnapshotReadModel {
+  customerId: string;
+  active: boolean;
+  freshness: SalesforceSnapshotFreshness;
+  ageSeconds: number | null;
+  snapshot: null | {
+    snapshotId: string;
+    version: number;
+    capturedAt: string;
+    publishedAt: string;
+    sourceMode: SalesforceSnapshotSourceMode;
+    schemaVersion: number;
+    mappingVersion: string;
+    data: SalesforceCustomerSnapshot | null;
+  };
+  latestAttempt: null | { status: 'succeeded' | 'failed'; finishedAt: string };
+  validationErrors: string[];
+}
+
+export interface SalesforceSnapshotClient {
+  getSnapshot(customerId: string): Promise<SalesforceSnapshotReadModel>;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +110,20 @@ export interface AgentSignalExtraction {
   signal: string;
   value: string;
   evidence: string;
+  sourceReference: string;
+  counterparty: string | null;
+  confidenceStatus: 'qualified' | 'review';
+  alternatives: string[];
+}
+
+export type DemoEvidenceScenario = 'no_signal' | 'unmapped' | 'conflicts' | 'multi_signal' | 'correction' | 'failure';
+
+export interface AgentEvidenceExtraction {
+  scenario: DemoEvidenceScenario;
+  status: 'no_signal' | 'unmapped' | 'review_required' | 'success' | 'failed';
+  signals: AgentSignalExtraction[];
+  unmapped: Array<{ type: string; value: string; evidence: string; sourceReference: string }>;
+  message: string;
 }
 
 export interface AgentAllocationProposal {
@@ -87,6 +136,85 @@ export interface AgentAllocationProposal {
 // ---------------------------------------------------------------------------
 // Service interfaces
 // ---------------------------------------------------------------------------
+
+export type BridgeLedgerStatus = 'reserved' | 'pending' | 'suspended' | 'funded' | 'collecting' | 'repaid' | 'failed';
+
+export interface BridgeLedgerProjection {
+  bridgeId: string;
+  customerId: string;
+  status: BridgeLedgerStatus;
+  principalOutstandingCents: number;
+  feeOutstandingCents: number;
+}
+
+export interface FacilityLedgerProjection {
+  currency: 'USD';
+  facilityAmountCents: number;
+  reserveFloorCents: number;
+  openingExposureCents: number;
+  settledPrincipalCents: number;
+  activeReservationsCents: number;
+  deployableCents: number;
+}
+
+export interface LedgerProjectionResponse {
+  facility: FacilityLedgerProjection;
+  bridges: BridgeLedgerProjection[];
+}
+
+export interface Kit5ProviderTransaction {
+  processResult: 'APPROVED' | 'DECLINED';
+  failureReason: string | null;
+  cardTransactionEventId: string;
+  cardTransactionId: string;
+  cardTransactionLifecycleId: string;
+}
+
+export interface Kit5PolicyDecisionSummary {
+  outcome: 'human_review' | 'auto_approved' | 'declined' | 'blocked';
+  amountCents: number;
+  creditLineCents: number;
+  tier: string;
+  capitalBand: string | null;
+  door: string | null;
+  reasonCodes: string[];
+  rationale: string;
+}
+
+export interface Kit5RepaymentCollectionCharge {
+  status: string;
+  amountCents: number;
+  providerOperationId: string;
+  providerObjectId: string | null;
+}
+
+export interface Kit5RepaymentCollectionSummary {
+  fee: Kit5RepaymentCollectionCharge | null;
+  principal: Kit5RepaymentCollectionCharge | null;
+}
+
+export interface Kit5RepaymentDepositResponse {
+  status: 'creating' | 'ambiguous' | 'created' | 'settled' | 'blocked';
+  depositId: string | null;
+  providerStatus: string | null;
+  bridgeId: string;
+  statementRef: string;
+  error: string | null;
+  collection: Kit5RepaymentCollectionSummary | null;
+}
+
+export type Kit5NextCustomerResponse =
+  | { status: 'completed'; attemptId: string; lifecycleId?: string | null; attemptedAmount: { amountCents: number; currency: string } | null; result: Kit5ProviderTransaction; policyStatus?: string; policyError?: string | null; policyDecisionId?: string | null; policyDecision?: Kit5PolicyDecisionSummary | null; bridgeId?: string | null; retryLifecycleId?: string | null; retryResult?: Kit5ProviderTransaction & { requestId?: string } | null; retryError?: string | null; humanApproved?: boolean }
+  | { status: 'in_progress' | 'ambiguous' | 'failed'; attemptId: string; lifecycleId: string | null; attemptedAmount: { amountCents: number; currency: string } | null; result?: Kit5ProviderTransaction; policyStatus?: string; policyError?: string | null; policyDecisionId?: string | null; policyDecision?: Kit5PolicyDecisionSummary | null; bridgeId?: string | null; retryLifecycleId?: string | null; retryResult?: Kit5ProviderTransaction & { requestId?: string } | null; retryError?: string | null; humanApproved?: boolean }
+  | { status: 'rejected'; reason: string };
+
+export type Kit5AttemptStatusResponse = Exclude<Kit5NextCustomerResponse, { status: 'rejected' }>;
+
+export interface Kit5NextCustomerRequest {
+  scenarioId: string;
+  customerId: string;
+  actionId: string;
+}
 
 export interface AirwallexClient {
   simulateCardSpend(params: {
@@ -132,7 +260,7 @@ export interface CrmClient {
 }
 
 export interface AgentClient {
-  extractSignals(note: CrmNote): Promise<AgentSignalExtraction[]>;
+  extractSignals(note: CrmNote): Promise<AgentEvidenceExtraction>;
 
   proposeAllocation(params: {
     declines: Array<{ customerId: string; customerName: string; shortfall: number }>;

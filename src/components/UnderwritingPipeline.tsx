@@ -90,6 +90,9 @@ export function UnderwritingPipeline({ precheck, perRequest }: Props) {
 
 function PrecheckLane({ steps }: { steps: PipelineStep[] }) {
   const firstFailIdx = steps.findIndex((s) => s.status === 'fail');
+  const inputGateFailed = steps.some((step) =>
+    ['Salesforce snapshot', 'Evidence readiness'].includes(step.label) && step.status === 'fail',
+  );
 
   return (
     <div>
@@ -107,7 +110,7 @@ function PrecheckLane({ steps }: { steps: PipelineStep[] }) {
           <>
             <Arrow failed />
             <div className="bg-red-100 border border-red-300 border-dashed rounded-lg px-3 py-2 min-w-[90px] text-center">
-              <div className="text-xs font-semibold text-red-600">No line</div>
+              <div className="text-xs font-semibold text-red-600">{inputGateFailed ? 'Blocked' : 'No line'}</div>
             </div>
           </>
         )}

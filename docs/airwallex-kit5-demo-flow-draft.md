@@ -46,13 +46,14 @@ separate transfers only after the applicable approval.
     deployable amount is $15,000, in the Less band. The capital bar remains
     visible throughout.
 
-2.  **Re-rate Bloom.** At 8:40, a Salesforce note says Bloom's largest client,
-    about 65% of revenue, is disputing an invoice. The agent extracts three
-    signals with quoted evidence. Bloom moves from Tier A with a $10,000 line to
-    Tier C with a $4,000 line. At the 9:02 card decline, the
-    $7,000 shortfall is refused because it exceeds the revised line and the
-    Tier C door is closed. A $4,000 partial bridge would not clear the payment.
-    Deployable capital stays at $15,000.
+2.  **Review Bloom's evidence.** At 8:40, a Salesforce note says Bloom's
+    largest client, about 65% of revenue, is disputing an invoice. The fixture
+    contains unresolved claims, so Bloom is blocked pending reviewer resolution
+    while other customers continue. If the reviewer qualifies the evidence,
+    Bloom moves from Tier A with a $10,000 line to Tier C with a $4,000 line.
+    At the 9:02 card decline, the $7,000 shortfall exceeds the revised line and
+    the Tier C door is closed. A $4,000 partial bridge would not clear the
+    payment. Deployable capital stays at $15,000.
 
 3.  **Fund Atlas automatically.** At 9:05, Atlas has a $5,000 shortfall. Tier A
     in the Less band is Auto. The sandbox card attempt is recorded, the policy
@@ -81,9 +82,10 @@ separate transfers only after the applicable approval.
     outstanding.
 
 8.  **Close on the treasury view.** Summarize: Atlas funded automatically,
-    Nova approved and repaid, Bloom declined on new evidence, Pixel ineligible,
-    and Juniper refused at the floor. Show that the floor was never breached
-    and that each decision and provider transaction is recorded.
+    Nova approved and repaid, Bloom blocked pending evidence review (then
+    declined if resolved), Pixel ineligible, and Juniper refused at the floor.
+    Show that the floor was never breached and that each decision and provider
+    transaction is recorded.
 
 ## Airwallex API behavior
 

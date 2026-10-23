@@ -1,4 +1,4 @@
-import type { FacilityConfig, Signals } from '../policy/types.js';
+import type { DemoPolicyReadiness, FacilityConfig, Signals } from '../policy/types.js';
 import { CUSTOMERS, BLOOM_SIGNALS_AFTER_CRM, AGENT_RATIONALES } from '../seed.js';
 import type { Scenario, ScenarioCustomer, ScenarioInputs } from './types.js';
 
@@ -29,17 +29,21 @@ const ALL_GREEN: Signals = {
   cashBuffer: 'green',
   trackRecord: 'green',
 };
+const SYNTHETIC_READY: DemoPolicyReadiness = {
+  snapshot: 'fresh', evidence: 'no_signal', creditReview: 'approved', priorDefault: 'no',
+};
 
 // GD's four customers, unchanged. Bloom keeps the Salesforce re-rating.
 const BLOOM: ScenarioCustomer = {
   ...CUSTOMERS.bloom,
   key: 'bloom',
+  salesforceSnapshotCustomerId: CUSTOMERS.bloom.id,
   rationale: AGENT_RATIONALES.bloom_initial,
   crmSignalsAfter: BLOOM_SIGNALS_AFTER_CRM,
 };
-const ATLAS: ScenarioCustomer = { ...CUSTOMERS.atlas, key: 'atlas', rationale: AGENT_RATIONALES.atlas };
-const NOVA: ScenarioCustomer = { ...CUSTOMERS.nova, key: 'nova', rationale: AGENT_RATIONALES.nova_revised };
-const PIXEL: ScenarioCustomer = { ...CUSTOMERS.pixel, key: 'pixel' };
+const ATLAS: ScenarioCustomer = { ...CUSTOMERS.atlas, key: 'atlas', salesforceSnapshotCustomerId: CUSTOMERS.atlas.id, rationale: AGENT_RATIONALES.atlas };
+const NOVA: ScenarioCustomer = { ...CUSTOMERS.nova, key: 'nova', salesforceSnapshotCustomerId: CUSTOMERS.nova.id, rationale: AGENT_RATIONALES.nova_revised };
+const PIXEL: ScenarioCustomer = { ...CUSTOMERS.pixel, key: 'pixel', salesforceSnapshotCustomerId: CUSTOMERS.pixel.id };
 
 const original: ScenarioInputs = {
   facility: KIT5_FACILITY,
@@ -63,12 +67,15 @@ const kit5Target: ScenarioInputs = {
     {
       id: 'acct_juniper001',
       key: 'juniper',
+      salesforceSnapshotCustomerId: 'acct_juniper001',
       name: 'Juniper Labs',
       monthlyInflow: 30_000,
       signals: { ...CUSTOMERS.nova.signals },
       historyDays: 240,
+      fullyRepaidOnTimeBridges: 3,
       noGo: NO_GO,
       rationale: 'Same profile shape as Nova: two yellows on concentration and cash buffer',
+      policyReadiness: SYNTHETIC_READY,
     },
   ],
   events: [
@@ -86,12 +93,15 @@ function twin(key: string, id: string, name: string, monthlyInflow: number): Sce
   return {
     id,
     key,
+    salesforceSnapshotCustomerId: id,
     name,
     monthlyInflow,
     signals: { ...ALL_GREEN },
     historyDays: 400,
+    fullyRepaidOnTimeBridges: 3,
     noGo: NO_GO,
     rationale: 'All four signals green, repaid every past bridge on time',
+    policyReadiness: SYNTHETIC_READY,
   };
 }
 

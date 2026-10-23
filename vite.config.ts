@@ -1,11 +1,11 @@
-/// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { defineConfig } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   test: {
     globals: true,
+    exclude: [...configDefaults.exclude, '**/worktrees/**'],
   },
 })
