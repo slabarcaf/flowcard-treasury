@@ -42,8 +42,18 @@ const kit5RepaymentDepositMigrationUrl = new URL(
   "../../server/src/db/migrations/017_kit5_repayment_deposits.sql",
   import.meta.url,
 );
+const kit5AttemptTypeMigrationUrl = new URL(
+  "../../server/src/db/migrations/020_kit5_attempt_type.sql",
+  import.meta.url,
+);
 
 describe("bridge ledger schema", () => {
+  it("separates fixture checkpoints from legacy Sandbox-live attempts", async () => {
+    const sql = await readFile(kit5AttemptTypeMigrationUrl, "utf8");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS attempt_type text NOT NULL DEFAULT 'sandbox_live'");
+    expect(sql).toContain("CHECK (attempt_type IN ('sandbox_live', 'fixture_checkpoint'))");
+  });
+
   it("persists one immutable, bridge-linked Kit 5 USD repayment deposit operation", async () => {
     const sql = await readFile(kit5RepaymentDepositMigrationUrl, "utf8");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS kit5_repayment_deposits");

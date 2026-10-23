@@ -1,7 +1,7 @@
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
-import type { AirwallexGateway, IssuingSimulationGateway } from "../../server/src/airwallex/client.js";
+import { ProviderHttpError, type AirwallexGateway, type IssuingSimulationGateway } from "../../server/src/airwallex/client.js";
 import type { DatabaseClient, DatabasePool, QueryResult } from "../../server/src/db/pool.js";
 import type { Kit5CardAttempt } from "../../server/src/db/repositories.js";
 import type { Kit5BridgeFundingBoundary } from "../../server/src/demo/next-customer.js";
@@ -17,7 +17,7 @@ const runId = "00000000-0000-4000-8000-000000000001";
 const providerLifecycleId = "33333333-3333-4333-8333-333333333333";
 const scenarioId = `kit5-target:${runId}`;
 const customerId = "acct_bloom001";
-const actionId = `${scenarioId}:txn_bloom_supplier_001`;
+const actionId = `${scenarioId}:fixture-checkpoint:txn_bloom_supplier_001`;
 const customerIds = [customerId, "acct_atlas001", "acct_nova001", "acct_pixel001", "acct_juniper001"];
 
 function binding(customer: string, overrides: Record<string, unknown> = {}) {
@@ -70,11 +70,17 @@ function matchingCheckpointSimulation(lifecycleId: string, overrides: Record<str
 class MemoryPool implements DatabasePool {
   readonly attempts = new Map<string, Kit5CardAttempt>();
   readonly rosterRows: Record<string, unknown>[];
+  failLifecyclePersistence = false;
   readonly query = vi.fn(async <Row>(sql: string, values: readonly unknown[] = []): Promise<QueryResult<Row>> => {
     if (sql.includes("FROM kit5_card_attempts") && sql.includes("ORDER BY created_at DESC")) {
       const attempts = [...this.attempts.values()].filter((attempt) =>
         attempt.customerId === customerId && attempt.scenarioId.startsWith("kit5-target:") &&
-        attempt.actionId === `${attempt.scenarioId}:txn_bloom_supplier_001`);
+        (sql.includes("attempt_type = 'fixture_checkpoint'")
+          ? attempt.attemptType === "fixture_checkpoint" && attempt.actionId === `${attempt.scenarioId}:fixture-checkpoint:txn_bloom_supplier_001`
+          : attempt.attemptType !== "fixture_checkpoint" && [
+            `${attempt.scenarioId}:live:txn_bloom_supplier_001`,
+            `${attempt.scenarioId}:txn_bloom_supplier_001`,
+          ].includes(attempt.actionId)));
       const latest = attempts.at(-1);
       return { rows: latest ? [this.row(latest) as Row] : [], rowCount: latest ? 1 : 0 };
     }
@@ -107,6 +113,7 @@ class MemoryPool implements DatabasePool {
       return { rows: [], rowCount: 1 };
     }
     if (sql.includes("SET lifecycle_id = $3, status = 'in_progress'")) {
+      if (this.failLifecyclePersistence) throw new Error("simulated database write failure");
       const attempt = this.attempt(String(values[0]), String(values[1]));
       if (!attempt || !["submitting", "ambiguous"].includes(attempt.status) || attempt.lifecycleId !== null) {
         return { rows: [], rowCount: 0 };
@@ -151,7 +158,12 @@ class MemoryPool implements DatabasePool {
         if (sql.includes("FROM kit5_card_attempts") && sql.includes("ORDER BY created_at DESC")) {
           const attempts = [...this.attempts.values()].filter((attempt) =>
             attempt.customerId === customerId && attempt.scenarioId.startsWith("kit5-target:") &&
-            attempt.actionId === `${attempt.scenarioId}:txn_bloom_supplier_001`);
+            (sql.includes("attempt_type = 'fixture_checkpoint'")
+              ? attempt.attemptType === "fixture_checkpoint" && attempt.actionId === `${attempt.scenarioId}:fixture-checkpoint:txn_bloom_supplier_001`
+              : attempt.attemptType !== "fixture_checkpoint" && [
+                `${attempt.scenarioId}:live:txn_bloom_supplier_001`,
+                `${attempt.scenarioId}:txn_bloom_supplier_001`,
+              ].includes(attempt.actionId)));
           const latest = attempts.at(-1);
           return { rows: latest ? [this.row(latest) as Row] : [], rowCount: latest ? 1 : 0 };
         }
@@ -175,6 +187,7 @@ class MemoryPool implements DatabasePool {
             scenarioId: String(values[0]),
             customerId: String(values[1]),
             actionId: String(values[2]),
+            attemptType: values[5] === "fixture_checkpoint" ? "fixture_checkpoint" : "sandbox_live",
             sequenceIndex: Number(values[3]),
             lifecycleId: null,
             status: "accepted",
@@ -222,6 +235,7 @@ class MemoryPool implements DatabasePool {
       scenario_id: attempt.scenarioId,
       customer_id: attempt.customerId,
       action_id: attempt.actionId,
+      attempt_type: attempt.attemptType ?? "sandbox_live",
       sequence_index: attempt.sequenceIndex,
       lifecycle_id: attempt.lifecycleId,
       status: attempt.status,
@@ -413,13 +427,87 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     expect(funding.retryCardAfterSettlement).toHaveBeenCalledOnce();
   });
 
+  it("keeps a legacy Sandbox-live Bloom attempt separate from a new fixture checkpoint", async () => {
+    const pool = new MemoryPool();
+    const legacyScenarioId = "kit5-target:00000000-0000-4000-8000-000000000002";
+    const legacyActionId = `${legacyScenarioId}:txn_bloom_supplier_001`;
+    const legacyCreate = vi.fn(async () => matchingCheckpointSimulation(providerLifecycleId));
+    const legacyHandler = route(pool, { createIssuingSimulation: legacyCreate, getIssuingLifecycle: vi.fn() });
+
+    const legacy = await send(legacyHandler, {
+      scenarioId: legacyScenarioId,
+      customerId,
+      actionId: legacyActionId,
+    }, true, "/api/kit5/next-customer");
+    const legacyAttempt = pool.attempts.get(`${legacyScenarioId}/${legacyActionId}`);
+    if (legacyAttempt) {
+      legacyAttempt.fundingClaimed = true;
+      legacyAttempt.policyStatus = "settled";
+      legacyAttempt.bridgeId = "legacy-bridge";
+      legacyAttempt.retryLifecycleId = "legacy-retry";
+    }
+
+    const checkpointCreate = vi.fn(async (request: { lifecycleId?: string }) =>
+      matchingCheckpointSimulation(request.lifecycleId ?? "missing-lifecycle"));
+    const checkpointHandler = route(pool, {
+      createIssuingSimulation: checkpointCreate,
+      getIssuingLifecycle: vi.fn(),
+    });
+    const checkpoint = await send(checkpointHandler, { scenarioId, customerId, actionId });
+    const checkpointAttempt = pool.attempts.get(`${scenarioId}/${actionId}`);
+    const recovery = await send(checkpointHandler, {}, true, "/api/kit5/fixture-checkpoint/recover");
+
+    expect(legacy.statusCode).toBe(200);
+    expect(legacyAttempt).toMatchObject({ attemptType: "sandbox_live", status: "completed", fundingClaimed: true });
+    expect(checkpoint.statusCode).toBe(200);
+    expect(checkpoint.body).toMatchObject({ status: "completed", scenarioId, actionId });
+    expect(checkpointAttempt).toMatchObject({ attemptType: "fixture_checkpoint", status: "completed" });
+    expect(checkpointCreate).toHaveBeenCalledOnce();
+    expect(recovery.body).toMatchObject({ status: "completed", scenarioId, actionId });
+  });
+
+  it("marks a definitive Airwallex 4xx failed after lifecycle correlation was saved", async () => {
+    const pool = new MemoryPool();
+    const createIssuingSimulation = vi.fn(async () => { throw new ProviderHttpError(400, "invalid issuing request"); });
+    const getIssuingLifecycleEvents = vi.fn();
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn(), getIssuingLifecycleEvents });
+
+    const first = await send(handler, { scenarioId, customerId, actionId });
+    const replay = await send(handler, { scenarioId, customerId, actionId });
+
+    expect(first).toMatchObject({ statusCode: 502, body: { status: "failed", lifecycleId: expect.any(String) } });
+    expect(replay).toMatchObject({ statusCode: 502, body: { status: "failed", lifecycleId: expect.any(String) } });
+    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({ status: "failed", lifecycleId: expect.any(String) });
+    expect(createIssuingSimulation).toHaveBeenCalledOnce();
+    expect(getIssuingLifecycleEvents).not.toHaveBeenCalled();
+  });
+
+  it("marks a failed lifecycle-ID persistence terminal before calling Airwallex", async () => {
+    const pool = new MemoryPool();
+    pool.failLifecyclePersistence = true;
+    const createIssuingSimulation = vi.fn();
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() });
+
+    const first = await send(handler, { scenarioId, customerId, actionId });
+    const replay = await send(handler, { scenarioId, customerId, actionId });
+
+    expect(first).toMatchObject({ statusCode: 502, body: { status: "failed", lifecycleId: null } });
+    expect(replay).toMatchObject({ statusCode: 502, body: { status: "failed", lifecycleId: null } });
+    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({
+      status: "failed",
+      lifecycleId: null,
+      error: "checkpoint_create_not_started",
+    });
+    expect(createIssuingSimulation).not.toHaveBeenCalled();
+  });
+
   it("adopts the unresolved server attempt across fresh run UUIDs without another create", async () => {
     const pool = new MemoryPool();
     const createIssuingSimulation = vi.fn(async () => ({ process_result: "PROCESSING" }));
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() });
     const anotherRunId = "00000000-0000-4000-8000-000000000002";
     const anotherScenarioId = `kit5-target:${anotherRunId}`;
-    const anotherActionId = `${anotherScenarioId}:txn_bloom_supplier_001`;
+    const anotherActionId = `${anotherScenarioId}:fixture-checkpoint:txn_bloom_supplier_001`;
 
     const first = await send(handler, { scenarioId, customerId, actionId });
     const replay = await send(handler, { scenarioId: anotherScenarioId, customerId, actionId: anotherActionId, startNew: true });
@@ -445,7 +533,7 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() });
     const nextRunId = "00000000-0000-4000-8000-000000000002";
     const nextScenarioId = `kit5-target:${nextRunId}`;
-    const nextActionId = `${nextScenarioId}:txn_bloom_supplier_001`;
+    const nextActionId = `${nextScenarioId}:fixture-checkpoint:txn_bloom_supplier_001`;
 
     await send(handler, { scenarioId, customerId, actionId });
     const replay = await send(handler, { scenarioId: nextScenarioId, customerId, actionId: nextActionId });
@@ -456,7 +544,7 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
       startNew: true,
     });
 
-    expect(replay.statusCode).toBe(202);
+    expect(replay.statusCode).toBe(200);
     expect(replay.body).toMatchObject({ status: "completed", scenarioId, actionId });
     expect(started.statusCode).toBe(200);
     expect(started.body).toMatchObject({ status: "completed", scenarioId: nextScenarioId, actionId: nextActionId });
@@ -472,7 +560,7 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
 
     const recovered = await send(handler, {}, true, "/api/kit5/fixture-checkpoint/recover");
 
-    expect(recovered.statusCode).toBe(200);
+    expect(recovered.statusCode).toBe(202);
     expect(recovered.body).toMatchObject({
       status: "ambiguous",
       scenarioId,
@@ -482,6 +570,45 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
       lifecycleId: pool.attempts.get(`${scenarioId}/${actionId}`)?.lifecycleId,
     });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
+  });
+
+  it("revalidates completed checkpoint results before cross-run adoption or reload recovery", async () => {
+    const pool = new MemoryPool();
+    const createIssuingSimulation = vi.fn(async (request: { lifecycleId?: string }) =>
+      matchingCheckpointSimulation(request.lifecycleId ?? "missing-lifecycle"));
+    const getIssuingLifecycleEvents = vi.fn(async () => []);
+    const handler = route(pool, {
+      createIssuingSimulation,
+      getIssuingLifecycle: vi.fn(),
+      getIssuingLifecycleEvents,
+    });
+
+    const first = await send(handler, { scenarioId, customerId, actionId });
+    const saved = pool.attempts.get(`${scenarioId}/${actionId}`);
+    if (!saved?.result) throw new Error("checkpoint result was not saved");
+    saved.result = { ...saved.result, cardId: "card-from-another-transaction" };
+
+    const nextScenarioId = "kit5-target:00000000-0000-4000-8000-000000000002";
+    const nextActionId = `${nextScenarioId}:fixture-checkpoint:txn_bloom_supplier_001`;
+    const adopted = await send(handler, {
+      scenarioId: nextScenarioId,
+      customerId,
+      actionId: nextActionId,
+    });
+    const recovered = await send(handler, {}, true, "/api/kit5/fixture-checkpoint/recover");
+
+    expect(first.statusCode).toBe(200);
+    expect(adopted).toMatchObject({ statusCode: 202, body: { status: "ambiguous", scenarioId, actionId } });
+    expect(adopted.body).not.toHaveProperty("result");
+    expect(recovered).toMatchObject({ statusCode: 202, body: { status: "ambiguous", scenarioId, actionId } });
+    expect(recovered.body).not.toHaveProperty("result");
+    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({
+      status: "ambiguous",
+      error: "checkpoint_identity_unverified",
+      result: null,
+    });
+    expect(createIssuingSimulation).toHaveBeenCalledOnce();
+    expect(getIssuingLifecycleEvents).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -651,7 +778,7 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
   it("invalidates a completed replay that lacks provider identity and cannot match a lifecycle event", async () => {
     const pool = new MemoryPool();
     pool.attempts.set(`${scenarioId}/${actionId}`, {
-      scenarioId, customerId, actionId, sequenceIndex: 0, lifecycleId: providerLifecycleId,
+      scenarioId, customerId, actionId, attemptType: "fixture_checkpoint", sequenceIndex: 0, lifecycleId: providerLifecycleId,
       status: "completed",
       result: {
         processResult: "DECLINED", failureReason: "INSUFFICIENT_FUNDS",
@@ -691,7 +818,7 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
   it("does not let manual reconciliation return an unverified completed result", async () => {
     const pool = new MemoryPool();
     pool.attempts.set(`${scenarioId}/${actionId}`, {
-      scenarioId, customerId, actionId, sequenceIndex: 0, lifecycleId: providerLifecycleId,
+      scenarioId, customerId, actionId, attemptType: "fixture_checkpoint", sequenceIndex: 0, lifecycleId: providerLifecycleId,
       status: "completed",
       result: {
         processResult: "DECLINED", failureReason: "INSUFFICIENT_FUNDS",
@@ -735,7 +862,7 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
   it("keeps checkpoint attempt-status on event verification and skips bridge recovery", async () => {
     const pool = new MemoryPool();
     pool.attempts.set(`${scenarioId}/${actionId}`, {
-      scenarioId, customerId, actionId, sequenceIndex: 0, lifecycleId: providerLifecycleId,
+      scenarioId, customerId, actionId, attemptType: "fixture_checkpoint", sequenceIndex: 0, lifecycleId: providerLifecycleId,
       status: "ambiguous", result: null, error: "checkpoint_identity_unverified", fundingClaimed: false,
       requestFacts: {
         accountId: `verified-account-${customerId}`, cardId: `verified-card-${customerId}`,
@@ -908,7 +1035,7 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
   it("does not accept a prior identical Bloom transaction when the current attempt has no correlation ID", async () => {
     const pool = new MemoryPool();
     pool.attempts.set(`${scenarioId}/${actionId}`, {
-      scenarioId, customerId, actionId, sequenceIndex: 0, lifecycleId: null,
+      scenarioId, customerId, actionId, attemptType: "fixture_checkpoint", sequenceIndex: 0, lifecycleId: null,
       status: "ambiguous", result: null, error: "legacy_attempt", fundingClaimed: false,
       requestFacts: {
         accountId: `verified-account-${customerId}`, cardId: `verified-card-${customerId}`,
@@ -939,7 +1066,7 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
   it("does not match a same-terms event from an older lifecycle", async () => {
     const pool = new MemoryPool();
     pool.attempts.set(`${scenarioId}/${actionId}`, {
-      scenarioId, customerId, actionId, sequenceIndex: 0, lifecycleId: providerLifecycleId,
+      scenarioId, customerId, actionId, attemptType: "fixture_checkpoint", sequenceIndex: 0, lifecycleId: providerLifecycleId,
       status: "ambiguous", result: null, error: "provider_result_unresolved", fundingClaimed: false,
       requestFacts: {
         accountId: `verified-account-${customerId}`, cardId: `verified-card-${customerId}`,

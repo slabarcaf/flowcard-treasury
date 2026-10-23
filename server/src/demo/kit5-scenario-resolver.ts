@@ -62,7 +62,7 @@ export function isKit5FixtureCheckpointInput(input: NextCustomerInput): boolean 
   if (!input.scenarioId.startsWith(prefix) || input.customerId !== KIT5_BLOOM_CUSTOMER_ID) return false;
   const runId = input.scenarioId.slice(prefix.length);
   return LIVE_RUN_ID_PATTERN.test(runId) &&
-    input.actionId === `${input.scenarioId}:${KIT5_BLOOM_CHECKPOINT_REQUEST_ID}`;
+    input.actionId === `${input.scenarioId}:fixture-checkpoint:${KIT5_BLOOM_CHECKPOINT_REQUEST_ID}`;
 }
 
 function resolveScenarioSpecs(scenarioId: string): readonly DemoCustomerSpec[] | null {

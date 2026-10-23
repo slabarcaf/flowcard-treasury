@@ -133,7 +133,7 @@ describe('Kit 5 sandbox-live transaction client', () => {
     const confirmedActivity: FixtureCheckpointActivity = {
       scenarioId: 'kit5-target:run',
       customerId: 'acct_bloom001',
-      actionId: 'kit5-target:run:txn_bloom_supplier_001',
+      actionId: 'kit5-target:run:fixture-checkpoint:txn_bloom_supplier_001',
       status: 'completed',
       attemptId: 'attempt-demo',
       lifecycleId: 'lifecycle-demo',
@@ -173,7 +173,7 @@ describe('Kit 5 sandbox-live transaction client', () => {
     const activity: FixtureCheckpointActivity = {
       scenarioId: 'kit5-target:run',
       customerId: 'acct_bloom001',
-      actionId: 'kit5-target:run:txn_bloom_supplier_001',
+      actionId: 'kit5-target:run:fixture-checkpoint:txn_bloom_supplier_001',
       status: 'completed',
       lifecycleId: 'lifecycle-demo',
       result: {
@@ -194,7 +194,7 @@ describe('Kit 5 sandbox-live transaction client', () => {
   it('does not expose the new provider run action while the checkpoint result is unresolved', () => {
     const hook = dashboardHookValue('fixture-checkpoint', [], {
       status: 'ambiguous',
-      actionId: 'run:txn_bloom_supplier_001',
+      actionId: 'run:fixture-checkpoint:txn_bloom_supplier_001',
       scenarioId: 'kit5-target:run',
       customerId: 'acct_bloom001',
       lifecycleId: null,

@@ -130,7 +130,7 @@ describe('Kit 5 fixture provider checkpoint', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({
         status: 'completed',
-        attemptId: 'kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001',
+        attemptId: 'kit5-target:00000000-0000-4000-8000-000000000001:fixture-checkpoint:txn_bloom_supplier_001',
         lifecycleId: 'lifecycle-demo',
         attemptedAmount: { amountCents: 900_000, currency: 'USD' },
         result: {

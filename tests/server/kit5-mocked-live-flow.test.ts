@@ -50,6 +50,7 @@ class MemoryPool implements DatabasePool {
             scenarioId: String(values[0]),
             customerId: String(values[1]),
             actionId: String(values[2]),
+            attemptType: values[5] === "fixture_checkpoint" ? "fixture_checkpoint" : "sandbox_live",
             sequenceIndex: Number(values[3]),
             lifecycleId: null,
             status: "accepted",
@@ -132,6 +133,7 @@ class MemoryPool implements DatabasePool {
       scenario_id: attempt.scenarioId,
       customer_id: attempt.customerId,
       action_id: attempt.actionId,
+      attempt_type: attempt.attemptType ?? "sandbox_live",
       sequence_index: attempt.sequenceIndex,
       lifecycle_id: attempt.lifecycleId,
       status: attempt.status,
@@ -227,7 +229,7 @@ describe("Kit 5 mocked sandbox-live flow", () => {
     const runId = "00000000-0000-4000-8000-000000000001";
     const checkpointScenarioId = `kit5-target:${runId}`;
     const bloomCustomerId = "acct_bloom001";
-    const bloomActionId = `${checkpointScenarioId}:txn_bloom_supplier_001`;
+    const bloomActionId = `${checkpointScenarioId}:fixture-checkpoint:txn_bloom_supplier_001`;
     const orderedCustomerIds = [bloomCustomerId, "acct_atlas001", "acct_nova001", "acct_pixel001", "acct_juniper001"];
     const amounts = [900_000, 650_000, 700_000, 250_000, 700_000];
     const checkpointFixture: Kit5CustomerFixture = {

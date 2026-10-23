@@ -99,7 +99,10 @@ export async function processNextCustomerAction(
     requestFacts: { accountId: customer.accountId, cardId: customer.cardId,
       amountCents: customer.amountCents, currency: customer.currency, merchant: customer.merchant, ...policyFacts },
     ...((options.requireCheckpointIdentity || options.protectCheckpointRun) ? {
-      checkpointRun: { allowNewRun: options.protectCheckpointRun || options.allowNewCheckpointRun === true },
+      checkpointRun: {
+        allowNewRun: options.protectCheckpointRun || options.allowNewCheckpointRun === true,
+        attemptType: options.requireCheckpointIdentity ? "fixture_checkpoint" : "sandbox_live",
+      },
     } : {}),
   });
   if (!action.accepted) return {
@@ -181,21 +184,35 @@ export async function processNextCustomerAction(
 
   let result: IssuingSimulationResponse;
   const checkpointLifecycleId = options.requireCheckpointIdentity ? randomUUID() : undefined;
+  let providerCreateInvoked = false;
   try {
     result = await simulateIssuingTransaction({
       ...customer,
       scenarioId: input.scenarioId,
       ...(checkpointLifecycleId ? { lifecycleId: checkpointLifecycleId } : {}),
     }, {
-      gateway,
+      gateway: options.requireCheckpointIdentity
+        ? observingCreate(gateway, () => { providerCreateInvoked = true; })
+        : gateway,
       persistLifecycleId: async (scenarioId, lifecycleId) => {
         await setKit5AttemptLifecycle(pool, { scenarioId, actionId: input.actionId, lifecycleId });
       },
     });
   } catch (error) {
+    if (error instanceof ProviderHttpError && error.status < 500) {
+      await finishKit5Attempt(pool, { ...input, status: "failed", error: error.name });
+      if (options.requireCheckpointIdentity) {
+        return { status: "failed", attempt: await requiredAttempt(pool, input) };
+      }
+      throw error;
+    }
+    if (options.requireCheckpointIdentity && !providerCreateInvoked) {
+      await finishKit5Attempt(pool, { ...input, status: "failed", error: "checkpoint_create_not_started" });
+      return { status: "failed", attempt: await requiredAttempt(pool, input) };
+    }
     const persisted = await requiredAttempt(pool, input);
     if (error instanceof AmbiguousIssuingResponseError
-      || (persisted.status === "submitting" && !(error instanceof ProviderHttpError && error.status < 500))) {
+      || persisted.status === "submitting") {
       if (error instanceof AmbiguousIssuingResponseError && error.lifecycleId && !persisted.lifecycleId) {
         await setKit5AttemptLifecycle(pool, {
           scenarioId: input.scenarioId,
@@ -205,9 +222,6 @@ export async function processNextCustomerAction(
       }
       await finishKit5Attempt(pool, { ...input, status: "ambiguous", error: "provider_result_unresolved" });
       return { status: "ambiguous", attempt: await requiredAttempt(pool, input) };
-    }
-    if (persisted.status === "submitting" && error instanceof ProviderHttpError && error.status < 500) {
-      await finishKit5Attempt(pool, { ...input, status: "failed", error: error.name });
     }
     throw error;
   }
@@ -224,6 +238,23 @@ export async function processNextCustomerAction(
   return isFundingPending(finalAttempt, result)
     ? { status: "in_progress", attempt: finalAttempt }
     : { status: "completed", attempt: finalAttempt, result };
+}
+
+function observingCreate(
+  gateway: IssuingSimulationGateway,
+  onCreate: () => void,
+): IssuingSimulationGateway {
+  return {
+    createIssuingSimulation: async (request) => {
+      onCreate();
+      return gateway.createIssuingSimulation(request);
+    },
+    getIssuingLifecycle: (lifecycleId, accountId) => gateway.getIssuingLifecycle(lifecycleId, accountId),
+    ...(gateway.getIssuingLifecycleEvents
+      ? { getIssuingLifecycleEvents: (lifecycleId: string, accountId: string) =>
+        gateway.getIssuingLifecycleEvents!(lifecycleId, accountId) }
+      : {}),
+  };
 }
 
 export async function reconcileKit5CustomerAction(

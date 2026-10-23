@@ -78,7 +78,16 @@ export async function handleKit5FixtureCheckpoint(
     });
     if (outcome.status === "rejected") {
       if (outcome.attempt && (outcome.reason === "fixture_checkpoint_run_unresolved" || outcome.reason === "fixture_checkpoint_new_run_requires_confirmation")) {
-        sendCheckpointAttempt(response, 202, outcome.attempt, fixture);
+        const reconciled = await reconcileKit5CustomerAction(dependencies.pool, dependencies.gateway, {
+          scenarioId: outcome.attempt.scenarioId,
+          customerId: outcome.attempt.customerId,
+          actionId: outcome.attempt.actionId,
+        }, fixture, { requireCheckpointIdentity: true });
+        if (!reconciled || reconciled.attemptType !== "fixture_checkpoint") {
+          send(response, 409, { status: "rejected", reason: "fixture_checkpoint_attempt_unverified" });
+          return;
+        }
+        sendCheckpointAttempt(response, reconciled.status === "completed" ? 200 : 202, reconciled, fixture);
         return;
       }
       send(response, 409, { status: "rejected", reason: outcome.reason });
@@ -113,7 +122,16 @@ export async function handleKit5FixtureCheckpointRecovery(
       send(response, 409, { status: "rejected", reason: "fixture_checkpoint_mapping_unavailable" });
       return;
     }
-    sendCheckpointAttempt(response, 200, attempt, fixture);
+    const reconciled = await reconcileKit5CustomerAction(dependencies.pool, dependencies.gateway, {
+      scenarioId: attempt.scenarioId,
+      customerId: attempt.customerId,
+      actionId: attempt.actionId,
+    }, fixture, { requireCheckpointIdentity: true });
+    if (!reconciled || reconciled.attemptType !== "fixture_checkpoint") {
+      send(response, 409, { status: "rejected", reason: "fixture_checkpoint_attempt_unverified" });
+      return;
+    }
+    sendCheckpointAttempt(response, reconciled.status === "completed" ? 200 : 202, reconciled, fixture);
   } catch {
     send(response, 503, { error: "kit5_fixture_checkpoint_unavailable" });
   }

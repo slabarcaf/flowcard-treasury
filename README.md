@@ -119,6 +119,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/015_kit5_car
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/016_kit5_policy_retry_lifecycle.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/017_kit5_repayment_deposits.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/018_customer_roster_account_mapping_audit.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/019_provider_generated_issuing_lifecycle.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/020_kit5_attempt_type.sql
 ```
 
 Set these server environment variables before starting the service:

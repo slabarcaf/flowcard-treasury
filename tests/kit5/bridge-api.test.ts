@@ -57,7 +57,7 @@ describe('Kit 5 ledger API client', () => {
   it('sends only the run-scoped checkpoint identity with the operator session cookie', async () => {
     const checkpoint = {
       status: 'completed',
-      attemptId: 'kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001',
+      attemptId: 'kit5-target:00000000-0000-4000-8000-000000000001:fixture-checkpoint:txn_bloom_supplier_001',
       lifecycleId: 'lifecycle-demo',
       attemptedAmount: { amountCents: 900_000, currency: 'USD' },
       result: {
@@ -73,7 +73,7 @@ describe('Kit 5 ledger API client', () => {
     const input = {
       scenarioId: 'kit5-target:00000000-0000-4000-8000-000000000001',
       customerId: 'acct_bloom001',
-      actionId: 'kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001',
+      actionId: 'kit5-target:00000000-0000-4000-8000-000000000001:fixture-checkpoint:txn_bloom_supplier_001',
     };
 
     await expect(client.fixtureCheckpoint(input)).resolves.toEqual(checkpoint);
@@ -92,8 +92,8 @@ describe('Kit 5 ledger API client', () => {
       status: 'ambiguous',
       scenarioId: 'kit5-target:00000000-0000-4000-8000-000000000009',
       customerId: 'acct_bloom001',
-      actionId: 'kit5-target:00000000-0000-4000-8000-000000000009:txn_bloom_supplier_001',
-      attemptId: 'kit5-target:00000000-0000-4000-8000-000000000009:txn_bloom_supplier_001',
+      actionId: 'kit5-target:00000000-0000-4000-8000-000000000009:fixture-checkpoint:txn_bloom_supplier_001',
+      attemptId: 'kit5-target:00000000-0000-4000-8000-000000000009:fixture-checkpoint:txn_bloom_supplier_001',
       lifecycleId: '33333333-3333-4333-8333-333333333333',
       attemptedAmount: { amountCents: 900_000, currency: 'USD' },
     } as const;
@@ -113,7 +113,7 @@ describe('Kit 5 ledger API client', () => {
     const input = {
       scenarioId: 'kit5-target:00000000-0000-4000-8000-000000000002',
       customerId: 'acct_bloom001',
-      actionId: 'kit5-target:00000000-0000-4000-8000-000000000002:txn_bloom_supplier_001',
+      actionId: 'kit5-target:00000000-0000-4000-8000-000000000002:fixture-checkpoint:txn_bloom_supplier_001',
       startNew: true,
     };
     const response = {
@@ -167,7 +167,7 @@ describe('Kit 5 ledger API client', () => {
     const input = {
       scenarioId: 'kit5-target:00000000-0000-4000-8000-000000000001',
       customerId: 'acct_bloom001',
-      actionId: 'kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001',
+      actionId: 'kit5-target:00000000-0000-4000-8000-000000000001:fixture-checkpoint:txn_bloom_supplier_001',
       lifecycleId,
     };
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => responseBody });

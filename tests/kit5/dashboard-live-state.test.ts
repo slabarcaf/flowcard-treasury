@@ -101,9 +101,9 @@ function checkpointActivity(
   return {
     scenarioId,
     customerId: 'acct_bloom001',
-    actionId: `${scenarioId}:txn_bloom_supplier_001`,
+    actionId: `${scenarioId}:fixture-checkpoint:txn_bloom_supplier_001`,
     status,
-    attemptId: `${scenarioId}:txn_bloom_supplier_001`,
+    attemptId: `${scenarioId}:fixture-checkpoint:txn_bloom_supplier_001`,
     lifecycleId: 'lifecycle-bloom',
     attemptedAmount: { amountCents: 900_000, currency: 'USD' },
     ...(result ? { result } : {}),
@@ -384,7 +384,7 @@ describe('Kit 5 live dashboard recovery state', () => {
     const confirmedActivity: FixtureCheckpointActivity = {
       scenarioId: 'kit5-target:run',
       customerId: 'acct_bloom001',
-      actionId: 'kit5-target:run:txn_bloom_supplier_001',
+      actionId: 'kit5-target:run:fixture-checkpoint:txn_bloom_supplier_001',
       status: 'completed',
       attemptId: 'attempt-demo',
       lifecycleId: 'lifecycle-demo',
@@ -590,7 +590,7 @@ describe('Kit 5 live dashboard recovery state', () => {
   it('adopts the server-owned unresolved attempt after a new browser session loses its run identity', async () => {
     const savedRunId = '00000000-0000-4000-8000-000000000009';
     const savedScenarioId = `kit5-target:${savedRunId}`;
-    const savedActionId = `${savedScenarioId}:txn_bloom_supplier_001`;
+    const savedActionId = `${savedScenarioId}:fixture-checkpoint:txn_bloom_supplier_001`;
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({
@@ -651,7 +651,7 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(Object.keys(input).sort()).toEqual(['actionId', 'customerId', 'scenarioId']);
     expect(input.customerId).toBe('acct_bloom001');
     expect(input.scenarioId).toMatch(/^kit5-target:[0-9a-f-]{36}$/i);
-    expect(input.actionId).toBe(`${input.scenarioId}:txn_bloom_supplier_001`);
+    expect(input.actionId).toBe(`${input.scenarioId}:fixture-checkpoint:txn_bloom_supplier_001`);
 
     dashboard.reset();
     dashboard = renderDashboard();

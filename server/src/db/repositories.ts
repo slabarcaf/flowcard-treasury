@@ -1,11 +1,13 @@
 import type { DatabasePool } from "./pool.js";
 
 export type Kit5AttemptStatus = "accepted" | "submitting" | "in_progress" | "completed" | "ambiguous" | "failed";
+export type Kit5AttemptType = "sandbox_live" | "fixture_checkpoint";
 
 export interface Kit5CardAttempt {
   scenarioId: string;
   customerId: string;
   actionId: string;
+  attemptType?: Kit5AttemptType;
   sequenceIndex: number;
   lifecycleId: string | null;
   status: Kit5AttemptStatus;
@@ -30,6 +32,7 @@ interface Kit5AttemptRow {
   scenario_id: string;
   customer_id: string;
   action_id: string;
+  attempt_type?: Kit5AttemptType;
   sequence_index: number;
   lifecycle_id: string | null;
   status: Kit5AttemptStatus;
@@ -55,6 +58,7 @@ function mapKit5Attempt(row: Kit5AttemptRow): Kit5CardAttempt {
     scenarioId: row.scenario_id,
     customerId: row.customer_id,
     actionId: row.action_id,
+    attemptType: row.attempt_type === "fixture_checkpoint" ? "fixture_checkpoint" : "sandbox_live",
     sequenceIndex: row.sequence_index,
     lifecycleId: row.lifecycle_id,
     status: row.status,
@@ -83,15 +87,29 @@ export type AcceptKit5AttemptResult =
 
 const KIT5_FIXTURE_CHECKPOINT_ADVISORY_LOCK = "741982570051";
 
-const KIT5_FIXTURE_CHECKPOINT_LATEST_ATTEMPT_QUERY = `SELECT scenario_id, customer_id, action_id, sequence_index, lifecycle_id,
+const KIT5_FIXTURE_CHECKPOINT_LATEST_ATTEMPT_QUERY = `SELECT scenario_id, customer_id, action_id, attempt_type, sequence_index, lifecycle_id,
        status, provider_result, error, funding_claimed, request_facts,
        policy_status, policy_error, policy_decision_id, bridge_id, retry_lifecycle_id,
        pending_policy_decision_id, policy_actor_id, policy_approval_reason,
        retry_request_id, retry_provider_result, retry_error
   FROM kit5_card_attempts
  WHERE customer_id = 'acct_bloom001'
+   AND attempt_type = 'fixture_checkpoint'
    AND scenario_id LIKE 'kit5-target:%'
-   AND action_id = scenario_id || ':txn_bloom_supplier_001'
+   AND action_id = scenario_id || ':fixture-checkpoint:txn_bloom_supplier_001'
+ ORDER BY created_at DESC
+ LIMIT 1`;
+
+const KIT5_SANDBOX_LIVE_LATEST_ATTEMPT_QUERY = `SELECT scenario_id, customer_id, action_id, attempt_type, sequence_index, lifecycle_id,
+       status, provider_result, error, funding_claimed, request_facts,
+       policy_status, policy_error, policy_decision_id, bridge_id, retry_lifecycle_id,
+       pending_policy_decision_id, policy_actor_id, policy_approval_reason,
+       retry_request_id, retry_provider_result, retry_error
+  FROM kit5_card_attempts
+ WHERE customer_id = 'acct_bloom001'
+   AND attempt_type = 'sandbox_live'
+   AND scenario_id LIKE 'kit5-target:%'
+   AND action_id IN (scenario_id || ':live:txn_bloom_supplier_001', scenario_id || ':txn_bloom_supplier_001')
  ORDER BY created_at DESC
  LIMIT 1`;
 
@@ -108,7 +126,7 @@ export async function acceptKit5CardAttempt(
     actionId: string;
     orderedCustomerIds: readonly string[];
     requestFacts?: Kit5CardAttempt["requestFacts"];
-    checkpointRun?: { allowNewRun: boolean };
+    checkpointRun?: { allowNewRun: boolean; attemptType: Kit5AttemptType };
   },
 ): Promise<AcceptKit5AttemptResult> {
   const client = await pool.connect();
@@ -116,7 +134,10 @@ export async function acceptKit5CardAttempt(
     await client.query("BEGIN");
     if (input.checkpointRun) {
       await client.query(`SELECT pg_advisory_xact_lock(${KIT5_FIXTURE_CHECKPOINT_ADVISORY_LOCK}::bigint)`);
-      const latestResult = await client.query<Kit5AttemptRow>(KIT5_FIXTURE_CHECKPOINT_LATEST_ATTEMPT_QUERY);
+      const latestQuery = input.checkpointRun.attemptType === "fixture_checkpoint"
+        ? KIT5_FIXTURE_CHECKPOINT_LATEST_ATTEMPT_QUERY
+        : KIT5_SANDBOX_LIVE_LATEST_ATTEMPT_QUERY;
+      const latestResult = await client.query<Kit5AttemptRow>(latestQuery);
       const latest = latestResult.rows[0];
       if (latest && (latest.scenario_id !== input.scenarioId || latest.action_id !== input.actionId)) {
         const unresolved = KIT5_FIXTURE_CHECKPOINT_UNRESOLVED_STATUSES.has(latest.status) ||
@@ -145,7 +166,7 @@ export async function acceptKit5CardAttempt(
     if (!scenarioState) throw new Error("Kit 5 scenario state was not initialized");
 
     const prior = await client.query<Kit5AttemptRow>(
-      `SELECT scenario_id, customer_id, action_id, sequence_index, lifecycle_id,
+      `SELECT scenario_id, customer_id, action_id, attempt_type, sequence_index, lifecycle_id,
               status, provider_result, error, funding_claimed, request_facts,
               policy_status, policy_error, policy_decision_id, bridge_id, retry_lifecycle_id,
               pending_policy_decision_id, policy_actor_id, policy_approval_reason,
@@ -157,6 +178,9 @@ export async function acceptKit5CardAttempt(
     if (existing) {
       await client.query("COMMIT");
       if (existing.customer_id !== input.customerId) return { accepted: false, reason: "action_id_conflict" };
+      if ((existing.attempt_type ?? "sandbox_live") !== (input.checkpointRun?.attemptType ?? "sandbox_live")) {
+        return { accepted: false, reason: "action_id_conflict" };
+      }
       if (!sameRequestFacts(existing.request_facts, input.requestFacts ?? null)) return { accepted: false, reason: "action_id_conflict" };
       return { accepted: true, created: false, attempt: mapKit5Attempt(existing) };
     }
@@ -192,14 +216,14 @@ export async function acceptKit5CardAttempt(
     }
     const inserted = await client.query<Kit5AttemptRow>(
       `INSERT INTO kit5_card_attempts (
-         scenario_id, customer_id, action_id, sequence_index, status, request_facts
-       ) VALUES ($1, $2, $3, $4, 'accepted', $5::jsonb)
-       RETURNING scenario_id, customer_id, action_id, sequence_index, lifecycle_id,
+         scenario_id, customer_id, action_id, sequence_index, status, request_facts, attempt_type
+       ) VALUES ($1, $2, $3, $4, 'accepted', $5::jsonb, $6)
+       RETURNING scenario_id, customer_id, action_id, attempt_type, sequence_index, lifecycle_id,
                  status, provider_result, error, funding_claimed, request_facts,
                  policy_status, policy_error, policy_decision_id, bridge_id, retry_lifecycle_id,
                  pending_policy_decision_id, policy_actor_id, policy_approval_reason,
                  retry_request_id, retry_provider_result, retry_error`,
-      [input.scenarioId, input.customerId, input.actionId, index, JSON.stringify(input.requestFacts ?? null)],
+      [input.scenarioId, input.customerId, input.actionId, index, JSON.stringify(input.requestFacts ?? null), input.checkpointRun?.attemptType ?? "sandbox_live"],
     );
     const attempt = inserted.rows[0];
     if (!attempt) throw new Error("Kit 5 card attempt insert did not return a row");
@@ -400,7 +424,7 @@ export async function getKit5CardAttempt(
   actionId: string,
 ): Promise<Kit5CardAttempt | null> {
   const result = await pool.query<Kit5AttemptRow>(
-    `SELECT scenario_id, customer_id, action_id, sequence_index, lifecycle_id,
+    `SELECT scenario_id, customer_id, action_id, attempt_type, sequence_index, lifecycle_id,
             status, provider_result, error, funding_claimed, request_facts,
             policy_status, policy_error, policy_decision_id, bridge_id, retry_lifecycle_id,
             pending_policy_decision_id, policy_actor_id, policy_approval_reason,

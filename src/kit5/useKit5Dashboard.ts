@@ -385,7 +385,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     ? {
       scenarioId: fixtureCheckpointScenarioId,
       customerId: fixtureCheckpointCustomer.id,
-      actionId: `${fixtureCheckpointScenarioId}:${scenario.providerCheckpoint.eventRequestId}`,
+      actionId: `${fixtureCheckpointScenarioId}:fixture-checkpoint:${scenario.providerCheckpoint.eventRequestId}`,
     }
     : null, [fixtureCheckpointCustomer, fixtureCheckpointScenarioId, scenario.providerCheckpoint]);
   const fixtureCheckpointTermsCompatible = fixtureCheckpointTermsMatch(scenario, inputs);

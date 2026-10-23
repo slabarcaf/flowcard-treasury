@@ -90,7 +90,10 @@ class MemoryPool implements DatabasePool {
     if (sql.includes("FROM kit5_card_attempts") && sql.includes("ORDER BY created_at DESC")) {
       const attempts = [...this.attempts.values()].filter((attempt) =>
         attempt.customerId === "acct_bloom001" && attempt.scenarioId.startsWith("kit5-target:") &&
-        attempt.actionId === `${attempt.scenarioId}:txn_bloom_supplier_001`);
+        attempt.attemptType !== "fixture_checkpoint" && [
+          `${attempt.scenarioId}:live:txn_bloom_supplier_001`,
+          `${attempt.scenarioId}:txn_bloom_supplier_001`,
+        ].includes(attempt.actionId));
       const latest = attempts.at(-1);
       return { rows: latest ? [this.row(latest) as Row] : [], rowCount: latest ? 1 : 0 };
     }
@@ -114,6 +117,7 @@ class MemoryPool implements DatabasePool {
     if (sql.includes("INSERT INTO kit5_card_attempts")) {
       const attempt: Kit5CardAttempt = {
         scenarioId: String(values[0]), customerId: String(values[1]), actionId: String(values[2]),
+        attemptType: values[5] === "fixture_checkpoint" ? "fixture_checkpoint" : "sandbox_live",
         sequenceIndex: Number(values[3]), lifecycleId: null, status: "accepted", result: null, error: null, fundingClaimed: false,
         requestFacts: values[4] ? JSON.parse(String(values[4])) : null,
         policyStatus: "not_started", policyError: null, policyDecisionId: null, bridgeId: null,
@@ -138,6 +142,7 @@ class MemoryPool implements DatabasePool {
   private row(attempt: Kit5CardAttempt): Record<string, unknown> {
     return {
       scenario_id: attempt.scenarioId, customer_id: attempt.customerId, action_id: attempt.actionId,
+      attempt_type: attempt.attemptType ?? "sandbox_live",
       sequence_index: attempt.sequenceIndex, lifecycle_id: attempt.lifecycleId, status: attempt.status,
       provider_result: attempt.result, error: attempt.error,
       funding_claimed: attempt.fundingClaimed,

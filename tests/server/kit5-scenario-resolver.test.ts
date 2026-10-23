@@ -57,7 +57,7 @@ describe("Kit 5 server-side scenario mappings", () => {
     const fixture = await resolve({
       scenarioId,
       customerId: "acct_bloom001",
-      actionId: `${scenarioId}:txn_bloom_supplier_001`,
+      actionId: `${scenarioId}:fixture-checkpoint:txn_bloom_supplier_001`,
     });
 
     expect(fixture?.orderedCustomerIds[0]).toBe("acct_bloom001");
@@ -87,7 +87,7 @@ describe("Kit 5 server-side scenario mappings", () => {
     const fixture = await createKit5FixtureCheckpointResolver(pool)({
       scenarioId,
       customerId: "acct_bloom001",
-      actionId: `${scenarioId}:txn_bloom_supplier_001`,
+      actionId: `${scenarioId}:fixture-checkpoint:txn_bloom_supplier_001`,
     });
 
     expect(fixture?.orderedCustomerIds).toEqual(ids);
@@ -103,6 +103,7 @@ describe("Kit 5 server-side scenario mappings", () => {
     ["another scenario", "original:00000000-0000-4000-8000-000000000001", "acct_bloom001", "original:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001"],
     ["the unscoped target", "kit5-target", "acct_bloom001", "kit5-target:txn_bloom_supplier_001"],
     ["another customer", "kit5-target:00000000-0000-4000-8000-000000000001", "acct_atlas001", "kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001"],
+    ["legacy Sandbox-live action ID", "kit5-target:00000000-0000-4000-8000-000000000001", "acct_bloom001", "kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001"],
     ["another request identity", "kit5-target:00000000-0000-4000-8000-000000000001", "acct_bloom001", "kit5-target:00000000-0000-4000-8000-000000000001:txn_atlas_supplier_001"],
     ["a malformed run UUID", "kit5-target:run-1", "acct_bloom001", "kit5-target:run-1:txn_bloom_supplier_001"],
   ])("rejects %s before reading provider mappings", async (_name, scenarioId, customerId, actionId) => {
@@ -122,7 +123,7 @@ describe("Kit 5 server-side scenario mappings", () => {
     await expect(createKit5FixtureCheckpointResolver(pool)({
       scenarioId: "kit5-target:00000000-0000-4000-8000-000000000001",
       customerId: "acct_bloom001",
-      actionId: "kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001",
+      actionId: "kit5-target:00000000-0000-4000-8000-000000000001:fixture-checkpoint:txn_bloom_supplier_001",
     })).resolves.toBeNull();
   });
 
