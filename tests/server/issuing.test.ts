@@ -152,6 +152,7 @@ describe("issuing simulation operation", () => {
       transaction_amount: 9000,
       transaction_currency: "USD",
       merchant_category_code: "5411",
+      merchant_info: input.merchant.padEnd(43, " "),
     });
     expect(headers.get("x-api-key")).toBeNull();
   });

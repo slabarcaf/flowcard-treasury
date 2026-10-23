@@ -234,19 +234,28 @@ export async function reconcileKit5CheckpointLifecycle(
     return { status: "rejected", reason: "checkpoint_lifecycle_conflict" };
   }
 
-  let lifecycle: unknown | null;
+  const policyFacts = fixture.policyFacts?.(input.customerId);
+  if (!policyFacts || !matchesTrustedCheckpointRequest(attempt.requestFacts, customer, policyFacts)) {
+    return unresolvedCheckpoint(attempt);
+  }
+
+  let lifecycleEvents: unknown[] | null;
   try {
-    lifecycle = await gateway.getIssuingLifecycle(input.lifecycleId, customer.accountId);
+    lifecycleEvents = await gateway.getIssuingLifecycleEvents?.(input.lifecycleId, customer.accountId) ?? null;
   } catch {
     return { status: attempt.status === "ambiguous" ? "ambiguous" : "in_progress", attempt };
   }
-  if (lifecycle === null) {
-    return { status: attempt.status === "ambiguous" ? "ambiguous" : "in_progress", attempt };
-  }
+  if (lifecycleEvents === null) return unresolvedCheckpoint(attempt);
+
+  const matchingEvents = lifecycleEvents.filter((event) =>
+    matchesCheckpointLifecycle(event, attempt!.requestFacts, customer.accountId, input.lifecycleId));
+  if (matchingEvents.length !== 1) return unresolvedCheckpoint(attempt);
 
   let result: IssuingSimulationResponse;
   try {
-    result = normalizeIssuingResponse(lifecycle, input.lifecycleId);
+    const event = normalizeCheckpointLifecycleEvent(matchingEvents[0], input.lifecycleId);
+    if (!event) return unresolvedCheckpoint(attempt);
+    result = normalizeIssuingResponse(event, input.lifecycleId);
   } catch {
     return { status: "ambiguous", attempt };
   }
@@ -262,6 +271,77 @@ export async function reconcileKit5CheckpointLifecycle(
   }
   await finishKit5Attempt(pool, { ...input, status: "completed", result: resultRecord(result) });
   return { status: "completed", attempt: await requiredAttempt(pool, input), result };
+}
+
+function matchesTrustedCheckpointRequest(
+  saved: Kit5CardAttempt["requestFacts"],
+  customer: Omit<IssuingSimulationInput, "scenarioId">,
+  policyFacts: ReturnType<NonNullable<Kit5CustomerFixture["policyFacts"]>>,
+): boolean {
+  return saved !== null && saved.accountId === customer.accountId && saved.cardId === customer.cardId &&
+    saved.amountCents === customer.amountCents && saved.currency === customer.currency &&
+    saved.merchant === customer.merchant && saved.transactionType === policyFacts.transactionType &&
+    saved.transactionCategory === policyFacts.transactionCategory &&
+    saved.merchantCategoryCode === policyFacts.merchantCategoryCode;
+}
+
+/** A provider lookup is scoped to the trusted connected account and must establish every checkpoint identity. */
+function matchesCheckpointLifecycle(
+  value: unknown,
+  facts: Kit5CardAttempt["requestFacts"],
+  scopedAccountId: string,
+  expectedLifecycleId: string,
+): boolean {
+  if (facts === null || typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const lifecycle = value as Record<string, unknown>;
+  const merchant = typeof lifecycle.merchant === "object" && lifecycle.merchant !== null && !Array.isArray(lifecycle.merchant)
+    ? lifecycle.merchant as Record<string, unknown>
+    : null;
+  const transactionAmount = lifecycle.transaction_amount;
+  const amountCents = typeof transactionAmount === "number" && Number.isFinite(transactionAmount)
+    ? Math.round(transactionAmount * 100)
+    : null;
+  const responseAccountId = lifecycle.account_id;
+  const transactionCurrency = typeof lifecycle.transaction_currency === "string"
+    ? lifecycle.transaction_currency.trim().toUpperCase()
+    : "";
+  const merchantName = typeof merchant?.name === "string" ? merchant.name.trim() : "";
+  const merchantCategoryCode = typeof merchant?.category_code === "string"
+    ? merchant.category_code.trim()
+    : typeof lifecycle.merchant_category_code === "string"
+      ? lifecycle.merchant_category_code.trim()
+      : "";
+  const transactionType = lifecycle.type ?? lifecycle.transaction_type;
+  const responseLifecycleId = lifecycle.card_transaction_lifecycle_id ?? lifecycle.lifecycle_id;
+
+  return facts.accountId === scopedAccountId &&
+    (responseAccountId === undefined || responseAccountId === scopedAccountId) &&
+    responseLifecycleId === expectedLifecycleId &&
+    lifecycle.card_id === facts.cardId &&
+    amountCents === facts.amountCents && typeof transactionAmount === "number" &&
+    Math.abs(transactionAmount * 100 - facts.amountCents) <= 1e-6 &&
+    transactionCurrency === facts.currency.toUpperCase() &&
+    merchantName === facts.merchant &&
+    merchantCategoryCode === facts.merchantCategoryCode &&
+    transactionType === facts.transactionType &&
+    lifecycle.transaction_category === facts.transactionCategory;
+}
+
+function normalizeCheckpointLifecycleEvent(value: unknown, expectedLifecycleId: string): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const event = value as Record<string, unknown>;
+  const eventId = event.card_transaction_event_id ?? event.id;
+  const lifecycleId = event.card_transaction_lifecycle_id ?? event.lifecycle_id;
+  if (typeof eventId !== "string" || typeof lifecycleId !== "string" || lifecycleId !== expectedLifecycleId) return null;
+  return {
+    ...event,
+    card_transaction_event_id: eventId,
+    card_transaction_lifecycle_id: lifecycleId,
+  };
+}
+
+function unresolvedCheckpoint(attempt: Kit5CardAttempt): NextCustomerOutcome {
+  return { status: attempt.status === "ambiguous" ? "ambiguous" : "in_progress", attempt };
 }
 
 async function maybeFundAndRetry(

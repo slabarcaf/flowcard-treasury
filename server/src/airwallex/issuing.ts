@@ -70,19 +70,31 @@ export function normalizeIssuingResponse(value: unknown, expectedLifecycleId?: s
     throw new Error("Airwallex issuing simulation returned a malformed failure_reason");
   }
 
-  const cardTransactionEventId = requiredProviderId(response.card_transaction_event_id, "card_transaction_event_id");
+  const cardTransactionEventId = requiredProviderId(
+    response.card_transaction_event_id ?? response.id,
+    "card_transaction_event_id",
+  );
   const cardTransactionId = requiredProviderId(response.card_transaction_id, "card_transaction_id");
-  const cardTransactionLifecycleId = requiredProviderId(response.card_transaction_lifecycle_id, "card_transaction_lifecycle_id");
+  const cardTransactionLifecycleId = requiredProviderId(
+    response.card_transaction_lifecycle_id ?? response.lifecycle_id,
+    "card_transaction_lifecycle_id",
+  );
   if (expectedLifecycleId && cardTransactionLifecycleId !== expectedLifecycleId) {
     throw new Error("Airwallex issuing simulation returned a different lifecycle ID");
   }
 
-  const transactionType = response.transaction_type;
+  const transactionType = response.transaction_type ?? response.type;
   if (transactionType !== undefined && transactionType !== "AUTHORIZATION" && transactionType !== "CLEARING") {
     throw new Error("Airwallex issuing simulation returned a malformed transaction_type");
   }
   const transactionCategory = optionalProviderString(response.transaction_category, "transaction_category");
-  const merchantCategoryCode = optionalProviderString(response.merchant_category_code, "merchant_category_code");
+  const merchant = typeof response.merchant === "object" && response.merchant !== null && !Array.isArray(response.merchant)
+    ? response.merchant as Record<string, unknown>
+    : null;
+  const merchantCategoryCode = optionalProviderString(
+    response.merchant_category_code ?? merchant?.category_code,
+    "merchant_category_code",
+  );
   const accountId = optionalProviderString(response.account_id, "account_id");
   const cardId = optionalProviderString(response.card_id, "card_id");
   const transactionCurrency = optionalProviderString(response.transaction_currency, "transaction_currency");

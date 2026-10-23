@@ -110,11 +110,46 @@ describe("Airwallex gateway", () => {
       transaction_amount: 9000,
       transaction_currency: "USD",
       merchant_category_code: "5411",
+      merchant_info: "Supplier".padEnd(43, " "),
       card_transaction_lifecycle_id: "d8af1614-a6a1-4d45-aae7-6858fc6d9ede",
     });
     expect(requestBody).not.toHaveProperty("transaction_failure_reason");
     expect(headers[1].get("x-on-behalf-of")).toBe("acct_bloom");
     expect(headers[1].get("x-api-version")).toBe("2026-08-21");
+  });
+
+  it("retrieves all issuing events for a lifecycle with account scoping and pagination", async () => {
+    const calls: Array<{ url: URL; headers: Headers }> = [];
+    const gateway = new HttpAirwallexGateway({
+      baseUrl: "https://airwallex.invalid",
+      clientId: "id",
+      apiKey: "key",
+      fetcher: async (input, init = {}) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/authentication/login")) {
+          return new Response(JSON.stringify({ token: "access" }));
+        }
+        calls.push({ url, headers: new Headers(init.headers) });
+        if (url.searchParams.get("page") === "next-bookmark") {
+          return new Response(JSON.stringify({ items: [{ id: "event-2" }], has_more: false }));
+        }
+        return new Response(JSON.stringify({ items: [{ id: "event-1" }], has_more: true, page_after: "next-bookmark" }));
+      },
+    });
+
+    await expect(gateway.getIssuingLifecycleEvents("lifecycle-1", "account-bloom")).resolves.toEqual([
+      { id: "event-1" }, { id: "event-2" },
+    ]);
+
+    expect(calls.map(({ url }) => url.pathname)).toEqual([
+      "/api/v1/issuing/card_transaction_events",
+      "/api/v1/issuing/card_transaction_events",
+    ]);
+    expect(calls[0]?.url.searchParams.get("lifecycle_id")).toBe("lifecycle-1");
+    expect(calls[0]?.url.searchParams.get("page_size")).toBe("100");
+    expect(calls[1]?.url.searchParams.get("page")).toBe("next-bookmark");
+    expect(calls[0]?.headers.get("x-on-behalf-of")).toBe("account-bloom");
+    expect(calls[0]?.headers.get("x-api-version")).toBe("2026-08-21");
   });
 
   it("creates a settled Global Account deposit simulation on behalf of a connected account", async () => {
