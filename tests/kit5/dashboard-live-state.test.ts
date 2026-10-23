@@ -248,7 +248,7 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(retryRequest).toEqual(firstRequest);
     expect(retryRequest).toMatchObject({ customerId: 'acct_bloom001' });
     expect(retryRequest.scenarioId).toMatch(/^original:[0-9a-f-]{36}$/i);
-    expect(retryRequest.actionId).toBe(`${retryRequest.scenarioId}:txn_bloom_payroll_001`);
+    expect(retryRequest.actionId).toBe(`${retryRequest.scenarioId}:live:txn_bloom_payroll_001`);
   });
 
   it('releases the submission lock after an explicit rejection and retries the same customer', async () => {
@@ -587,6 +587,51 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(dashboard.fixtureCheckpointUnresolved).toBe(true);
   });
 
+  it('adopts the server-owned unresolved attempt after a new browser session loses its run identity', async () => {
+    const savedRunId = '00000000-0000-4000-8000-000000000009';
+    const savedScenarioId = `kit5-target:${savedRunId}`;
+    const savedActionId = `${savedScenarioId}:txn_bloom_supplier_001`;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({
+        status: 'ambiguous',
+        scenarioId: savedScenarioId,
+        customerId: 'acct_bloom001',
+        actionId: savedActionId,
+        attemptId: savedActionId,
+        lifecycleId: '33333333-3333-4333-8333-333333333333',
+        attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+      }) });
+    vi.stubGlobal('fetch', fetchMock);
+    let dashboard = renderDashboard();
+    dashboard.selectScenario('kit5-target');
+    dashboard = renderDashboard();
+    dashboard.selectMode('fixture-checkpoint');
+    dashboard = renderDashboard();
+    dashboard.scan();
+    dashboard = renderDashboard();
+
+    await dashboard.authenticateOperator('runtime-only-token');
+    dashboard = renderDashboard();
+
+    expect(dashboard.mode).toBe('fixture-checkpoint');
+    expect(dashboard.fixtureCheckpointScenarioId).toBe(savedScenarioId);
+    expect(dashboard.fixtureCheckpointRunId).toBe(savedRunId);
+    expect(dashboard.fixtureCheckpointActivity).toMatchObject({
+      scenarioId: savedScenarioId,
+      customerId: 'acct_bloom001',
+      actionId: savedActionId,
+      status: 'ambiguous',
+      lifecycleId: '33333333-3333-4333-8333-333333333333',
+    });
+    expect(dashboard.fixtureCheckpointUnresolved).toBe(true);
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:8000/api/kit5/session',
+      'http://localhost:8000/api/kit5/fixture-checkpoint/recover',
+    ]);
+  });
+
   it('requires the exact provider insufficient-funds decline and reuses one action identity per run', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ approvalAvailable: false }) })
@@ -745,5 +790,6 @@ describe('Kit 5 live dashboard recovery state', () => {
     const nextRequest = JSON.parse(String(checkpointCalls[1]![1]?.body)) as { scenarioId: string; actionId: string };
     expect(nextRequest.scenarioId).not.toBe(firstRequest.scenarioId);
     expect(nextRequest.actionId).not.toBe(firstRequest.actionId);
+    expect(JSON.parse(String(checkpointCalls[1]![1]?.body))).toMatchObject({ startNew: true });
   });
 });

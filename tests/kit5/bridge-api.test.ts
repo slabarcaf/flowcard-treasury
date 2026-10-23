@@ -87,6 +87,51 @@ describe('Kit 5 ledger API client', () => {
     expect(Object.keys(submittedBody).sort()).toEqual(['actionId', 'customerId', 'scenarioId']);
   });
 
+  it('recovers the saved server checkpoint identity after browser storage loss', async () => {
+    const recovery = {
+      status: 'ambiguous',
+      scenarioId: 'kit5-target:00000000-0000-4000-8000-000000000009',
+      customerId: 'acct_bloom001',
+      actionId: 'kit5-target:00000000-0000-4000-8000-000000000009:txn_bloom_supplier_001',
+      attemptId: 'kit5-target:00000000-0000-4000-8000-000000000009:txn_bloom_supplier_001',
+      lifecycleId: '33333333-3333-4333-8333-333333333333',
+      attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+    } as const;
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => recovery });
+    const client = new BridgeApiClient('http://localhost:8000', fetchImpl as unknown as typeof fetch);
+
+    await expect(client.recoverFixtureCheckpoint()).resolves.toEqual(recovery);
+    expect(fetchImpl).toHaveBeenCalledWith('http://localhost:8000/api/kit5/fixture-checkpoint/recover', {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: '{}',
+    });
+  });
+
+  it('marks a newly confirmed checkpoint run explicitly', async () => {
+    const input = {
+      scenarioId: 'kit5-target:00000000-0000-4000-8000-000000000002',
+      customerId: 'acct_bloom001',
+      actionId: 'kit5-target:00000000-0000-4000-8000-000000000002:txn_bloom_supplier_001',
+      startNew: true,
+    };
+    const response = {
+      status: 'in_progress',
+      scenarioId: input.scenarioId,
+      customerId: input.customerId,
+      actionId: input.actionId,
+      attemptId: input.actionId,
+      lifecycleId: null,
+      attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+    } as const;
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => response });
+    const client = new BridgeApiClient('', fetchImpl as unknown as typeof fetch);
+
+    await expect(client.fixtureCheckpoint(input)).resolves.toEqual(response);
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body))).toEqual(input);
+  });
+
   it('preserves an ambiguous response for same-identity recovery', async () => {
     const checkpoint = {
       status: 'ambiguous',

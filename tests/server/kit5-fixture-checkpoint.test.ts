@@ -71,6 +71,13 @@ class MemoryPool implements DatabasePool {
   readonly attempts = new Map<string, Kit5CardAttempt>();
   readonly rosterRows: Record<string, unknown>[];
   readonly query = vi.fn(async <Row>(sql: string, values: readonly unknown[] = []): Promise<QueryResult<Row>> => {
+    if (sql.includes("FROM kit5_card_attempts") && sql.includes("ORDER BY created_at DESC")) {
+      const attempts = [...this.attempts.values()].filter((attempt) =>
+        attempt.customerId === customerId && attempt.scenarioId.startsWith("kit5-target:") &&
+        attempt.actionId === `${attempt.scenarioId}:txn_bloom_supplier_001`);
+      const latest = attempts.at(-1);
+      return { rows: latest ? [this.row(latest) as Row] : [], rowCount: latest ? 1 : 0 };
+    }
     if (sql.includes("FROM customer_roster AS roster")) {
       const ids = values[0] as string[];
       const rows = this.rosterRows.filter((row) => ids.includes(String(row.customer_id)));
@@ -80,6 +87,13 @@ class MemoryPool implements DatabasePool {
       const attempt = this.attempt(String(values[0]), String(values[1]));
       if (!attempt || attempt.status !== "accepted") return { rows: [], rowCount: 0 };
       attempt.status = "submitting";
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes("SET funding_claimed = true")) {
+      const attempt = this.attempt(String(values[0]), String(values[1]));
+      if (!attempt || attempt.status !== "completed" || attempt.fundingClaimed) return { rows: [], rowCount: 0 };
+      attempt.fundingClaimed = true;
+      attempt.policyStatus = "evaluating";
       return { rows: [], rowCount: 1 };
     }
     if (sql.includes("SET status = 'ambiguous', provider_result = NULL")) {
@@ -133,6 +147,14 @@ class MemoryPool implements DatabasePool {
     return {
       query: async <Row>(sql: string, values: readonly unknown[] = []) => {
         if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [], rowCount: 0 };
+        if (sql.includes("pg_advisory_xact_lock")) return { rows: [], rowCount: 1 };
+        if (sql.includes("FROM kit5_card_attempts") && sql.includes("ORDER BY created_at DESC")) {
+          const attempts = [...this.attempts.values()].filter((attempt) =>
+            attempt.customerId === customerId && attempt.scenarioId.startsWith("kit5-target:") &&
+            attempt.actionId === `${attempt.scenarioId}:txn_bloom_supplier_001`);
+          const latest = attempts.at(-1);
+          return { rows: latest ? [this.row(latest) as Row] : [], rowCount: latest ? 1 : 0 };
+        }
         if (sql.includes("INSERT INTO kit5_demo_scenario_state")) {
           if (!this.nextIndex.has(String(values[0]))) this.nextIndex.set(String(values[0]), 0);
           return { rows: [], rowCount: 1 };
@@ -348,6 +370,120 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     expect(pool.query).not.toHaveBeenCalled();
   });
 
+  it("rejects the hybrid checkpoint identity on the generic route before provider or bridge work", async () => {
+    const pool = new MemoryPool();
+    const createIssuingSimulation = vi.fn();
+    const funding = {
+      evaluate: vi.fn(),
+      reserveAndWaitForSettlement: vi.fn(),
+      retryCardAfterSettlement: vi.fn(),
+    } as unknown as Kit5BridgeFundingBoundary;
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() }, undefined, funding);
+
+    const result = await send(handler, { scenarioId, customerId, actionId }, true, "/api/kit5/next-customer");
+
+    expect(result).toEqual({ statusCode: 409, body: { status: "rejected", reason: "use_fixture_checkpoint_route" } });
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(createIssuingSimulation).not.toHaveBeenCalled();
+    expect(funding.evaluate).not.toHaveBeenCalled();
+    expect(funding.reserveAndWaitForSettlement).not.toHaveBeenCalled();
+    expect(funding.retryCardAfterSettlement).not.toHaveBeenCalled();
+  });
+
+  it("preserves the full Sandbox-live funding path for the explicitly marked live action", async () => {
+    const pool = new MemoryPool();
+    const createIssuingSimulation = vi.fn(async () => matchingCheckpointSimulation(providerLifecycleId));
+    const funding = {
+      evaluate: vi.fn(async () => ({
+        status: "approved" as const,
+        command: { bridgeId: "00000000-0000-4000-8000-000000000008", customerId, amountCents: 700_000, repaymentTerm: "asap" as const },
+      })),
+      reserveAndWaitForSettlement: vi.fn(async () => ({ bridgeId: "bridge-live", status: "settled" as const })),
+      retryCardAfterSettlement: vi.fn(async () => {}),
+    } as unknown as Kit5BridgeFundingBoundary;
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() }, undefined, funding);
+    const liveActionId = `${scenarioId}:live:txn_bloom_supplier_001`;
+
+    const result = await send(handler, { scenarioId, customerId, actionId: liveActionId }, true, "/api/kit5/next-customer");
+
+    expect(result.statusCode).toBe(202);
+    expect(createIssuingSimulation).toHaveBeenCalledOnce();
+    expect(funding.evaluate).toHaveBeenCalledOnce();
+    expect(funding.reserveAndWaitForSettlement).toHaveBeenCalledOnce();
+    expect(funding.retryCardAfterSettlement).toHaveBeenCalledOnce();
+  });
+
+  it("adopts the unresolved server attempt across fresh run UUIDs without another create", async () => {
+    const pool = new MemoryPool();
+    const createIssuingSimulation = vi.fn(async () => ({ process_result: "PROCESSING" }));
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() });
+    const anotherRunId = "00000000-0000-4000-8000-000000000002";
+    const anotherScenarioId = `kit5-target:${anotherRunId}`;
+    const anotherActionId = `${anotherScenarioId}:txn_bloom_supplier_001`;
+
+    const first = await send(handler, { scenarioId, customerId, actionId });
+    const replay = await send(handler, { scenarioId: anotherScenarioId, customerId, actionId: anotherActionId, startNew: true });
+
+    expect(first.statusCode).toBe(202);
+    expect(replay.statusCode).toBe(202);
+    expect(replay.body).toMatchObject({
+      status: "ambiguous",
+      scenarioId,
+      customerId,
+      actionId,
+      attemptId: actionId,
+      lifecycleId: pool.attempts.get(`${scenarioId}/${actionId}`)?.lifecycleId,
+    });
+    expect(createIssuingSimulation).toHaveBeenCalledOnce();
+    expect(pool.attempts.size).toBe(1);
+  });
+
+  it("allows a new provider run only after resolution and explicit presenter confirmation", async () => {
+    const pool = new MemoryPool();
+    const createIssuingSimulation = vi.fn(async (request: { lifecycleId?: string }) =>
+      matchingCheckpointSimulation(request.lifecycleId ?? "missing-lifecycle"));
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() });
+    const nextRunId = "00000000-0000-4000-8000-000000000002";
+    const nextScenarioId = `kit5-target:${nextRunId}`;
+    const nextActionId = `${nextScenarioId}:txn_bloom_supplier_001`;
+
+    await send(handler, { scenarioId, customerId, actionId });
+    const replay = await send(handler, { scenarioId: nextScenarioId, customerId, actionId: nextActionId });
+    const started = await send(handler, {
+      scenarioId: nextScenarioId,
+      customerId,
+      actionId: nextActionId,
+      startNew: true,
+    });
+
+    expect(replay.statusCode).toBe(202);
+    expect(replay.body).toMatchObject({ status: "completed", scenarioId, actionId });
+    expect(started.statusCode).toBe(200);
+    expect(started.body).toMatchObject({ status: "completed", scenarioId: nextScenarioId, actionId: nextActionId });
+    expect(createIssuingSimulation).toHaveBeenCalledTimes(2);
+    expect(pool.attempts.size).toBe(2);
+  });
+
+  it("returns the saved attempt identity through authenticated reload recovery", async () => {
+    const pool = new MemoryPool();
+    const createIssuingSimulation = vi.fn(async () => ({ process_result: "PROCESSING" }));
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn() });
+    await send(handler, { scenarioId, customerId, actionId });
+
+    const recovered = await send(handler, {}, true, "/api/kit5/fixture-checkpoint/recover");
+
+    expect(recovered.statusCode).toBe(200);
+    expect(recovered.body).toMatchObject({
+      status: "ambiguous",
+      scenarioId,
+      customerId,
+      actionId,
+      attemptId: actionId,
+      lifecycleId: pool.attempts.get(`${scenarioId}/${actionId}`)?.lifecycleId,
+    });
+    expect(createIssuingSimulation).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ["missing mapping", customerIds.slice(1).map((id) => binding(id))],
     ["inactive roster mapping", customerIds.map((id) => binding(id, id === customerId ? { roster_active: false } : {}))],
@@ -365,7 +501,8 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
 
   it("persists the normalized Bloom attempt once and never invokes bridge funding or card retry", async () => {
     const pool = new MemoryPool();
-    const createIssuingSimulation = vi.fn(async () => matchingCheckpointSimulation("life_bloom_checkpoint"));
+    const createIssuingSimulation = vi.fn(async (request: { lifecycleId?: string }) =>
+      matchingCheckpointSimulation(request.lifecycleId ?? "missing-lifecycle"));
     const boundary = {
       evaluate: vi.fn(),
       reserveAndWaitForSettlement: vi.fn(),
@@ -392,15 +529,18 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
       statusCode: 200,
       body: {
         status: "completed",
+        scenarioId,
+        customerId,
+        actionId,
         attemptId: actionId,
-        lifecycleId: "life_bloom_checkpoint",
+        lifecycleId: expect.any(String),
         attemptedAmount: { amountCents: 900_000, currency: "USD" },
         result: {
           processResult: "DECLINED",
           failureReason: "INSUFFICIENT_FUNDS",
           cardTransactionEventId: "evt_bloom_checkpoint",
           cardTransactionId: "txn_bloom_checkpoint",
-          cardTransactionLifecycleId: "life_bloom_checkpoint",
+          cardTransactionLifecycleId: expect.any(String),
           transactionType: "AUTHORIZATION",
           transactionCategory: "PURCHASE",
           merchantName: "Supplier",
@@ -414,9 +554,9 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.body.attemptId).toBe(actionId);
-    expect(attempt).toMatchObject({ customerId, status: "completed", lifecycleId: "life_bloom_checkpoint", policyStatus: "not_started" });
+    expect(attempt).toMatchObject({ customerId, status: "completed", lifecycleId: expect.any(String), policyStatus: "not_started" });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
-    expect(createIssuingSimulation).toHaveBeenCalledWith({
+    expect(createIssuingSimulation).toHaveBeenCalledWith(expect.objectContaining({
       accountId: `verified-account-${customerId}`,
       cardId: `verified-card-${customerId}`,
       amountCents: 900_000,
@@ -424,7 +564,9 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
       merchant: "Supplier",
       merchantCategoryCode: "5411",
       scenarioId,
-    });
+      lifecycleId: expect.any(String),
+    }));
+    expect(createIssuingSimulation.mock.calls[0]?.[0].lifecycleId).toBe(attempt?.lifecycleId);
     expect(boundary.evaluate).not.toHaveBeenCalled();
     expect(boundary.reserveAndWaitForSettlement).not.toHaveBeenCalled();
     expect(boundary.retryCardAfterSettlement).not.toHaveBeenCalled();
@@ -445,11 +587,14 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
 
     expect(first).toEqual({
       statusCode: 202,
-      body: { status: "ambiguous", attemptId: actionId, lifecycleId: null, attemptedAmount: { amountCents: 900_000, currency: "USD" } },
+      body: expect.objectContaining({
+        status: "ambiguous", scenarioId, customerId, actionId, attemptId: actionId,
+        lifecycleId: expect.any(String), attemptedAmount: { amountCents: 900_000, currency: "USD" },
+      }),
     });
     expect(replay.statusCode).toBe(202);
     expect(replay.body.status).toBe("ambiguous");
-    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({ status: "ambiguous", lifecycleId: null });
+    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({ status: "ambiguous", lifecycleId: expect.any(String) });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
   });
 
@@ -465,16 +610,17 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     ["missing merchant", { merchant: undefined }],
   ])("keeps an immediate create result ambiguous when it has a %s", async (_name, mismatch) => {
     const pool = new MemoryPool();
-    const createIssuingSimulation = vi.fn(async () => matchingCheckpointSimulation(providerLifecycleId, mismatch));
+    const createIssuingSimulation = vi.fn(async (request: { lifecycleId?: string }) =>
+      matchingCheckpointSimulation(request.lifecycleId ?? "missing-lifecycle", mismatch));
     const getIssuingLifecycle = vi.fn(async () => { throw new Error("checkpoint must use event-level lookup"); });
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle });
 
     const result = await send(handler, { scenarioId, customerId, actionId });
 
     expect(result.statusCode).toBe(202);
-    expect(result.body).toMatchObject({ status: "ambiguous", lifecycleId: providerLifecycleId });
+    expect(result.body).toMatchObject({ status: "ambiguous", lifecycleId: expect.any(String) });
     expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({
-      status: "ambiguous", lifecycleId: providerLifecycleId, result: null,
+      status: "ambiguous", lifecycleId: expect.any(String), result: null,
     });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
     expect(getIssuingLifecycle).not.toHaveBeenCalled();
@@ -482,9 +628,9 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
 
   it("reconciles a mismatched immediate result from the saved lifecycle without another create", async () => {
     const pool = new MemoryPool();
-    const createIssuingSimulation = vi.fn(async () =>
-      matchingCheckpointSimulation(providerLifecycleId, { card_id: "other-card" }));
-    const getIssuingLifecycleEvents = vi.fn(async () => [matchingCheckpointLifecycle(providerLifecycleId)]);
+    const createIssuingSimulation = vi.fn(async (request: { lifecycleId?: string }) =>
+      matchingCheckpointSimulation(request.lifecycleId ?? "missing-lifecycle", { card_id: "other-card" }));
+    const getIssuingLifecycleEvents = vi.fn(async (id: string) => [matchingCheckpointLifecycle(id)]);
     const handler = route(pool, {
       createIssuingSimulation,
       getIssuingLifecycle: vi.fn(),
@@ -495,9 +641,9 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     const replay = await send(handler, { scenarioId, customerId, actionId });
 
     expect(first.statusCode).toBe(202);
-    expect(first.body).toMatchObject({ status: "ambiguous", lifecycleId: providerLifecycleId });
+    expect(first.body).toMatchObject({ status: "ambiguous", lifecycleId: expect.any(String) });
     expect(replay.statusCode).toBe(200);
-    expect(replay.body).toMatchObject({ status: "completed", lifecycleId: providerLifecycleId });
+    expect(replay.body).toMatchObject({ status: "completed", lifecycleId: first.body.lifecycleId });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
     expect(getIssuingLifecycleEvents).toHaveBeenCalledOnce();
   });
@@ -627,33 +773,34 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     const pool = new MemoryPool();
     const createIssuingSimulation = vi.fn(async () => ({ process_result: "PROCESSING" }));
     const getIssuingLifecycleEvents = vi.fn(async (id: string, accountId: string) => {
-      expect(id).toBe(providerLifecycleId);
       expect(accountId).toBe(`verified-account-${customerId}`);
-      return [matchingCheckpointLifecycle(providerLifecycleId)];
+      return [matchingCheckpointLifecycle(id)];
     });
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn(), getIssuingLifecycleEvents });
     await send(handler, { scenarioId, customerId, actionId });
+    const attempt = pool.attempts.get(`${scenarioId}/${actionId}`)!;
+    const lifecycleId = attempt.lifecycleId!;
 
     const reconciled = await send(handler, {
-      scenarioId, customerId, actionId, lifecycleId: providerLifecycleId,
+      scenarioId, customerId, actionId, lifecycleId,
     }, true, "/api/kit5/fixture-checkpoint/reconcile");
 
     expect(reconciled.statusCode).toBe(200);
     expect(reconciled.body).toMatchObject({
       status: "completed",
       attemptId: actionId,
-      lifecycleId: providerLifecycleId,
+      lifecycleId,
       result: {
         processResult: "DECLINED",
         failureReason: "INSUFFICIENT_FUNDS",
-        cardTransactionLifecycleId: providerLifecycleId,
+        cardTransactionLifecycleId: lifecycleId,
       },
     });
     expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({
-      status: "completed", lifecycleId: providerLifecycleId,
+      status: "completed", lifecycleId,
     });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
-    expect(getIssuingLifecycleEvents).toHaveBeenCalledOnce();
+    expect(getIssuingLifecycleEvents).toHaveBeenCalledWith(lifecycleId, `verified-account-${customerId}`);
   });
 
   it.each([
@@ -669,18 +816,19 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
   ])("leaves an operator lifecycle unresolved when it has a %s", async (_name, mismatch) => {
     const pool = new MemoryPool();
     const createIssuingSimulation = vi.fn(async () => ({ process_result: "PROCESSING" }));
-    const getIssuingLifecycleEvents = vi.fn(async () => [matchingCheckpointLifecycle(providerLifecycleId, mismatch)]);
+    const getIssuingLifecycleEvents = vi.fn(async (id: string) => [matchingCheckpointLifecycle(id, mismatch)]);
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn(), getIssuingLifecycleEvents });
     await send(handler, { scenarioId, customerId, actionId });
+    const lifecycleId = pool.attempts.get(`${scenarioId}/${actionId}`)!.lifecycleId!;
 
     const reconciled = await send(handler, {
-      scenarioId, customerId, actionId, lifecycleId: providerLifecycleId,
+      scenarioId, customerId, actionId, lifecycleId,
     }, true, "/api/kit5/fixture-checkpoint/reconcile");
 
     expect(reconciled.statusCode).toBe(202);
-    expect(reconciled.body).toMatchObject({ status: "ambiguous", lifecycleId: null });
+    expect(reconciled.body).toMatchObject({ status: "ambiguous", lifecycleId });
     expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({
-      status: "ambiguous", lifecycleId: null,
+      status: "ambiguous", lifecycleId,
     });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
     expect(getIssuingLifecycleEvents).toHaveBeenCalledOnce();
@@ -689,19 +837,22 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
   it("keeps duplicate matching events unresolved instead of choosing one", async () => {
     const pool = new MemoryPool();
     const createIssuingSimulation = vi.fn(async () => ({ process_result: "PROCESSING" }));
-    const matching = matchingCheckpointLifecycle(providerLifecycleId);
-    const getIssuingLifecycleEvents = vi.fn(async () => [matching, { ...matching, id: "evt_bloom_duplicate" }]);
+    const getIssuingLifecycleEvents = vi.fn(async (id: string) => {
+      const matching = matchingCheckpointLifecycle(id);
+      return [matching, { ...matching, id: "evt_bloom_duplicate" }];
+    });
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn(), getIssuingLifecycleEvents });
     await send(handler, { scenarioId, customerId, actionId });
+    const lifecycleId = pool.attempts.get(`${scenarioId}/${actionId}`)!.lifecycleId!;
 
     const reconciled = await send(handler, {
-      scenarioId, customerId, actionId, lifecycleId: providerLifecycleId,
+      scenarioId, customerId, actionId, lifecycleId,
     }, true, "/api/kit5/fixture-checkpoint/reconcile");
 
     expect(reconciled.statusCode).toBe(202);
-    expect(reconciled.body).toMatchObject({ status: "ambiguous", lifecycleId: null });
+    expect(reconciled.body).toMatchObject({ status: "ambiguous", lifecycleId });
     expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({
-      status: "ambiguous", lifecycleId: null,
+      status: "ambiguous", lifecycleId,
     });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
   });
@@ -712,21 +863,23 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
     const getIssuingLifecycleEvents = vi.fn(async () => []);
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn(), getIssuingLifecycleEvents });
     await send(handler, { scenarioId, customerId, actionId });
+    const lifecycleId = pool.attempts.get(`${scenarioId}/${actionId}`)!.lifecycleId!;
 
     const result = await send(handler, {
-      scenarioId, customerId, actionId, lifecycleId: providerLifecycleId,
+      scenarioId, customerId, actionId, lifecycleId,
     }, true, "/api/kit5/fixture-checkpoint/reconcile");
 
     expect(result.statusCode).toBe(202);
-    expect(result.body).toMatchObject({ status: "ambiguous", lifecycleId: null });
-    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({ status: "ambiguous", lifecycleId: null });
+    expect(result.body).toMatchObject({ status: "ambiguous", lifecycleId });
+    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({ status: "ambiguous", lifecycleId });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
-    expect(getIssuingLifecycleEvents).toHaveBeenCalledWith(providerLifecycleId, `verified-account-${customerId}`);
+    expect(getIssuingLifecycleEvents).toHaveBeenCalledWith(lifecycleId, `verified-account-${customerId}`);
   });
 
   it("returns a saved in-progress lifecycle for reconciliation without resubmitting the create", async () => {
     const pool = new MemoryPool();
-    const createIssuingSimulation = vi.fn(async () => matchingCheckpointSimulation("life_bloom_checkpoint"));
+    const createIssuingSimulation = vi.fn(async (request: { lifecycleId?: string }) =>
+      matchingCheckpointSimulation(request.lifecycleId ?? "missing-lifecycle"));
     const getIssuingLifecycle = vi.fn(async () => null);
     const getIssuingLifecycleEvents = vi.fn(async () => null);
     const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle, getIssuingLifecycleEvents });
@@ -737,17 +890,78 @@ describe("Kit 5 Airwallex fixture checkpoint route", () => {
 
     const result = await send(handler, input);
 
-    expect(result).toEqual({
-      statusCode: 202,
-      body: {
+    expect(result.statusCode).toBe(202);
+    expect(result.body).toMatchObject({
         status: "in_progress",
+        scenarioId,
+        customerId,
+        actionId,
         attemptId: actionId,
-        lifecycleId: "life_bloom_checkpoint",
+        lifecycleId: attempt.lifecycleId,
         attemptedAmount: { amountCents: 900_000, currency: "USD" },
-      },
     });
     expect(createIssuingSimulation).toHaveBeenCalledOnce();
     expect(getIssuingLifecycle).not.toHaveBeenCalled();
-    expect(getIssuingLifecycleEvents).toHaveBeenCalledWith("life_bloom_checkpoint", `verified-account-${customerId}`);
+    expect(getIssuingLifecycleEvents).toHaveBeenCalledWith(attempt.lifecycleId, `verified-account-${customerId}`);
+  });
+
+  it("does not accept a prior identical Bloom transaction when the current attempt has no correlation ID", async () => {
+    const pool = new MemoryPool();
+    pool.attempts.set(`${scenarioId}/${actionId}`, {
+      scenarioId, customerId, actionId, sequenceIndex: 0, lifecycleId: null,
+      status: "ambiguous", result: null, error: "legacy_attempt", fundingClaimed: false,
+      requestFacts: {
+        accountId: `verified-account-${customerId}`, cardId: `verified-card-${customerId}`,
+        amountCents: 900_000, currency: "USD", merchant: "Supplier", transactionType: "AUTHORIZATION",
+        transactionCategory: "PURCHASE", merchantCategoryCode: "5411",
+      },
+      policyStatus: "not_started", policyError: null, policyDecisionId: null, pendingPolicyDecisionId: null,
+      policyActorId: null, policyApprovalReason: null, bridgeId: null,
+      retryLifecycleId: null, retryRequestId: null, retryResult: null, retryError: null,
+    });
+    const getIssuingLifecycleEvents = vi.fn(async () => [matchingCheckpointLifecycle(providerLifecycleId)]);
+    const createIssuingSimulation = vi.fn();
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn(), getIssuingLifecycleEvents });
+
+    const result = await send(handler, {
+      scenarioId, customerId, actionId, lifecycleId: providerLifecycleId,
+    }, true, "/api/kit5/fixture-checkpoint/reconcile");
+
+    expect(result).toEqual({
+      statusCode: 409,
+      body: { status: "rejected", reason: "checkpoint_lifecycle_correlation_unavailable" },
+    });
+    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({ status: "ambiguous", lifecycleId: null });
+    expect(getIssuingLifecycleEvents).not.toHaveBeenCalled();
+    expect(createIssuingSimulation).not.toHaveBeenCalled();
+  });
+
+  it("does not match a same-terms event from an older lifecycle", async () => {
+    const pool = new MemoryPool();
+    pool.attempts.set(`${scenarioId}/${actionId}`, {
+      scenarioId, customerId, actionId, sequenceIndex: 0, lifecycleId: providerLifecycleId,
+      status: "ambiguous", result: null, error: "provider_result_unresolved", fundingClaimed: false,
+      requestFacts: {
+        accountId: `verified-account-${customerId}`, cardId: `verified-card-${customerId}`,
+        amountCents: 900_000, currency: "USD", merchant: "Supplier", transactionType: "AUTHORIZATION",
+        transactionCategory: "PURCHASE", merchantCategoryCode: "5411",
+      },
+      policyStatus: "not_started", policyError: null, policyDecisionId: null, pendingPolicyDecisionId: null,
+      policyActorId: null, policyApprovalReason: null, bridgeId: null,
+      retryLifecycleId: null, retryRequestId: null, retryResult: null, retryError: null,
+    });
+    const olderLifecycleId = "44444444-4444-4444-8444-444444444444";
+    const getIssuingLifecycleEvents = vi.fn(async (_id: string) => [matchingCheckpointLifecycle(olderLifecycleId)]);
+    const createIssuingSimulation = vi.fn();
+    const handler = route(pool, { createIssuingSimulation, getIssuingLifecycle: vi.fn(), getIssuingLifecycleEvents });
+
+    const result = await send(handler, { scenarioId, customerId, actionId });
+
+    expect(result.statusCode).toBe(202);
+    expect(result.body).toMatchObject({ status: "ambiguous", lifecycleId: providerLifecycleId });
+    expect(result.body).not.toHaveProperty("result");
+    expect(getIssuingLifecycleEvents).toHaveBeenCalledWith(providerLifecycleId, `verified-account-${customerId}`);
+    expect(createIssuingSimulation).not.toHaveBeenCalled();
+    expect(pool.attempts.get(`${scenarioId}/${actionId}`)).toMatchObject({ status: "ambiguous", lifecycleId: providerLifecycleId, result: null });
   });
 });

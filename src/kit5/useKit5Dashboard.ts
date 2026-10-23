@@ -115,6 +115,13 @@ function newFixtureCheckpointRun(): Omit<PersistedFixtureCheckpointRun, 'identit
   return { runId: globalThis.crypto.randomUUID(), activity: null, resolution: 'awaiting', enabled: false };
 }
 
+function fixtureCheckpointRunIdFromScenarioId(scenarioId: string, baseScenarioId: string): string | null {
+  const prefix = `${baseScenarioId}:`;
+  if (!scenarioId.startsWith(prefix)) return null;
+  const runId = scenarioId.slice(prefix.length);
+  return LIVE_RUN_ID_PATTERN.test(runId) ? runId : null;
+}
+
 function shouldRestoreFixtureCheckpointMode(run: PersistedFixtureCheckpointRun): boolean {
   return run.enabled || fixtureCheckpointNeedsReconciliation(run.activity) ||
     (run.activity !== null && run.resolution === 'awaiting');
@@ -355,6 +362,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const [fixtureCheckpointResolution, setFixtureCheckpointResolution] = useState<FixtureCheckpointResolution>(initialFixtureCheckpointRun.resolution);
   const [fixtureCheckpointIdentityKnown, setFixtureCheckpointIdentityKnown] = useState(initialFixtureCheckpointRun.identityKnown);
   const [fixtureCheckpointIdentityPersisted, setFixtureCheckpointIdentityPersisted] = useState(initialFixtureCheckpointRun.identityPersisted);
+  const [fixtureCheckpointStartNew, setFixtureCheckpointStartNew] = useState(false);
   const [fixtureCheckpointError, setFixtureCheckpointError] = useState<string | null>(null);
   const [fixtureCheckpointPending, setFixtureCheckpointPending] = useState(false);
   const [liveRunId, setLiveRunId] = useState(initialLiveRun.runId);
@@ -459,6 +467,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     fixtureCheckpointSubmissionRef.current = false;
     setFixtureCheckpointRunId(checkpointRun.runId);
     setFixtureCheckpointActivity(checkpointRun.activity);
+    setFixtureCheckpointStartNew(false);
     setFixtureCheckpointResolution(checkpointRun.resolution);
     setFixtureCheckpointIdentityKnown(checkpointRun.identityKnown);
     setFixtureCheckpointIdentityPersisted(checkpointRun.identityPersisted);
@@ -498,6 +507,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setFixtureCheckpointRunId(nextCheckpointRun.runId);
     setFixtureCheckpointIdentityPersisted(nextCheckpointRun.identityPersisted);
     setFixtureCheckpointActivity(null);
+    setFixtureCheckpointStartNew(false);
     setLiveCustomerIndex(0);
     setLiveAction(null);
     setLiveHistory([]);
@@ -525,6 +535,52 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const crmReEvaluate = useCallback(() => setState((s) => reEvaluateCrm(s)), []);
   const approve = useCallback((requestId: string) => setState((s) => approveRequest(s, requestId)), []);
   const continueAfterAuto = useCallback(() => setState((s) => acknowledge(s)), []);
+
+  const recoverFixtureCheckpointFromServer = useCallback(async () => {
+    if (!apiBaseUrl) return;
+    const recovered = await new BridgeApiClient(apiBaseUrl).recoverFixtureCheckpoint();
+    if (recovered.status === 'not_found') return;
+    const checkpointScenario = scenarios.find((candidate) =>
+      fixtureCheckpointRunIdFromScenarioId(recovered.scenarioId, candidate.id) !== null && candidate.providerCheckpoint);
+    const recoveredRunId = checkpointScenario
+      ? fixtureCheckpointRunIdFromScenarioId(recovered.scenarioId, checkpointScenario.id)
+      : null;
+    if (!checkpointScenario || !recoveredRunId) {
+      setFixtureCheckpointError('The server has a saved checkpoint, but its scenario identity is not recognized. No new provider attempt will be submitted.');
+      return;
+    }
+    const recoveredActivity: FixtureCheckpointActivity = {
+      scenarioId: recovered.scenarioId,
+      customerId: recovered.customerId,
+      actionId: recovered.actionId,
+      status: recovered.status,
+      attemptId: recovered.attemptId,
+      lifecycleId: recovered.lifecycleId,
+      attemptedAmount: recovered.attemptedAmount,
+      result: recovered.result,
+    };
+    const recoveredInputs = structuredClone(checkpointScenario.inputs);
+    liveGenerationRef.current += 1;
+    setScenarioId(checkpointScenario.id);
+    persistSelectedScenarioId(checkpointScenario.id);
+    setInputs(recoveredInputs);
+    setState(start(initialKit5State(recoveredInputs)));
+    setFixtureCheckpointRunId(recoveredRunId);
+    setFixtureCheckpointActivity(recoveredActivity);
+    setFixtureCheckpointResolution('awaiting');
+    setFixtureCheckpointStartNew(false);
+    setFixtureCheckpointIdentityKnown(true);
+    setMode('fixture-checkpoint');
+    const persisted = persistFixtureCheckpointRun(checkpointScenario.id, {
+      runId: recoveredRunId,
+      activity: recoveredActivity,
+      resolution: 'awaiting',
+      enabled: true,
+      identityKnown: true,
+      identityPersisted: true,
+    });
+    setFixtureCheckpointIdentityPersisted(persisted);
+  }, [apiBaseUrl, scenarios]);
 
   const fixtureCheckpointProviderConfirmed = isFixtureCheckpointProviderConfirmed(fixtureCheckpointActivity);
   const fixtureCheckpointUnresolved = fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity);
@@ -618,7 +674,10 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setFixtureCheckpointPending(true);
     setFixtureCheckpointError(null);
     try {
-      const response = await new BridgeApiClient(apiBaseUrl).fixtureCheckpoint(fixtureCheckpointRequest);
+      const response = await new BridgeApiClient(apiBaseUrl).fixtureCheckpoint({
+        ...fixtureCheckpointRequest,
+        ...(fixtureCheckpointStartNew ? { startNew: true } : {}),
+      });
       if (generation !== liveGenerationRef.current) return;
       if (response.status === 'rejected') {
         setFixtureCheckpointActivity({
@@ -631,13 +690,27 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
         return;
       }
       const activity: FixtureCheckpointActivity = {
-        ...fixtureCheckpointRequest,
+        scenarioId: response.scenarioId ?? fixtureCheckpointRequest.scenarioId,
+        customerId: response.customerId ?? fixtureCheckpointRequest.customerId,
+        actionId: response.actionId ?? fixtureCheckpointRequest.actionId,
         status: response.status,
         attemptId: response.attemptId,
         lifecycleId: response.lifecycleId,
         attemptedAmount: response.attemptedAmount,
         result: response.result,
       };
+      const adoptedRunId = response.scenarioId
+        ? fixtureCheckpointRunIdFromScenarioId(response.scenarioId, scenario.id)
+        : fixtureCheckpointRunId;
+      if (!adoptedRunId) {
+        setFixtureCheckpointError('The server returned an invalid checkpoint recovery identity. No new provider attempt will be submitted.');
+        return;
+      }
+      setFixtureCheckpointRunId(adoptedRunId);
+      setFixtureCheckpointStartNew(false);
+      setFixtureCheckpointIdentityKnown(true);
+      setFixtureCheckpointIdentityPersisted(true);
+      setMode('fixture-checkpoint');
       setFixtureCheckpointActivity(activity);
       if (response.status === 'completed') {
         setFixtureCheckpointError(isFixtureCheckpointProviderConfirmed(activity)
@@ -664,7 +737,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
         setFixtureCheckpointPending(false);
       }
     }
-  }, [apiBaseUrl, fixtureCheckpointActivity, fixtureCheckpointIdentityKnown, fixtureCheckpointIdentityPersisted, fixtureCheckpointPaused, fixtureCheckpointPending, fixtureCheckpointRequest, fixtureCheckpointResolution, fixtureCheckpointRunId, fixtureCheckpointTermsCompatible, mode, operatorAuthenticated, scenario.id]);
+  }, [apiBaseUrl, fixtureCheckpointActivity, fixtureCheckpointIdentityKnown, fixtureCheckpointIdentityPersisted, fixtureCheckpointPaused, fixtureCheckpointPending, fixtureCheckpointRequest, fixtureCheckpointResolution, fixtureCheckpointRunId, fixtureCheckpointStartNew, fixtureCheckpointTermsCompatible, mode, operatorAuthenticated, scenario.id]);
 
   const runFixtureCheckpoint = useCallback(async () => {
     if (fixtureCheckpointActivity?.status === 'completed') return;
@@ -743,6 +816,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setFixtureCheckpointIdentityKnown(true);
     setFixtureCheckpointIdentityPersisted(true);
     setFixtureCheckpointActivity(null);
+    setFixtureCheckpointStartNew(true);
     setFixtureCheckpointResolution('awaiting');
     setFixtureCheckpointError(null);
     setFixtureCheckpointPending(false);
@@ -755,11 +829,21 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
       const session = await new BridgeApiClient(apiBaseUrl).createOperatorSession(token);
       setOperatorAuthenticated(true);
       setOperatorApprovalAvailable(session.approvalAvailable);
+      if (scenario.providerCheckpoint && mode === 'fixture-checkpoint' &&
+          (!fixtureCheckpointActivity || fixtureCheckpointNeedsReconciliation(fixtureCheckpointActivity))) {
+        try {
+          await recoverFixtureCheckpointFromServer();
+        } catch (error) {
+          setFixtureCheckpointError(error instanceof Error
+            ? `Could not recover the saved Airwallex checkpoint: ${error.message}`
+            : 'Could not recover the saved Airwallex checkpoint.');
+        }
+      }
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : 'Operator login failed.');
       throw error;
     }
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, fixtureCheckpointActivity, mode, recoverFixtureCheckpointFromServer, scenario.providerCheckpoint]);
 
   const submitNextCustomer = useCallback(async () => {
     if (mode !== 'sandbox-live' || !apiBaseUrl || !operatorAuthenticated || !nextLiveCustomer || liveBlocked || liveSubmissionRef.current) return;
@@ -771,7 +855,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
       const response = await new BridgeApiClient(apiBaseUrl).nextCustomer({
         scenarioId: liveScenarioId,
         customerId: nextLiveCustomer.customer.id,
-        actionId: `${liveScenarioId}:${nextLiveCustomer.event.requestId}`,
+        actionId: `${liveScenarioId}:live:${nextLiveCustomer.event.requestId}`,
       });
       if (generation !== liveGenerationRef.current) return;
       if (response.status === 'rejected') {
@@ -829,7 +913,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
       setLiveAction({
         status: 'unresolved',
         scenarioId: liveScenarioId,
-        attemptId: `${liveScenarioId}:${nextLiveCustomer.event.requestId}`,
+        attemptId: `${liveScenarioId}:live:${nextLiveCustomer.event.requestId}`,
         customerId: nextLiveCustomer.customer.id,
         customerName: nextLiveCustomer.customer.name,
       });

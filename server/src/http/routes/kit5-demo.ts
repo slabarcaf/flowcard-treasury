@@ -4,6 +4,7 @@ import type { AirwallexGateway } from "../../airwallex/client.js";
 import type { DatabasePool } from "../../db/pool.js";
 import { createKit5RepaymentDeposit, type Kit5DepositTarget } from "../../collections/kit5-repayment-deposit.js";
 import { processNextCustomerAction, reconcileKit5CheckpointLifecycle, reconcileKit5CustomerAction, type Kit5BridgeFundingBoundary, type Kit5CustomerFixture, type NextCustomerInput } from "../../demo/next-customer.js";
+import { getLatestKit5FixtureCheckpointAttempt, type Kit5CardAttempt } from "../../db/repositories.js";
 import { isKit5FixtureCheckpointInput } from "../../demo/kit5-scenario-resolver.js";
 import { authenticatedKit5OperatorActor, authorizeKit5OperatorRequest, type Kit5OperatorAuthConfig } from "../kit5-operator-auth.js";
 
@@ -48,11 +49,12 @@ export async function handleKit5FixtureCheckpoint(
     send(response, 400, { error: "invalid_request" });
     return;
   }
-  const input = validateFixtureCheckpointInput(body);
-  if (!input) {
+  const checkpointRequest = validateFixtureCheckpointInput(body);
+  if (!checkpointRequest) {
     send(response, 400, { error: "invalid_fixture_checkpoint" });
     return;
   }
+  const { input, startNew } = checkpointRequest;
   if (!isKit5FixtureCheckpointInput(input)) {
     send(response, 409, { status: "rejected", reason: "fixture_checkpoint_not_allowed" });
     return;
@@ -72,20 +74,46 @@ export async function handleKit5FixtureCheckpoint(
     // and reconciles the Airwallex issuing attempt.
     const outcome = await processNextCustomerAction(dependencies.pool, dependencies.gateway, input, fixture, undefined, {
       requireCheckpointIdentity: true,
+      allowNewCheckpointRun: startNew,
     });
     if (outcome.status === "rejected") {
+      if (outcome.attempt && (outcome.reason === "fixture_checkpoint_run_unresolved" || outcome.reason === "fixture_checkpoint_new_run_requires_confirmation")) {
+        sendCheckpointAttempt(response, 202, outcome.attempt, fixture);
+        return;
+      }
       send(response, 409, { status: "rejected", reason: outcome.reason });
       return;
     }
-    const customer = fixture.resolveCustomer(input.customerId);
-    const body = {
-      status: outcome.status,
-      attemptId: outcome.attempt.actionId,
-      lifecycleId: outcome.attempt.lifecycleId,
-      attemptedAmount: customer ? { amountCents: customer.amountCents, currency: customer.currency } : null,
-      ...(outcome.status === "completed" ? { result: outcome.result } : {}),
-    };
-    send(response, outcome.status === "completed" ? 200 : outcome.status === "failed" ? 502 : 202, body);
+    sendCheckpointAttempt(response, outcome.status === "completed" ? 200 : outcome.status === "failed" ? 502 : 202,
+      outcome.attempt, fixture, outcome.status === "completed" ? outcome.result : undefined);
+  } catch {
+    send(response, 503, { error: "kit5_fixture_checkpoint_unavailable" });
+  }
+}
+
+/** Restore the latest checkpoint attempt after browser session storage is lost. */
+export async function handleKit5FixtureCheckpointRecovery(
+  request: IncomingMessage,
+  response: ServerResponse,
+  dependencies: Kit5DemoRouteDependencies,
+): Promise<void> {
+  if (!authorizeKit5OperatorRequest(request, response, dependencies.operatorAuth)) return;
+  try {
+    const attempt = await getLatestKit5FixtureCheckpointAttempt(dependencies.pool);
+    if (!attempt) {
+      send(response, 200, { status: "not_found" });
+      return;
+    }
+    const fixture = await dependencies.resolveFixtureCheckpoint?.({
+      scenarioId: attempt.scenarioId,
+      customerId: attempt.customerId,
+      actionId: attempt.actionId,
+    }) ?? null;
+    if (!fixture) {
+      send(response, 409, { status: "rejected", reason: "fixture_checkpoint_mapping_unavailable" });
+      return;
+    }
+    sendCheckpointAttempt(response, 200, attempt, fixture);
   } catch {
     send(response, 503, { error: "kit5_fixture_checkpoint_unavailable" });
   }
@@ -139,6 +167,9 @@ export async function handleKit5FixtureCheckpointReconcile(
     const customer = fixture.resolveCustomer(identity.customerId);
     send(response, outcome.status === "completed" ? 200 : 202, {
       status: outcome.status,
+      scenarioId: outcome.attempt.scenarioId,
+      customerId: outcome.attempt.customerId,
+      actionId: outcome.attempt.actionId,
       attemptId: outcome.attempt.actionId,
       lifecycleId: outcome.attempt.lifecycleId,
       attemptedAmount: customer ? { amountCents: customer.amountCents, currency: customer.currency } : null,
@@ -168,10 +199,16 @@ export async function handleKit5NextCustomer(
     send(response, 400, { error: "invalid_action" });
     return;
   }
+  if (isKit5FixtureCheckpointInput(input)) {
+    send(response, 409, { status: "rejected", reason: "use_fixture_checkpoint_route" });
+    return;
+  }
   try {
     const fixture = await dependencies.resolveScenario(input.scenarioId);
     const attemptedAmount = fixture?.resolveCustomer(input.customerId);
-    const outcome = await processNextCustomerAction(dependencies.pool, dependencies.gateway, input, fixture, dependencies.bridgeFunding);
+    const outcome = await processNextCustomerAction(dependencies.pool, dependencies.gateway, input, fixture, dependencies.bridgeFunding, {
+      protectCheckpointRun: input.customerId === "acct_bloom001" && input.scenarioId.startsWith("kit5-target:"),
+    });
     if (outcome.status === "rejected") {
       send(response, 409, { status: "rejected", reason: outcome.reason });
       return;
@@ -403,14 +440,47 @@ function validateInput(value: unknown): NextCustomerInput | null {
   return { scenarioId: record.scenarioId, customerId: record.customerId, actionId: record.actionId };
 }
 
-function validateFixtureCheckpointInput(value: unknown): NextCustomerInput | null {
+function validateFixtureCheckpointInput(value: unknown): { input: NextCustomerInput; startNew: boolean } | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).sort().join(",") !== "actionId,customerId,scenarioId" ||
+  const keys = Object.keys(record).sort().join(",");
+  if ((keys !== "actionId,customerId,scenarioId" && keys !== "actionId,customerId,scenarioId,startNew") ||
       typeof record.scenarioId !== "string" || !IDENTIFIER_PATTERN.test(record.scenarioId) ||
       typeof record.customerId !== "string" || !IDENTIFIER_PATTERN.test(record.customerId) ||
-      typeof record.actionId !== "string" || !ACTION_ID_PATTERN.test(record.actionId)) return null;
-  return { scenarioId: record.scenarioId, customerId: record.customerId, actionId: record.actionId };
+      typeof record.actionId !== "string" || !ACTION_ID_PATTERN.test(record.actionId) ||
+      (record.startNew !== undefined && typeof record.startNew !== "boolean")) return null;
+  return {
+    input: { scenarioId: record.scenarioId, customerId: record.customerId, actionId: record.actionId },
+    startNew: record.startNew === true,
+  };
+}
+
+function sendCheckpointAttempt(
+  response: ServerResponse,
+  statusCode: number,
+  attempt: Kit5CardAttempt,
+  fixture: Kit5CustomerFixture,
+  completedResult?: IssuingSimulationResponse,
+): void {
+  const customer = fixture.resolveCustomer(attempt.customerId);
+  const result = completedResult ?? attempt.result as unknown as IssuingSimulationResponse | null;
+  const status = attempt.status === "failed"
+    ? "failed"
+    : attempt.status === "ambiguous" || (attempt.status === "completed" && !result)
+      ? "ambiguous"
+      : attempt.status === "completed"
+        ? "completed"
+        : "in_progress";
+  send(response, statusCode, {
+    status,
+    scenarioId: attempt.scenarioId,
+    customerId: attempt.customerId,
+    actionId: attempt.actionId,
+    attemptId: attempt.actionId,
+    lifecycleId: attempt.lifecycleId,
+    attemptedAmount: customer ? { amountCents: customer.amountCents, currency: customer.currency } : null,
+    ...(status === "completed" && result ? { result } : {}),
+  });
 }
 
 function validateFixtureCheckpointLifecycleInput(

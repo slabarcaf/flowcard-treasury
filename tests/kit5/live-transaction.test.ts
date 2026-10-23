@@ -123,7 +123,7 @@ describe('Kit 5 sandbox-live transaction client', () => {
     const promptHtml = renderToStaticMarkup(createElement(Kit5Dashboard, { versionToggle: null }));
 
     expect(promptHtml).toContain('Fixture + Airwallex checkpoint');
-    expect(promptHtml).toContain('Run Airwallex Sandbox attempt');
+    expect(promptHtml).toContain('Run or recover Airwallex Sandbox attempt');
     expect(promptHtml).toContain('The scenario clock and fixture decision remain paused');
     expect(promptHtml).not.toContain('Next customer');
     expect(promptHtml).not.toContain('Restart sequence');

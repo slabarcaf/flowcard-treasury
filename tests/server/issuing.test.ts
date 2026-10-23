@@ -54,6 +54,30 @@ describe("issuing simulation operation", () => {
     });
   });
 
+  it("persists a server-owned lifecycle before checkpoint create and verifies the provider associates it", async () => {
+    const order: string[] = [];
+    const createIssuingSimulation = vi.fn(async (request: IssuingSimulationRequest) => {
+      order.push("create");
+      return { ...response, card_transaction_lifecycle_id: request.lifecycleId };
+    });
+    const provider = {
+      createIssuingSimulation,
+      getIssuingLifecycle: vi.fn(async () => null),
+    };
+    const result = await simulateIssuingTransaction({ ...input, lifecycleId }, {
+      gateway: provider,
+      persistLifecycleId: async (scenarioId, id) => {
+        order.push("persist");
+        expect(scenarioId).toBe(input.scenarioId);
+        expect(id).toBe(lifecycleId);
+      },
+    });
+
+    expect(order).toEqual(["persist", "create"]);
+    expect(createIssuingSimulation).toHaveBeenCalledWith(expect.objectContaining({ lifecycleId }));
+    expect(result.cardTransactionLifecycleId).toBe(lifecycleId);
+  });
+
   it("preserves a provider decline and its unexpected failure reason", async () => {
     const provider = gateway(async () => ({ ...response, process_result: "DECLINED", failure_reason: "NEW_PROVIDER_REASON" }));
     const result = await simulateIssuingTransaction(input, {

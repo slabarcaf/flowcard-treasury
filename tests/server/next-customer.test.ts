@@ -86,6 +86,14 @@ class MemoryPool implements DatabasePool {
 
   private async transactionQuery<Row>(sql: string, values: readonly unknown[]): Promise<QueryResult<Row>> {
     if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
+    if (sql.includes("pg_advisory_xact_lock")) return { rows: [], rowCount: 1 };
+    if (sql.includes("FROM kit5_card_attempts") && sql.includes("ORDER BY created_at DESC")) {
+      const attempts = [...this.attempts.values()].filter((attempt) =>
+        attempt.customerId === "acct_bloom001" && attempt.scenarioId.startsWith("kit5-target:") &&
+        attempt.actionId === `${attempt.scenarioId}:txn_bloom_supplier_001`);
+      const latest = attempts.at(-1);
+      return { rows: latest ? [this.row(latest) as Row] : [], rowCount: latest ? 1 : 0 };
+    }
     if (sql.includes("INSERT INTO kit5_demo_scenario_state")) {
       const id = String(values[0]);
       if (!this.states.has(id)) this.states.set(id, 0);

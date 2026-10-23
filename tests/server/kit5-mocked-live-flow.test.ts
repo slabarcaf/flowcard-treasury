@@ -29,6 +29,10 @@ class MemoryPool implements DatabasePool {
     return {
       query: async <Row>(sql: string, values: readonly unknown[] = []) => {
         if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [], rowCount: 0 };
+        if (sql.includes("pg_advisory_xact_lock")) return { rows: [], rowCount: 1 };
+        if (sql.includes("FROM kit5_card_attempts") && sql.includes("ORDER BY created_at DESC")) {
+          return { rows: [], rowCount: 0 };
+        }
         if (sql.includes("INSERT INTO kit5_demo_scenario_state")) return { rows: [], rowCount: 1 };
         if (sql.includes("SELECT next_customer_index")) {
           return { rows: [{ next_customer_index: this.nextIndex } as Row], rowCount: 1 };
@@ -242,12 +246,12 @@ describe("Kit 5 mocked sandbox-live flow", () => {
       },
     };
     const provider = {
-      createIssuingSimulation: vi.fn(async () => ({
+      createIssuingSimulation: vi.fn(async (request: { lifecycleId?: string }) => ({
         process_result: "DECLINED",
         failure_reason: "INSUFFICIENT_FUNDS",
         card_transaction_event_id: "evt_bloom_checkpoint",
         card_transaction_id: "txn_bloom_checkpoint",
-        card_transaction_lifecycle_id: "life_bloom_checkpoint",
+        card_transaction_lifecycle_id: request.lifecycleId,
         card_id: `fixture-card-${bloomCustomerId}`,
         transaction_amount: 9_000,
         transaction_currency: "USD",

@@ -12,7 +12,7 @@ export interface IssuingSimulationRequest {
   currency: string;
   merchant: string;
   merchantCategoryCode?: string;
-  /** Set only when associating a new authorization with an existing lifecycle. */
+  /** Provider lifecycle ID to associate with the new authorization. */
   lifecycleId?: string;
 }
 

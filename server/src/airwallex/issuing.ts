@@ -10,6 +10,7 @@ export interface IssuingSimulationInput {
   currency: string;
   merchant: string;
   merchantCategoryCode?: string;
+  lifecycleId?: string;
   scenarioId: string;
 }
 
@@ -22,12 +23,16 @@ export interface IssuingSimulationDependencies {
   persistLifecycleId: (scenarioId: string, lifecycleId: string) => Promise<void>;
 }
 
-/** Validate a simulation and persist the lifecycle ID returned by Airwallex. */
+/** Validate a simulation and persist its correlation ID before create when supplied. */
 export async function simulateIssuingTransaction(
   input: IssuingSimulationInput,
   dependencies: IssuingSimulationDependencies,
 ): Promise<IssuingSimulationResult> {
   const request = validateInput(input);
+  const expectedLifecycleId = request.lifecycleId;
+  if (expectedLifecycleId) {
+    await dependencies.persistLifecycleId(request.scenarioId, expectedLifecycleId);
+  }
   let response: unknown;
   try {
     response = await dependencies.gateway.createIssuingSimulation(request);
@@ -38,14 +43,16 @@ export async function simulateIssuingTransaction(
 
   let result: IssuingSimulationResponse;
   try {
-    result = normalizeIssuingResponse(response);
+    result = normalizeIssuingResponse(response, expectedLifecycleId);
   } catch (error) {
     throw new AmbiguousIssuingResponseError(null, error);
   }
-  try {
-    await dependencies.persistLifecycleId(request.scenarioId, result.cardTransactionLifecycleId);
-  } catch (error) {
-    throw new AmbiguousIssuingResponseError(result.cardTransactionLifecycleId, error);
+  if (!expectedLifecycleId) {
+    try {
+      await dependencies.persistLifecycleId(request.scenarioId, result.cardTransactionLifecycleId);
+    } catch (error) {
+      throw new AmbiguousIssuingResponseError(result.cardTransactionLifecycleId, error);
+    }
   }
   return { ...result, scenarioId: request.scenarioId };
 }
@@ -144,9 +151,14 @@ function validateInput(input: IssuingSimulationInput): Omit<IssuingSimulationInp
   }
   const currency = requiredInput(input.currency, "currency").toUpperCase();
   if (currency !== "USD") throw new Error("Issuing simulation currency must be USD");
+  const lifecycleId = input.lifecycleId?.trim();
+  if (lifecycleId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lifecycleId)) {
+    throw new Error("Issuing simulation lifecycle ID must be a UUID");
+  }
   return {
     accountId, cardId, amountCents: input.amountCents, currency, merchant, scenarioId,
     ...(merchantCategoryCode ? { merchantCategoryCode } : {}),
+    ...(lifecycleId ? { lifecycleId } : {}),
   };
 }
 

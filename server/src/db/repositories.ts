@@ -78,16 +78,59 @@ function mapKit5Attempt(row: Kit5AttemptRow): Kit5CardAttempt {
 
 export type AcceptKit5AttemptResult =
   | { accepted: true; created: boolean; attempt: Kit5CardAttempt }
-  | { accepted: false; reason: "unknown_scenario" | "sequence_complete" | "out_of_order" | "previous_attempt_unresolved" | "action_id_conflict" };
+  | { accepted: false; reason: "unknown_scenario" | "sequence_complete" | "out_of_order" | "previous_attempt_unresolved" | "action_id_conflict" }
+  | { accepted: false; reason: "fixture_checkpoint_run_unresolved" | "fixture_checkpoint_new_run_requires_confirmation"; attempt: Kit5CardAttempt };
+
+const KIT5_FIXTURE_CHECKPOINT_ADVISORY_LOCK = "741982570051";
+
+const KIT5_FIXTURE_CHECKPOINT_LATEST_ATTEMPT_QUERY = `SELECT scenario_id, customer_id, action_id, sequence_index, lifecycle_id,
+       status, provider_result, error, funding_claimed, request_facts,
+       policy_status, policy_error, policy_decision_id, bridge_id, retry_lifecycle_id,
+       pending_policy_decision_id, policy_actor_id, policy_approval_reason,
+       retry_request_id, retry_provider_result, retry_error
+  FROM kit5_card_attempts
+ WHERE customer_id = 'acct_bloom001'
+   AND scenario_id LIKE 'kit5-target:%'
+   AND action_id = scenario_id || ':txn_bloom_supplier_001'
+ ORDER BY created_at DESC
+ LIMIT 1`;
+
+const KIT5_FIXTURE_CHECKPOINT_UNRESOLVED_STATUSES = new Set<Kit5AttemptStatus>([
+  "accepted", "submitting", "in_progress", "ambiguous",
+]);
 
 /** Reserve the next scenario action atomically. A repeated action ID returns its original row. */
 export async function acceptKit5CardAttempt(
   pool: DatabasePool,
-  input: { scenarioId: string; customerId: string; actionId: string; orderedCustomerIds: readonly string[]; requestFacts?: Kit5CardAttempt["requestFacts"] },
+  input: {
+    scenarioId: string;
+    customerId: string;
+    actionId: string;
+    orderedCustomerIds: readonly string[];
+    requestFacts?: Kit5CardAttempt["requestFacts"];
+    checkpointRun?: { allowNewRun: boolean };
+  },
 ): Promise<AcceptKit5AttemptResult> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    if (input.checkpointRun) {
+      await client.query(`SELECT pg_advisory_xact_lock(${KIT5_FIXTURE_CHECKPOINT_ADVISORY_LOCK}::bigint)`);
+      const latestResult = await client.query<Kit5AttemptRow>(KIT5_FIXTURE_CHECKPOINT_LATEST_ATTEMPT_QUERY);
+      const latest = latestResult.rows[0];
+      if (latest && (latest.scenario_id !== input.scenarioId || latest.action_id !== input.actionId)) {
+        const unresolved = KIT5_FIXTURE_CHECKPOINT_UNRESOLVED_STATUSES.has(latest.status) ||
+          (latest.status === "completed" && latest.provider_result === null);
+        if (unresolved || !input.checkpointRun.allowNewRun) {
+          await client.query("ROLLBACK");
+          return {
+            accepted: false,
+            reason: unresolved ? "fixture_checkpoint_run_unresolved" : "fixture_checkpoint_new_run_requires_confirmation",
+            attempt: mapKit5Attempt(latest),
+          };
+        }
+      }
+    }
     await client.query(
       `INSERT INTO kit5_demo_scenario_state (scenario_id, next_customer_index)
        VALUES ($1, 0) ON CONFLICT (scenario_id) DO NOTHING`,
@@ -365,6 +408,14 @@ export async function getKit5CardAttempt(
        FROM kit5_card_attempts WHERE scenario_id = $1 AND action_id = $2`,
     [scenarioId, actionId],
   );
+  return result.rows[0] ? mapKit5Attempt(result.rows[0]) : null;
+}
+
+/** Return the latest server-owned Bloom checkpoint attempt for reload recovery. */
+export async function getLatestKit5FixtureCheckpointAttempt(
+  pool: Pick<DatabasePool, "query">,
+): Promise<Kit5CardAttempt | null> {
+  const result = await pool.query<Kit5AttemptRow>(KIT5_FIXTURE_CHECKPOINT_LATEST_ATTEMPT_QUERY);
   return result.rows[0] ? mapKit5Attempt(result.rows[0]) : null;
 }
 

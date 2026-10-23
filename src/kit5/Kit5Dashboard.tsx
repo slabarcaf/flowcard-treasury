@@ -241,7 +241,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                         disabled={!k.operatorAuthenticated || !k.ledgerApiEnabled || k.fixtureCheckpointPending || !k.fixtureCheckpointIdentityKnown}
                         className="px-4 py-2 text-sm font-medium bg-[#e04e2f] hover:bg-[#c9442a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors cursor-pointer"
                       >
-                        Run Airwallex Sandbox attempt
+                        Run or recover Airwallex Sandbox attempt
                       </button>
                     )}
                     {checkpointControls === 'reconcile-attempt' && (

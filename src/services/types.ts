@@ -217,7 +217,18 @@ export interface Kit5NextCustomerRequest {
 }
 
 /** Browser input for the provider-only Bloom fixture checkpoint. */
-export type Kit5FixtureCheckpointRequest = Kit5NextCustomerRequest;
+export interface Kit5FixtureCheckpointRequest extends Kit5NextCustomerRequest {
+  /** Set only after presenter confirmation to begin another resolved checkpoint run. */
+  startNew?: boolean;
+}
+
+export type Kit5FixtureCheckpointRecoveryResponse =
+  | { status: 'not_found' }
+  | (Exclude<Kit5FixtureCheckpointResponse, { status: 'rejected' }> & {
+    scenarioId: string;
+    customerId: string;
+    actionId: string;
+  });
 
 /** Operator-supplied lifecycle identity for resolving an ambiguous checkpoint without another create. */
 export interface Kit5FixtureCheckpointLifecycleRequest extends Kit5FixtureCheckpointRequest {
@@ -227,6 +238,9 @@ export interface Kit5FixtureCheckpointLifecycleRequest extends Kit5FixtureCheckp
 export type Kit5FixtureCheckpointResponse =
   | {
     status: 'completed';
+    scenarioId?: string;
+    customerId?: string;
+    actionId?: string;
     attemptId: string;
     lifecycleId: string | null;
     attemptedAmount: { amountCents: number; currency: string } | null;
@@ -234,6 +248,9 @@ export type Kit5FixtureCheckpointResponse =
   }
   | {
     status: 'in_progress' | 'ambiguous' | 'failed';
+    scenarioId?: string;
+    customerId?: string;
+    actionId?: string;
     attemptId: string;
     lifecycleId: string | null;
     attemptedAmount: { amountCents: number; currency: string } | null;

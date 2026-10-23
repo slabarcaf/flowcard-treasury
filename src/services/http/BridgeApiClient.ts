@@ -1,4 +1,4 @@
-import type { Kit5AttemptStatusResponse, Kit5FixtureCheckpointLifecycleRequest, Kit5FixtureCheckpointRequest, Kit5FixtureCheckpointResponse, Kit5NextCustomerRequest, Kit5NextCustomerResponse, Kit5RepaymentDepositResponse, LedgerProjectionResponse } from '../types.js';
+import type { Kit5AttemptStatusResponse, Kit5FixtureCheckpointLifecycleRequest, Kit5FixtureCheckpointRecoveryResponse, Kit5FixtureCheckpointRequest, Kit5FixtureCheckpointResponse, Kit5NextCustomerRequest, Kit5NextCustomerResponse, Kit5RepaymentDepositResponse, LedgerProjectionResponse } from '../types.js';
 
 export class BridgeApiError extends Error {
   readonly status: number;
@@ -25,6 +25,9 @@ function isFixtureCheckpointResponse(value: unknown): value is Kit5FixtureCheckp
   const result = value as Record<string, unknown>;
   if (result.status === 'rejected') return typeof result.reason === 'string';
   if (!['completed', 'in_progress', 'ambiguous', 'failed'].includes(String(result.status)) ||
+      (result.scenarioId !== undefined && typeof result.scenarioId !== 'string') ||
+      (result.customerId !== undefined && typeof result.customerId !== 'string') ||
+      (result.actionId !== undefined && typeof result.actionId !== 'string') ||
       typeof result.attemptId !== 'string' ||
       (typeof result.lifecycleId !== 'string' && result.lifecycleId !== null)) return false;
   const amount = result.attemptedAmount;
@@ -105,6 +108,32 @@ export class BridgeApiClient {
       throw new BridgeApiError(`Kit 5 fixture checkpoint failed (${response.status})`, response.status);
     }
     return body;
+  }
+
+  /** Recover the server-owned checkpoint identity after session storage is lost. */
+  async recoverFixtureCheckpoint(): Promise<Kit5FixtureCheckpointRecoveryResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/kit5/fixture-checkpoint/recover`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({}),
+    });
+    let body: unknown;
+    try {
+      body = await response.json() as unknown;
+    } catch {
+      throw new BridgeApiError(`Kit 5 fixture checkpoint recovery failed (${response.status})`, response.status);
+    }
+    const recoveredRecord = typeof body === 'object' && body !== null ? body as Record<string, unknown> : null;
+    const validRecovery = recoveredRecord !== null && (recoveredRecord.status === 'not_found' ||
+      (isFixtureCheckpointResponse(body) && recoveredRecord.status !== 'rejected' &&
+        typeof recoveredRecord.scenarioId === 'string' && typeof recoveredRecord.customerId === 'string' &&
+        typeof recoveredRecord.actionId === 'string'));
+    if (!validRecovery) {
+      throw new BridgeApiError(`Kit 5 fixture checkpoint recovery failed (${response.status})`, response.status);
+    }
+    if (!response.ok) throw new BridgeApiError(`Kit 5 fixture checkpoint recovery failed (${response.status})`, response.status);
+    return body as Kit5FixtureCheckpointRecoveryResponse;
   }
 
   /** Verify a lifecycle found by an operator, without repeating the provider create. */

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { IssuingSimulationGateway, IssuingSimulationResponse } from "../airwallex/client.js";
 import { ProviderHttpError } from "../airwallex/client.js";
 import { AmbiguousIssuingResponseError, normalizeIssuingResponse, simulateIssuingTransaction, type IssuingSimulationInput } from "../airwallex/issuing.js";
@@ -30,7 +31,7 @@ export interface NextCustomerInput {
 export type NextCustomerOutcome =
   | { status: "completed"; attempt: Kit5CardAttempt; result: IssuingSimulationResponse }
   | { status: "in_progress" | "ambiguous" | "failed"; attempt: Kit5CardAttempt }
-  | { status: "rejected"; reason: string };
+  | { status: "rejected"; reason: string; attempt?: Kit5CardAttempt };
 
 export interface Kit5PolicyInput {
   scenarioId: string;
@@ -83,7 +84,7 @@ export async function processNextCustomerAction(
   input: NextCustomerInput,
   fixture: Kit5CustomerFixture | null,
   bridgeFunding?: Kit5BridgeFundingBoundary,
-  options: { requireCheckpointIdentity?: boolean } = {},
+  options: { requireCheckpointIdentity?: boolean; allowNewCheckpointRun?: boolean; protectCheckpointRun?: boolean } = {},
 ): Promise<NextCustomerOutcome> {
   if (!fixture) return { status: "rejected", reason: "unknown_scenario" };
   const customer = fixture.resolveCustomer(input.customerId);
@@ -97,20 +98,34 @@ export async function processNextCustomerAction(
     orderedCustomerIds: fixture.orderedCustomerIds,
     requestFacts: { accountId: customer.accountId, cardId: customer.cardId,
       amountCents: customer.amountCents, currency: customer.currency, merchant: customer.merchant, ...policyFacts },
+    ...((options.requireCheckpointIdentity || options.protectCheckpointRun) ? {
+      checkpointRun: { allowNewRun: options.protectCheckpointRun || options.allowNewCheckpointRun === true },
+    } : {}),
   });
-  if (!action.accepted) return { status: "rejected", reason: action.reason };
+  if (!action.accepted) return {
+    status: "rejected",
+    reason: action.reason,
+    ...("attempt" in action ? { attempt: action.attempt } : {}),
+  };
 
   let attempt = action.attempt;
   let ownsProviderCreate = false;
-  if (!action.created && attempt.status === "completed" && attempt.result) {
-    if (options.requireCheckpointIdentity) {
-      const result = decodeResult(attempt.result);
-      if (matchesCheckpointResult(result, attempt.requestFacts, customer.accountId, attempt.lifecycleId)) {
-        return { status: "completed", attempt, result };
+  if (!action.created && attempt.status === "completed" && options.requireCheckpointIdentity) {
+    let result: IssuingSimulationResponse | null = null;
+    if (attempt.result) {
+      try {
+        result = decodeResult(attempt.result);
+      } catch {
+        // Malformed durable provider data remains unresolved and requires event reconciliation.
       }
-      await invalidateKit5CheckpointResult(pool, input);
-      attempt = await requiredAttempt(pool, input);
-    } else {
+    }
+    if (result && matchesCheckpointResult(result, attempt.requestFacts, customer.accountId, attempt.lifecycleId)) {
+      return { status: "completed", attempt, result };
+    }
+    await invalidateKit5CheckpointResult(pool, input);
+    attempt = await requiredAttempt(pool, input);
+  } else if (!action.created && attempt.status === "completed" && attempt.result) {
+    if (!options.requireCheckpointIdentity) {
       await bridgeFunding?.recover?.({ ...input, accountId: customer.accountId, cardId: customer.cardId,
         attemptedAmountCents: customer.amountCents, amountCents: customer.amountCents, currency: customer.currency,
         providerResult: decodeResult(attempt.result) });
@@ -165,8 +180,13 @@ export async function processNextCustomerAction(
   }
 
   let result: IssuingSimulationResponse;
+  const checkpointLifecycleId = options.requireCheckpointIdentity ? randomUUID() : undefined;
   try {
-    result = await simulateIssuingTransaction({ ...customer, scenarioId: input.scenarioId }, {
+    result = await simulateIssuingTransaction({
+      ...customer,
+      scenarioId: input.scenarioId,
+      ...(checkpointLifecycleId ? { lifecycleId: checkpointLifecycleId } : {}),
+    }, {
       gateway,
       persistLifecycleId: async (scenarioId, lifecycleId) => {
         await setKit5AttemptLifecycle(pool, { scenarioId, actionId: input.actionId, lifecycleId });
@@ -266,6 +286,11 @@ export async function reconcileKit5CheckpointLifecycle(
   let attempt = await getKit5CardAttempt(pool, input.scenarioId, input.actionId);
   if (!attempt || attempt.customerId !== input.customerId) {
     return { status: "rejected", reason: "checkpoint_attempt_not_found" };
+  }
+  // Older attempts with no server-generated correlation ID cannot safely be
+  // matched to an operator-supplied lifecycle by transaction terms alone.
+  if (!attempt.lifecycleId) {
+    return { status: "rejected", reason: "checkpoint_lifecycle_correlation_unavailable" };
   }
   if (attempt.lifecycleId && attempt.lifecycleId !== input.lifecycleId) {
     return { status: "rejected", reason: "checkpoint_lifecycle_conflict" };
