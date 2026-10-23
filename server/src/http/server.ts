@@ -7,7 +7,7 @@ import type { WebhookInboxWorker } from "../webhooks/worker.js";
 import { handleAirwallexWebhook } from "./routes/airwallex-webhook.js";
 import { handleCustomerSnapshot, requestAuthorization } from "./routes/customer-snapshot.js";
 import { handleLedgerProjection } from "./routes/ledger-projection.js";
-import { handleKit5Approval, handleKit5AttemptStatus, handleKit5NextCustomer, handleKit5RepaymentDeposit, type Kit5DemoRouteDependencies } from "./routes/kit5-demo.js";
+import { handleKit5Approval, handleKit5AttemptStatus, handleKit5FixtureCheckpoint, handleKit5NextCustomer, handleKit5RepaymentDeposit, type Kit5DemoRouteDependencies } from "./routes/kit5-demo.js";
 import { handleKit5Preflight, handleKit5Session } from "./kit5-operator-auth.js";
 import { handleBridgeDecision } from "./routes/bridge-decision.js";
 import type { TrustedBridgeDecisionResult } from "./routes/bridge-decision.js";
@@ -66,6 +66,14 @@ export function createRequestHandler(
     }
     if (request.url === "/api/kit5/next-customer" && request.method === "OPTIONS") {
       handleKit5Preflight(request, response, operatorAuth);
+      return;
+    }
+    if (request.url === "/api/kit5/fixture-checkpoint" && request.method === "OPTIONS") {
+      handleKit5Preflight(request, response, operatorAuth);
+      return;
+    }
+    if (request.method === "POST" && request.url === "/api/kit5/fixture-checkpoint" && activeKit5Demo) {
+      void handleKit5FixtureCheckpoint(request, response, activeKit5Demo);
       return;
     }
     if (request.method === "POST" && request.url === "/api/kit5/next-customer" && activeKit5Demo) {

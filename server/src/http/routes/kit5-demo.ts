@@ -4,6 +4,7 @@ import type { AirwallexGateway } from "../../airwallex/client.js";
 import type { DatabasePool } from "../../db/pool.js";
 import { createKit5RepaymentDeposit, type Kit5DepositTarget } from "../../collections/kit5-repayment-deposit.js";
 import { processNextCustomerAction, reconcileKit5CustomerAction, type Kit5BridgeFundingBoundary, type Kit5CustomerFixture, type NextCustomerInput } from "../../demo/next-customer.js";
+import { isKit5FixtureCheckpointInput } from "../../demo/kit5-scenario-resolver.js";
 import { authenticatedKit5OperatorActor, authorizeKit5OperatorRequest, type Kit5OperatorAuthConfig } from "../kit5-operator-auth.js";
 
 const MAX_REQUEST_BYTES = 16_384;
@@ -25,10 +26,66 @@ export interface Kit5DemoRouteDependencies {
   pool: DatabasePool;
   gateway: IssuingSimulationGateway;
   resolveScenario: (scenarioId: string) => Kit5CustomerFixture | null | Promise<Kit5CustomerFixture | null>;
+  resolveFixtureCheckpoint?: (input: NextCustomerInput) => Kit5CustomerFixture | null | Promise<Kit5CustomerFixture | null>;
   operatorAuth: Kit5OperatorAuthConfig;
   bridgeFunding?: Kit5BridgeFundingBoundary;
   repaymentDepositGateway?: AirwallexGateway;
   resolveRepaymentDepositTarget?: (scenarioId: string, customerId: string) => Kit5DepositTarget | null | Promise<Kit5DepositTarget | null>;
+}
+
+/** Create or reconcile the one allowlisted Bloom provider attempt, without policy funding or card retry. */
+export async function handleKit5FixtureCheckpoint(
+  request: IncomingMessage,
+  response: ServerResponse,
+  dependencies: Kit5DemoRouteDependencies,
+): Promise<void> {
+  if (!authorizeKit5OperatorRequest(request, response, dependencies.operatorAuth)) return;
+  let body: unknown;
+  try {
+    body = JSON.parse((await readBody(request)).toString("utf8"));
+  } catch {
+    send(response, 400, { error: "invalid_request" });
+    return;
+  }
+  const input = validateFixtureCheckpointInput(body);
+  if (!input) {
+    send(response, 400, { error: "invalid_fixture_checkpoint" });
+    return;
+  }
+  if (!isKit5FixtureCheckpointInput(input)) {
+    send(response, 409, { status: "rejected", reason: "fixture_checkpoint_not_allowed" });
+    return;
+  }
+  if (!dependencies.resolveFixtureCheckpoint) {
+    send(response, 503, { error: "kit5_fixture_checkpoint_unavailable" });
+    return;
+  }
+
+  try {
+    const fixture = await dependencies.resolveFixtureCheckpoint(input);
+    if (!fixture) {
+      send(response, 409, { status: "rejected", reason: "fixture_checkpoint_mapping_unavailable" });
+      return;
+    }
+    // Intentionally omit dependencies.bridgeFunding. This route only records
+    // and reconciles the Airwallex issuing attempt.
+    const outcome = await processNextCustomerAction(dependencies.pool, dependencies.gateway, input, fixture);
+    if (outcome.status === "rejected") {
+      send(response, 409, { status: "rejected", reason: outcome.reason });
+      return;
+    }
+    const customer = fixture.resolveCustomer(input.customerId);
+    const body = {
+      status: outcome.status,
+      attemptId: outcome.attempt.actionId,
+      lifecycleId: outcome.attempt.lifecycleId,
+      attemptedAmount: customer ? { amountCents: customer.amountCents, currency: customer.currency } : null,
+      ...(outcome.status === "completed" ? { result: outcome.result } : {}),
+    };
+    send(response, outcome.status === "completed" ? 200 : outcome.status === "failed" ? 502 : 202, body);
+  } catch {
+    send(response, 503, { error: "kit5_fixture_checkpoint_unavailable" });
+  }
 }
 
 /** Accept one local customer action; provider IDs and amounts are resolved server-side. */
@@ -273,6 +330,16 @@ function validateInput(value: unknown): NextCustomerInput | null {
     || typeof record.actionId !== "string" || !ACTION_ID_PATTERN.test(record.actionId)) {
     return null;
   }
+  return { scenarioId: record.scenarioId, customerId: record.customerId, actionId: record.actionId };
+}
+
+function validateFixtureCheckpointInput(value: unknown): NextCustomerInput | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).sort().join(",") !== "actionId,customerId,scenarioId" ||
+      typeof record.scenarioId !== "string" || !IDENTIFIER_PATTERN.test(record.scenarioId) ||
+      typeof record.customerId !== "string" || !IDENTIFIER_PATTERN.test(record.customerId) ||
+      typeof record.actionId !== "string" || !ACTION_ID_PATTERN.test(record.actionId)) return null;
   return { scenarioId: record.scenarioId, customerId: record.customerId, actionId: record.actionId };
 }
 

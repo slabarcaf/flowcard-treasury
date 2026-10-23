@@ -1,6 +1,6 @@
 import type { DatabasePool } from "../db/pool.js";
 import type { Kit5DepositTarget } from "../collections/kit5-repayment-deposit.js";
-import type { Kit5CustomerFixture } from "./next-customer.js";
+import type { Kit5CustomerFixture, NextCustomerInput } from "./next-customer.js";
 
 interface DemoCustomerSpec {
   customerId: string;
@@ -49,8 +49,21 @@ const SCENARIOS: Record<string, readonly DemoCustomerSpec[]> = {
 };
 
 const NOVA_CUSTOMER_ID = "acct_nova001";
+const KIT5_TARGET_SCENARIO_ID = "kit5-target";
+const KIT5_BLOOM_CUSTOMER_ID = "acct_bloom001";
+const KIT5_BLOOM_CHECKPOINT_REQUEST_ID = "txn_bloom_supplier_001";
+const KIT5_BLOOM_CHECKPOINT_AMOUNT_CENTS = 900_000;
 const SAFE_PROVIDER_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const LIVE_RUN_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** The checkpoint action is fixed by the server and scoped to one v4 demo run. */
+export function isKit5FixtureCheckpointInput(input: NextCustomerInput): boolean {
+  const prefix = `${KIT5_TARGET_SCENARIO_ID}:`;
+  if (!input.scenarioId.startsWith(prefix) || input.customerId !== KIT5_BLOOM_CUSTOMER_ID) return false;
+  const runId = input.scenarioId.slice(prefix.length);
+  return LIVE_RUN_ID_PATTERN.test(runId) &&
+    input.actionId === `${input.scenarioId}:${KIT5_BLOOM_CHECKPOINT_REQUEST_ID}`;
+}
 
 function resolveScenarioSpecs(scenarioId: string): readonly DemoCustomerSpec[] | null {
   if (Object.prototype.hasOwnProperty.call(SCENARIOS, scenarioId)) return SCENARIOS[scenarioId] ?? null;
@@ -99,6 +112,26 @@ export function createKit5ScenarioResolver(pool: DatabasePool) {
         } : null;
       },
     };
+  };
+}
+
+/**
+ * Resolves the one server-approved provider checkpoint. The caller supplies
+ * only its run identity; roster/card bindings and transaction terms come from
+ * the existing trusted scenario resolver.
+ */
+export function createKit5FixtureCheckpointResolver(pool: DatabasePool) {
+  const resolveScenario = createKit5ScenarioResolver(pool);
+  return async (input: NextCustomerInput): Promise<Kit5CustomerFixture | null> => {
+    if (!isKit5FixtureCheckpointInput(input)) return null;
+    const fixture = await resolveScenario(input.scenarioId);
+    if (!fixture || fixture.orderedCustomerIds[0] !== KIT5_BLOOM_CUSTOMER_ID) return null;
+    const customer = fixture.resolveCustomer(KIT5_BLOOM_CUSTOMER_ID);
+    const facts = fixture.policyFacts?.(KIT5_BLOOM_CUSTOMER_ID);
+    if (!customer || customer.amountCents !== KIT5_BLOOM_CHECKPOINT_AMOUNT_CENTS ||
+        customer.currency !== "USD" || customer.merchant !== "Supplier" ||
+        customer.merchantCategoryCode !== "5411" || facts?.merchantCategoryCode !== "5411") return null;
+    return fixture;
   };
 }
 

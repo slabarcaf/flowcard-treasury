@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { DatabasePool } from "../../server/src/db/pool.js";
 import { loadConfig } from "../../server/src/config.js";
 import {
+  createKit5FixtureCheckpointResolver,
   createKit5RepaymentDepositTargetResolver,
   createKit5ScenarioResolver,
 } from "../../server/src/demo/kit5-scenario-resolver.js";
@@ -45,6 +46,57 @@ describe("Kit 5 server-side scenario mappings", () => {
       amountCents: 900_000,
       currency: "USD",
     });
+  });
+
+  it("allows only the Bloom Kit 5 target checkpoint for a run-scoped stable action", async () => {
+    const ids = ["acct_bloom001", "acct_atlas001", "acct_nova001", "acct_pixel001", "acct_juniper001"];
+    const { pool, query } = poolWith(ids.map((id) => binding(id)));
+    const scenarioId = "kit5-target:00000000-0000-4000-8000-000000000001";
+    const resolve = createKit5FixtureCheckpointResolver(pool);
+
+    const fixture = await resolve({
+      scenarioId,
+      customerId: "acct_bloom001",
+      actionId: `${scenarioId}:txn_bloom_supplier_001`,
+    });
+
+    expect(fixture?.orderedCustomerIds[0]).toBe("acct_bloom001");
+    expect(fixture?.resolveCustomer("acct_bloom001")).toMatchObject({
+      accountId: "verified-account-acct_bloom001",
+      cardId: "verified-card-acct_bloom001",
+      amountCents: 900_000,
+      currency: "USD",
+      merchant: "Supplier",
+      merchantCategoryCode: "5411",
+    });
+    expect(query).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["another scenario", "original:00000000-0000-4000-8000-000000000001", "acct_bloom001", "original:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001"],
+    ["the unscoped target", "kit5-target", "acct_bloom001", "kit5-target:txn_bloom_supplier_001"],
+    ["another customer", "kit5-target:00000000-0000-4000-8000-000000000001", "acct_atlas001", "kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001"],
+    ["another request identity", "kit5-target:00000000-0000-4000-8000-000000000001", "acct_bloom001", "kit5-target:00000000-0000-4000-8000-000000000001:txn_atlas_supplier_001"],
+    ["a malformed run UUID", "kit5-target:run-1", "acct_bloom001", "kit5-target:run-1:txn_bloom_supplier_001"],
+  ])("rejects %s before reading provider mappings", async (_name, scenarioId, customerId, actionId) => {
+    const { pool, query } = poolWith([]);
+    await expect(createKit5FixtureCheckpointResolver(pool)({ scenarioId, customerId, actionId }))
+      .resolves.toBeNull();
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing roster or card mapping", []],
+    ["inactive roster", [binding("acct_bloom001", { roster_active: false })]],
+  ])("fails closed when the checkpoint scenario has a %s", async (_name, bloomRows) => {
+    const ids = ["acct_bloom001", "acct_atlas001", "acct_nova001", "acct_pixel001", "acct_juniper001"];
+    const rows = ids.filter((id) => id !== "acct_bloom001").map((id) => binding(id)).concat(bloomRows);
+    const { pool } = poolWith(rows);
+    await expect(createKit5FixtureCheckpointResolver(pool)({
+      scenarioId: "kit5-target:00000000-0000-4000-8000-000000000001",
+      customerId: "acct_bloom001",
+      actionId: "kit5-target:00000000-0000-4000-8000-000000000001:txn_bloom_supplier_001",
+    })).resolves.toBeNull();
   });
 
   it("fails closed when a customer has no roster or card binding", async () => {

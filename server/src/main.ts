@@ -26,7 +26,7 @@ import { runDailyUnderwritingProfileBuild } from "./underwriting/runner.js";
 import { recordFailedProfileAttempt } from "./underwriting/publisher.js";
 import { randomUUID } from "node:crypto";
 import { createKit5PolicyFundingBoundary, recoverPendingKit5Funding } from "./policy/kit5-funding.js";
-import { createKit5RepaymentDepositTargetResolver, createKit5ScenarioResolver } from "./demo/kit5-scenario-resolver.js";
+import { createKit5FixtureCheckpointResolver, createKit5RepaymentDepositTargetResolver, createKit5ScenarioResolver } from "./demo/kit5-scenario-resolver.js";
 
 if (process.argv[2] === "policy-approval") {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -186,6 +186,7 @@ const server = createHttpServer(
     // Resolve operator-managed active roster and card-binding rows per request.
     // Missing or conflicting provider mappings keep the endpoint fail-closed.
     resolveScenario: createKit5ScenarioResolver(pool),
+    resolveFixtureCheckpoint: createKit5FixtureCheckpointResolver(pool),
     operatorAuth: {
       operatorToken: config.kit5OperatorToken,
       operatorId: config.kit5OperatorId,

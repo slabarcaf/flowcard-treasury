@@ -65,14 +65,16 @@ describe("Kit 5 operator authorization", () => {
       operatorAuth: auth,
     });
 
-    for (const headers of [{ origin }, { origin: "https://attacker.example", cookie: "kit5_operator_session=invalid" }]) {
+    for (const url of ["/api/kit5/next-customer", "/api/kit5/fixture-checkpoint"]) {
+      for (const headers of [{ origin }, { origin: "https://attacker.example", cookie: "kit5_operator_session=invalid" }]) {
       const request = Object.assign(Readable.from(["{}"]), {
-        method: "POST", url: "/api/kit5/next-customer", headers,
+          method: "POST", url, headers,
       }) as IncomingMessage;
       const recorder = responseRecorder();
       handler(request, recorder.response);
       await new Promise((resolve) => setImmediate(resolve));
       expect(recorder.status()).toBe(headers.origin === origin ? 401 : 403);
+      }
     }
     expect(create).not.toHaveBeenCalled();
   });

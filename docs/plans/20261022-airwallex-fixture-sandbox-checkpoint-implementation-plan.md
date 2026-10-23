@@ -189,19 +189,19 @@ create another provider attempt; a new provider run gets a new run UUID.
 - Modify: `tests/server/kit5-scenario-resolver.test.ts`
 - Modify: `tests/server/kit5-operator-auth.test.ts`
 
-- [ ] Add a server-owned allowlist for the Kit 5 target Bloom checkpoint and
+- [x] Add a server-owned allowlist for the Kit 5 target Bloom checkpoint and
       reject other scenarios, customers, or request IDs.
-- [ ] Resolve Bloom's account, card, amount, and merchant from the active
+- [x] Resolve Bloom's account, card, amount, and merchant from the active
       roster, card binding, and scenario configuration.
-- [ ] Add `POST /api/kit5/fixture-checkpoint` behind the existing operator
+- [x] Add `POST /api/kit5/fixture-checkpoint` behind the existing operator
       authorization and invoke the durable issuing-attempt path without a
       bridge-funding boundary.
-- [ ] Return the normalized provider result and saved attempt identifiers;
+- [x] Return the normalized provider result and saved attempt identifiers;
       preserve in-progress and ambiguous states for reconciliation.
-- [ ] Test authentication, allowlist failures, stale/missing mappings,
+- [x] Test authentication, allowlist failures, stale/missing mappings,
       idempotent replays, and that bridge funding and card retry are never
       invoked.
-- [ ] Run the focused server tests before starting Task 3.
+- [x] Run the focused server tests before starting Task 3.
 
 ### Task 3: Add browser checkpoint requests and recovery state
 
