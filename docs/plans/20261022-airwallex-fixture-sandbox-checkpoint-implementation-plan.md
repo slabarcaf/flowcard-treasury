@@ -165,18 +165,18 @@ create another provider attempt; a new provider run gets a new run UUID.
 - Create: `tests/kit5/fixture-checkpoint.test.ts`
 - Modify: `tests/kit5/dashboard-live-state.test.ts`
 
-- [ ] Add optional, explicit provider-checkpoint metadata to the scenario
+- [x] Add optional, explicit provider-checkpoint metadata to the scenario
       model and mark Bloom's Kit 5 target event as the sole checkpoint.
-- [ ] Add a `fixture-checkpoint` mode while leaving pure Fixture and Sandbox
+- [x] Add a `fixture-checkpoint` mode while leaving pure Fixture and Sandbox
       live mode behavior intact.
-- [ ] Pause automatic fixture advancement before the marked event until its
+- [x] Pause automatic fixture advancement before the marked event until its
       provider result is confirmed or the presenter explicitly chooses
       fixture-only continuation.
-- [ ] Keep `engine.step()` pure and ensure the verified checkpoint resumes
+- [x] Keep `engine.step()` pure and ensure the verified checkpoint resumes
       the existing event once, without adding a duplicate queue entry.
-- [ ] Add tests for checkpoint selection, pause, success, fallback, and
+- [x] Add tests for checkpoint selection, pause, success, fallback, and
       unchanged pure Fixture behavior.
-- [ ] Run the focused Kit 5 tests before starting Task 2.
+- [x] Run the focused Kit 5 tests before starting Task 2.
 
 ### Task 2: Add the authenticated provider-only checkpoint route
 

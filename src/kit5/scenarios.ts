@@ -147,6 +147,11 @@ export const SCENARIOS: Scenario[] = [
     name: 'Kit 5 target',
     summary: 'Five declines, $27K of shortfalls against $15K deployable. Juniper sends the same request as Nova, arrives later and is refused at the floor.',
     inputs: kit5Target,
+    providerCheckpoint: {
+      provider: 'airwallex',
+      eventRequestId: 'txn_bloom_supplier_001',
+      customerKey: 'bloom',
+    },
   },
   {
     id: 'first-come',

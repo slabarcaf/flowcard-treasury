@@ -145,11 +145,9 @@ describe('Kit 5 live dashboard recovery state', () => {
     const firstRequest = JSON.parse(String(postCalls[0]![1]?.body));
     const retryRequest = JSON.parse(String(postCalls[1]![1]?.body));
     expect(retryRequest).toEqual(firstRequest);
-    expect(retryRequest).toEqual({
-      scenarioId: 'original',
-      customerId: 'acct_bloom001',
-      actionId: 'original:txn_bloom_payroll_001',
-    });
+    expect(retryRequest).toMatchObject({ customerId: 'acct_bloom001' });
+    expect(retryRequest.scenarioId).toMatch(/^original:[0-9a-f-]{36}$/i);
+    expect(retryRequest.actionId).toBe(`${retryRequest.scenarioId}:txn_bloom_payroll_001`);
   });
 
   it('releases the submission lock after an explicit rejection and retries the same customer', async () => {
@@ -190,6 +188,24 @@ describe('Kit 5 live dashboard recovery state', () => {
     dashboard.scan();
     dashboard.advance();
     await dashboard.submitNextCustomer();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('holds the target Bloom event in checkpoint mode without creating a live request', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    let dashboard = useDashboardForTest();
+    dashboard.selectScenario('kit5-target');
+    dashboard = useDashboardForTest();
+    dashboard.selectMode('fixture-checkpoint');
+    dashboard = useDashboardForTest();
+    dashboard.scan();
+    dashboard.advance();
+    dashboard = useDashboardForTest();
+
+    expect(dashboard.fixtureCheckpointPaused).toBe(true);
+    expect(dashboard.state.cursor).toBe(0);
+    expect(dashboard.state.queue).toHaveLength(0);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

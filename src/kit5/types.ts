@@ -66,6 +66,15 @@ export interface Scenario {
   name: string;
   summary: string;
   inputs: ScenarioInputs;
+  /** Optional provider interaction that pauses the fixture sequence before one event. */
+  providerCheckpoint?: ScenarioProviderCheckpoint;
+}
+
+export interface ScenarioProviderCheckpoint {
+  provider: 'airwallex';
+  /** Request ID of the fixture event that must wait for the provider result. */
+  eventRequestId: string;
+  customerKey: string;
 }
 
 // ---------------------------------------------------------------------------

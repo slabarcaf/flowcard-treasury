@@ -42,6 +42,28 @@ export interface LiveProviderActivity {
   repaymentDepositError?: string | null;
 }
 
+export type FixtureCheckpointResolution = 'awaiting' | 'confirmed' | 'fixture-only';
+
+export function isFixtureCheckpointEventNext(
+  scenario: Scenario,
+  state: Kit5State,
+): boolean {
+  const checkpoint = scenario.providerCheckpoint;
+  const next = state.events[state.cursor];
+  return checkpoint?.provider === 'airwallex' && next?.type === 'decline' &&
+    next.requestId === checkpoint.eventRequestId;
+}
+
+export function shouldPauseForFixtureCheckpoint(
+  mode: 'fixture' | 'fixture-checkpoint' | 'sandbox-live',
+  scenario: Scenario,
+  state: Kit5State,
+  resolution: FixtureCheckpointResolution,
+): boolean {
+  return mode === 'fixture-checkpoint' && resolution === 'awaiting' &&
+    isFixtureCheckpointEventNext(scenario, state);
+}
+
 interface PersistedLiveRun {
   runId: string;
   customerIndex: number;
@@ -136,7 +158,8 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
   const [ledgerProjectionResult, setLedgerProjectionResult] = useState<{ url: string; data: LedgerProjectionResponse } | null>(null);
   const [ledgerProjectionFailure, setLedgerProjectionFailure] = useState<{ url: string; message: string } | null>(null);
   const [ledgerProjectionLoadedUrl, setLedgerProjectionLoadedUrl] = useState('');
-  const [mode, setMode] = useState<'fixture' | 'sandbox-live'>('fixture');
+  const [mode, setMode] = useState<'fixture' | 'fixture-checkpoint' | 'sandbox-live'>('fixture');
+  const [fixtureCheckpointResolution, setFixtureCheckpointResolution] = useState<FixtureCheckpointResolution>('awaiting');
   const [liveRunId, setLiveRunId] = useState(initialLiveRun.runId);
   const [liveCustomerIndex, setLiveCustomerIndex] = useState(initialLiveRun.customerIndex);
   const [liveAction, setLiveAction] = useState<LiveProviderActivity | null>(initialLiveRun.action);
@@ -189,17 +212,22 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
 
   // Declines arrive one at a time; the sequence stops for the CRM step, a
   // credit officer, or a repayment (which the presenter triggers).
+  const fixtureCheckpointPaused = shouldPauseForFixtureCheckpoint(mode, scenario, state, fixtureCheckpointResolution);
+
   useEffect(() => {
-    if (mode !== 'fixture' || !canAutoAdvance(state)) return;
-    const t = setTimeout(() => setState((s) => step(s)), ARRIVAL_MS);
+    if ((mode !== 'fixture' && mode !== 'fixture-checkpoint') || !canAutoAdvance(state) || fixtureCheckpointPaused) return;
+    const t = setTimeout(() => setState((s) => (
+      shouldPauseForFixtureCheckpoint(mode, scenario, s, fixtureCheckpointResolution) ? s : step(s)
+    )), ARRIVAL_MS);
     return () => clearTimeout(t);
-  }, [mode, state]);
+  }, [fixtureCheckpointPaused, fixtureCheckpointResolution, mode, scenario, state]);
 
   const selectScenario = useCallback((id: string) => {
     const next = scenarios.find((s) => s.id === id);
     if (!next) return;
     const liveRun = loadLiveRun(id);
     setScenarioId(id);
+    if (id !== scenarioId) setFixtureCheckpointResolution('awaiting');
     liveGenerationRef.current += 1;
     liveSubmissionRef.current = false;
     setLiveRunId(liveRun.runId);
@@ -210,7 +238,7 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setLivePending(false);
     setInputs(structuredClone(next.inputs));
     setState(initialKit5State(next.inputs));
-  }, [scenarios]);
+  }, [scenarioId, scenarios]);
 
   const applyInputs = useCallback((next: ScenarioInputs) => {
     liveGenerationRef.current += 1;
@@ -220,12 +248,15 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setLiveHistory([]);
     setLiveError(null);
     setLivePending(false);
+    setFixtureCheckpointResolution('awaiting');
     setInputs(structuredClone(next));
     setState(initialKit5State(next));
   }, []);
 
   const scan = useCallback(() => setState((s) => start(s)), []);
-  const advance = useCallback(() => setState((s) => step(s)), []);
+  const advance = useCallback(() => setState((s) => (
+    shouldPauseForFixtureCheckpoint(mode, scenario, s, fixtureCheckpointResolution) ? s : step(s)
+  )), [fixtureCheckpointResolution, mode, scenario]);
   const reset = useCallback(() => setState(initialKit5State(inputs)), [inputs]);
 
   const selectCustomer = useCallback((requestId: string | null) => {
@@ -264,10 +295,20 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     setLivePending(false);
   }, [liveAction?.status, liveBlocked, liveHistory, scenario.id]);
 
-  const selectMode = useCallback((next: 'fixture' | 'sandbox-live') => {
+  const selectMode = useCallback((next: 'fixture' | 'fixture-checkpoint' | 'sandbox-live') => {
     if (liveSubmissionRef.current || liveActivityNeedsReconciliation(liveAction)) return;
     setMode(next);
   }, [liveAction]);
+
+  const confirmFixtureCheckpoint = useCallback(() => {
+    if (!shouldPauseForFixtureCheckpoint(mode, scenario, state, fixtureCheckpointResolution)) return;
+    setFixtureCheckpointResolution('confirmed');
+  }, [fixtureCheckpointResolution, mode, scenario, state]);
+
+  const continueFixtureOnly = useCallback(() => {
+    if (!shouldPauseForFixtureCheckpoint(mode, scenario, state, fixtureCheckpointResolution)) return;
+    setFixtureCheckpointResolution('fixture-only');
+  }, [fixtureCheckpointResolution, mode, scenario, state]);
 
   const authenticateOperator = useCallback(async (token: string) => {
     if (!apiBaseUrl) throw new Error('Set VITE_BRIDGE_API_URL to enable operator login.');
@@ -522,6 +563,8 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     ledgerProjectionLoading,
     ledgerProjectionError,
     mode,
+    fixtureCheckpointResolution,
+    fixtureCheckpointPaused,
     liveAction,
     liveHistory,
     liveError,
@@ -542,6 +585,8 @@ export function useKit5Dashboard(apiBaseUrl = import.meta.env.VITE_BRIDGE_API_UR
     crmReEvaluate,
     approve,
     continueAfterAuto,
+    confirmFixtureCheckpoint,
+    continueFixtureOnly,
     selectMode,
     submitNextCustomer,
     authenticateOperator,
