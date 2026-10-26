@@ -1,11 +1,11 @@
 # Editing the FlowCard Treasury frontend
 
-There are two versions behind the toggle at the top right. **Kit 5** is the default; **GD
-original** is Yidi's build, kept as it was. Most of this guide below the Kit 5 section is about
-GD's files.
+There are two versions behind the toggle at the top right. **Kit 5** is the
+default; **GD original** is Yidi's build, kept as it was. Most of this guide
+below the Kit 5 section is about GD's files.
 
-A practical guide to changing the demo. Run `npm run dev` first; every save hot-reloads
-in the browser.
+A practical guide to changing the demo. Run `npm run dev` first; every save
+hot-reloads in the browser.
 
 ## Where things live on screen
 
@@ -22,14 +22,14 @@ in the browser.
 | Repayment waterfall                         | `src/components/CollectionWaterfall.tsx`     |
 | Right-hand Activity column / pop-up toasts  | `src/components/ActivityFeed.tsx`, `FeedToast.tsx` |
 
-The sidebar items other than **Dashboard** are visual only — they don't route anywhere yet.
-`src/components/SummaryCard.tsx` (an end-of-demo outcome list with hard-coded text) exists
-but is not rendered anywhere.
+The sidebar items other than **Dashboard** are visual only — they don't route
+anywhere yet. `src/components/SummaryCard.tsx` (an end-of-demo outcome list with
+hard-coded text) exists but is not rendered anywhere.
 
 ## Kit 5 version (default)
 
-Everything Kit 5 lives in `src/kit5/`. It reuses GD's components, so a visual change to the
-queue, capital bar or feed shows up in both versions.
+Everything Kit 5 lives in `src/kit5/`. It reuses GD's components, so a visual
+change to the queue, capital bar or feed shows up in both versions.
 
 | To change… | Edit |
 | --- | --- |
@@ -44,67 +44,88 @@ queue, capital bar or feed shows up in both versions.
 | Toggle labels or default version | `src/components/VersionToggle.tsx`, `src/App.tsx` |
 
 ### Add a scenario
-Add an entry to `SCENARIOS` in `src/kit5/scenarios.ts` with a `customers` list and an `events`
-list. Each `decline` event needs a unique `requestId`. A `repayment` event names the
-`requestId` of the bridge it repays. Events can be listed in any order; the engine sorts
-them by `day`, then `time`. Then add a test in `tests/kit5/engine.test.ts` that plays it and
-checks the outcome.
+
+Add an entry to `SCENARIOS` in `src/kit5/scenarios.ts` with a `customers` list
+and an `events` list. Each `decline` event needs a unique `requestId`. A
+`repayment` event names the `requestId` of the bridge it repays. Events can be
+listed in any order; the engine sorts them by `day`, then `time`. Then add
+a test in `tests/kit5/engine.test.ts` that plays it and checks the outcome.
 
 ### Connect the backend
-`loadScenarios()` in `src/kit5/scenarios.ts` is the single place scenario data enters.
-Replace its body with a call to the backend that returns `Scenario[]` in the shape defined in
-`src/kit5/types.ts` (plain JSON: facility, already lent out, customers, events). The inputs
-drawer edits a copy of that same object, so it keeps working.
+
+`loadScenarios()` in `src/kit5/scenarios.ts` is the single place scenario data
+enters. Replace its body with a call to the backend that returns `Scenario[]` in
+the shape defined in `src/kit5/types.ts` (plain JSON: facility, already lent
+out, customers, events). The inputs drawer edits a copy of that same object, so
+it keeps working.
 
 ### How the sequence runs
-`useKit5Dashboard` calls `step()` on a timer. Each step takes the next event in arrival
-order. A decline is decided immediately against the capital left at that moment. The timer
-stops while `state.pause` is set (Salesforce re-evaluation, a credit officer, or an
-auto-approval waiting for **Continue**), and before a
-repayment, which the presenter triggers with **Simulate Collection**.
+
+`useKit5Dashboard` calls `step()` on a timer. Each step takes the next event in
+arrival order. A decline is decided immediately against the capital left at
+that moment. The timer stops while `state.pause` is set (Salesforce
+re-evaluation, a credit officer, or an auto-approval waiting for **Continue**),
+and before a repayment, which the presenter triggers with **Simulate
+Collection**.
 
 ## GD original version: common changes
 
 ### Change wording, numbers, or the demo story
-Almost all of it is in **`src/seed.ts`**:
-- `FACILITY_CONFIG` — facility size, reserve floor %, per-customer cap, fee rate, minimum history days
-- `CUSTOMERS` — each customer's monthly inflow, signal ratings, days of history, no-go flags
-- `DECLINED_TRANSACTIONS` — the four declined payments (amount, wallet balance, shortfall, time)
-- `SEEDED_OUTSTANDING` — how much is already lent out at the start ($32,500)
-- `BLOOM_CRM_NOTE`, `AI_EXTRACTED_SIGNALS`, `AGENT_RATIONALES` — the "AI" text shown in the UI
 
-Activity-feed messages and step labels are written in **`src/state/machine.ts`** (search for
-the text you see on screen). The date in the header is `demoClock` in `initialState()`.
+Almost all of it is in **`src/seed.ts`**:
+- `FACILITY_CONFIG` — facility size, reserve floor %, per-customer cap, fee
+  rate, minimum history days
+- `CUSTOMERS` — each customer's monthly inflow, signal ratings, days of history,
+  no-go flags
+- `DECLINED_TRANSACTIONS` — the four declined payments (amount, wallet balance,
+  shortfall, time)
+- `SEEDED_OUTSTANDING` — how much is already lent out at the start ($32,500)
+- `BLOOM_CRM_NOTE`, `AI_EXTRACTED_SIGNALS`, `AGENT_RATIONALES` — the "AI" text
+  shown in the UI
+
+Activity-feed messages and step labels are written in **`src/state/machine.ts`**
+(search for the text you see on screen). The date in the header is `demoClock`
+in `initialState()`.
 
 ### Change the look
-Styling is Tailwind utility classes written directly on the elements (`className="…"`), so
-change the classes in the relevant component. Brand colors are hard-coded hex values:
-- sidebar background `#1a1b2e` in `src/components/Sidebar.tsx`; primary button `#e04e2f` in
-  `src/gd/GdDashboard.tsx` and `src/kit5/Kit5Dashboard.tsx`
+
+Styling is Tailwind utility classes written directly on the elements
+(`className="…"`), so change the classes in the relevant component. Brand
+colors are hard-coded hex values:
+- sidebar background `#1a1b2e` in `src/components/Sidebar.tsx`; primary button
+  `#e04e2f` in `src/gd/GdDashboard.tsx` and
+  `src/kit5/Kit5Dashboard.tsx`
 - custom animations (slide-in, fade) in `src/index.css`
 
-Tailwind v4 is loaded with `@import "tailwindcss";` — there is no `tailwind.config.js`.
+Tailwind v4 is loaded with `@import "tailwindcss"`; there is no
+`tailwind.config.js`.
 
 ### Add a customer to the story
-1. Add a profile to `CUSTOMERS` and a decline to `DECLINED_TRANSACTIONS` in `src/seed.ts`
-   (use a new `acct_…` id in both).
-2. Add a rationale for it under `AGENT_RATIONALES` (the key must match the `CUSTOMERS` key).
-3. That's usually enough: `processCustomer()` in `src/state/machine.ts` runs every customer
-   through the policy functions, so the outcome (funded / needs approval / declined /
-   ineligible) follows from the numbers. Only Bloom has special-case code (`key === 'bloom'`)
-   for the CRM-note reveal.
+
+1. Add a profile to `CUSTOMERS` and a decline to `DECLINED_TRANSACTIONS` in
+   `src/seed.ts` (use a new `acct_…` id in both).
+2. Add a rationale for it under `AGENT_RATIONALES` (the key must match the
+   `CUSTOMERS` key).
+3. That's usually enough: `processCustomer()` in `src/state/machine.ts` runs
+   every customer through the policy functions, so the outcome (funded / needs
+   approval / declined / ineligible) follows from the numbers. Only Bloom has
+   special-case code (`key === 'bloom'`) for the CRM-note reveal.
 
 ### Change the underwriting rules
-Rules are pure functions in `src/policy/` and covered by tests in `tests/policy/policy.test.ts`:
+
+Rules are pure functions in `src/policy/` and covered by tests in
+`tests/policy/policy.test.ts`:
 - `tiers.ts` — signals → Tier A/B/C/none
-- `creditLine.ts` — tier multipliers (30% / 20% / 10% of monthly inflow), per-customer cap
-- `facility.ts` — capital bands and the **door table** (auto / human / closed per band × tier)
+- `creditLine.ts` — tier multipliers (30% / 20% / 10% of monthly inflow),
+  per-customer cap
+- `facility.ts` — capital bands and the **door table** (auto / human / closed
+  per band × tier)
 - `bridge.ts` — the per-request approval checks
 - `fees.ts` — 1.5% per 30 days
 
-After changing a rule, run `npm test` and update the tests that encode the old rule.
-Note that the seeded story assumes the current rules, so changing them can change which
-customers get funded.
+After changing a rule, run `npm test` and update the tests that encode the old
+rule. Note that the seeded story assumes the current rules, so changing them can
+change which customers get funded.
 
 ## How a click becomes a screen update
 
@@ -190,29 +211,44 @@ reconciliation, mapping checks, and the production browser access gate.
 ### Run the local server
 
 Use Node 20.19+ or 22.12+ and a PostgreSQL database. The server does not run
-SQL migrations automatically. Apply all eighteen migrations in order from the
-repository root before using the policy APIs, operator approval CLI, or Kit 5
-attempt persistence:
+SQL migrations automatically. From the repository root, create `.env` from
+`.env.example` if needed, then source it. `DATABASE_URL` uses the Compose
+hostname `database`; `DATABASE_URL_HOST` is for host-side database access.
+Export the host URL as `DATABASE_URL` before running host-side server or CLI
+commands:
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_underwriting_profiles.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/006_policy_evaluations.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/007_policy_request_evaluations.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/008_remote_authorization.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_request_ledger_sequence.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/011_remote_authorization_nonce_claims.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/012_remote_authorization_decision_identity.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/013_remote_authorization_dispatch_gate.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/014_ai_evidence_decision_gate.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/015_kit5_card_attempts.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/016_kit5_policy_retry_lifecycle.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/017_kit5_repayment_deposits.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/018_customer_roster_account_mapping_audit.sql
+test -f .env || cp .env.example .env
+set -a
+source .env
+set +a
+export DATABASE_URL="$DATABASE_URL_HOST"
+```
+
+Apply all twenty migrations in order before using the policy APIs, operator
+approval CLI, or Kit 5 attempt persistence:
+
+```bash
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_underwriting_profiles.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/006_policy_evaluations.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/007_policy_request_evaluations.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/008_remote_authorization.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_request_ledger_sequence.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/011_remote_authorization_nonce_claims.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/012_remote_authorization_decision_identity.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/013_remote_authorization_dispatch_gate.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/014_ai_evidence_decision_gate.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/015_kit5_card_attempts.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/016_kit5_policy_retry_lifecycle.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/017_kit5_repayment_deposits.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/018_customer_roster_account_mapping_audit.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/019_provider_generated_issuing_lifecycle.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/020_kit5_attempt_type.sql
 ```
 
 To replace a seeded connected-account placeholder, first deactivate any active
@@ -237,12 +273,13 @@ The server requires `DATABASE_URL`, `AIRWALLEX_CLIENT_ID`,
 `AIRWALLEX_API_KEY`, and `AIRWALLEX_WEBHOOK_SECRET`. `PORT` is optional and
 defaults to `3000`.
 `AIRWALLEX_BASE_URL` is optional and defaults to
-`https://api.sandbox.airwallex.com`. Set the credentials in the server process
-environment. The server defaults to port `3000`. The existing ngrok tunnel
+`https://api.sandbox.airwallex.com`. The root `.env` supplies the server
+environment. Host-run commands use `DATABASE_URL_HOST` through the exported
+`DATABASE_URL`. The server defaults to port `3000`. The existing ngrok tunnel
 forwards to `localhost:8000`, so run the webhook-capable server on port `8000`:
 
 ```bash
-PORT=8000 npm run server:start
+DATABASE_URL="$DATABASE_URL_HOST" PORT=8000 npm run server:start
 ```
 
 For sandbox-live Kit 5 actions, configure server-only
@@ -265,27 +302,31 @@ The command builds the TypeScript server and starts it. It does not apply the
 SQL migrations. Keep Airwallex and operator credentials on the server; the
 browser receives only a scoped operator session cookie after runtime login.
 
-### Run the read-only demo with Docker
+### Run the sandbox-live Compose stack
 
-From the repository root, run:
+From the repository root, configure the required sandbox credentials, Kit 5
+operator settings, and verified Nova account mappings in `.env`. The tracked
+`.env.example` contains safe placeholders. Compose passes the full root `.env`
+to both PostgreSQL and the ledger. Use `DATABASE_URL` for the Compose service
+hostname `database`; use `DATABASE_URL_HOST` for host-side `psql` and server
+commands.
+
+The single Compose configuration exposes the ledger on port `8000` and binds
+PostgreSQL to localhost on port `5432`:
 
 ```bash
-docker compose -p flowcard-ledger-demo up -d --build
+docker compose up -d --build
 ```
 
-Compose starts PostgreSQL and the ledger API, then applies migrations 001
-through 003 when PostgreSQL creates its empty data volume. It does not apply
-migrations 004 through 018; apply them manually for the current schema. Compose
-uses
-placeholder Airwallex values and a localhost-only base URL. It does not make
-provider calls. Open `http://localhost:3000/api/ledger` to inspect the seeded
-projection, or check `http://localhost:3000/health` for service health.
+PostgreSQL applies migrations 001 through 003 when it creates an empty data
+volume. Apply migrations 004 through 020 manually with the host-side
+instructions above. Open `http://localhost:8000/api/ledger` to inspect the
+projection, or check `http://localhost:8000/health` for service health.
 
-Use `docker compose -p flowcard-ledger-demo ps` to check service state and
-`docker compose -p flowcard-ledger-demo logs -f ledger` to follow API logs.
-Stop the services with `docker compose -p flowcard-ledger-demo down`. The named
-database volume persists after stopping; the SQL seed only runs again if a new
-empty volume is created.
+Use `docker compose ps` to check service state and
+`docker compose logs -f ledger` to follow API logs. Stop the services with
+`docker compose down`. The named database volume persists after stopping; the
+SQL seed only runs again if a new empty volume is created.
 
 ### Webhook prerequisites
 

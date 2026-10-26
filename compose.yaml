@@ -1,10 +1,7 @@
 services:
   database:
     image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: flowcard_treasury
-      POSTGRES_USER: flowcard
-      POSTGRES_PASSWORD: demo-local-only
+    env_file: .env
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -22,19 +19,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgres://flowcard:demo-local-only@database:5432/flowcard_treasury
-      PORT: "3000"
-      AIRWALLEX_CLIENT_ID: demo-not-used
-      AIRWALLEX_API_KEY: demo-not-used
-      AIRWALLEX_WEBHOOK_SECRET: demo-webhook-secret
-      AIRWALLEX_BASE_URL: http://127.0.0.1:9
-      SALESFORCE_SNAPSHOT_MODE: demo
+    env_file: .env
     depends_on:
       database:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "8000:3000"
     healthcheck:
       test:
         - CMD

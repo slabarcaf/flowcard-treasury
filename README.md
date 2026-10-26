@@ -1,14 +1,15 @@
 # FlowCard Treasury
 
-A clickable demo of **bridge financing underwriting**: when a customer's card payment
-is declined for insufficient funds, FlowCard decides — using fixed policy rules plus an
-AI agent reading CRM notes — whether to front the shortfall from its lending facility.
+A clickable demo of **bridge financing underwriting**: when a customer's card
+payment is declined for insufficient funds, FlowCard decides — using fixed
+policy rules plus an AI agent reading CRM notes — whether to front the shortfall
+from its lending facility.
 
 > **Credit.** This project was originally built by
 > [@yidi-li-ydl](https://github.com/yidi-li-ydl) in
 > [yidi-li-ydl/flowcard-treasury](https://github.com/yidi-li-ydl/flowcard-treasury).
-> This repository is a copy made to keep iterating on the frontend. The original commit
-> history is preserved, so the first commit is hers.
+> This repository is a copy made to keep iterating on the frontend. The original
+> commit history is preserved, so the first commit is hers.
 
 **Live demo:** https://flowcard-treasury.vercel.app (anyone with the link can open it; the code stays private).
 
@@ -30,7 +31,7 @@ npm run dev        # http://localhost:5173
 | `npm run lint`    | Lint with oxlint                              |
 | `npm run preview` | Serve the production build locally            |
 
-The local demo Compose service sets `SALESFORCE_SNAPSHOT_MODE=demo`, which
+The sandbox-live Compose service sets `SALESFORCE_SNAPSHOT_MODE=demo`, which
 publishes synthetic snapshots at startup and refreshes them daily. Production
 Salesforce snapshots remain disabled until a trusted host MCP binding exists.
 Run `npm run test:acceptance` to execute the database-backed policy acceptance
@@ -38,8 +39,8 @@ suite. It requires a local PostgreSQL database whose name includes `test`.
 
 ### Update the live demo
 
-The demo is deployed from this folder with the Vercel CLI (account `slabarcaf`). Pushing to
-GitHub does **not** redeploy it. After merging changes:
+The demo is deployed from this folder with the Vercel CLI (account `slabarcaf`).
+Pushing to GitHub does **not** redeploy it. After merging changes:
 
 ```bash
 vercel deploy --prod
@@ -47,7 +48,8 @@ vercel deploy --prod
 
 ## Two versions: Kit 5 and GD original
 
-A toggle at the top right switches between two versions. The choice is remembered in the browser.
+A toggle at the top right switches between two versions. The choice
+is remembered in the browser.
 
 | | **Kit 5** (default) | **GD original** |
 | --- | --- | --- |
@@ -98,36 +100,56 @@ bridge. Local tests use fixture aliases and a mocked Airwallex gateway.
 ### Start the server locally
 
 Use Node 20.19+ or 22.12+ and PostgreSQL. From the repository root, create a
-local database, then apply the schema and demo facility seed:
+root `.env` from `.env.example` if one does not already exist, then configure
+the required values:
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_underwriting_profiles.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/006_policy_evaluations.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/007_policy_request_evaluations.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/008_remote_authorization.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_request_ledger_sequence.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/011_remote_authorization_nonce_claims.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/012_remote_authorization_decision_identity.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/013_remote_authorization_dispatch_gate.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/014_ai_evidence_decision_gate.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/015_kit5_card_attempts.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/016_kit5_policy_retry_lifecycle.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/017_kit5_repayment_deposits.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/018_customer_roster_account_mapping_audit.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/019_provider_generated_issuing_lifecycle.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/src/db/migrations/020_kit5_attempt_type.sql
+test -f .env || cp .env.example .env
+```
+
+Source the root file for host-side tools. `DATABASE_URL` targets the Compose
+service hostname `database`; `DATABASE_URL_HOST` targets PostgreSQL from the
+host. Export the host URL as `DATABASE_URL` before running the server or CLI on
+the host:
+
+```bash
+set -a
+source .env
+set +a
+export DATABASE_URL="$DATABASE_URL_HOST"
+```
+
+Apply the schema and demo facility seed from the repository root:
+
+```bash
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/001_bridge_ledger.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/002_customer_roster.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/003_salesforce_snapshots.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/004_ai_evidence.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/005_underwriting_profiles.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/006_policy_evaluations.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/007_policy_request_evaluations.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/008_remote_authorization.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/009_policy_request_ledger_sequence.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/010_remote_authorization_nonce_fingerprint.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/011_remote_authorization_nonce_claims.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/012_remote_authorization_decision_identity.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/013_remote_authorization_dispatch_gate.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/014_ai_evidence_decision_gate.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/015_kit5_card_attempts.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/016_kit5_policy_retry_lifecycle.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/017_kit5_repayment_deposits.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/018_customer_roster_account_mapping_audit.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/019_provider_generated_issuing_lifecycle.sql
+psql "$DATABASE_URL_HOST" -v ON_ERROR_STOP=1 -f server/src/db/migrations/020_kit5_attempt_type.sql
 ```
 
 Set these server environment variables before starting the service:
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | Yes | PostgreSQL connection string. |
+| `DATABASE_URL` | Yes in Compose | PostgreSQL URL using the Compose hostname `database`. |
+| `DATABASE_URL_HOST` | For host tools | Host URL for `psql` and host-run server or CLI commands. |
 | `PORT` | No | HTTP port; defaults to `3000`. |
 | `AIRWALLEX_CLIENT_ID` | Yes | Server-side Airwallex client ID. |
 | `AIRWALLEX_API_KEY` | Yes | Server-side Airwallex API key. |
@@ -198,9 +220,9 @@ local server:
 
 ```bash
 set -a
-source ../../.env
+source .env
 set +a
-PORT=8000 npm run server:start
+DATABASE_URL="$DATABASE_URL_HOST" PORT=8000 npm run server:start
 ```
 
 Point the local Kit 5 frontend at that server:
@@ -220,32 +242,31 @@ continues to use raw-body signature verification and does not require a browser
 session.
 
 This script builds the server and runs it on `PORT`. It does not apply database
-migrations; apply all eighteen SQL migrations first. Leave
+migrations; apply all twenty SQL migrations first. Leave
 `VITE_BRIDGE_API_URL` unset to use the deterministic Kit 5 mock without a
 ledger projection.
 
-### Run the ledger demo with Docker
+### Run the sandbox-live Compose stack
 
-Docker Compose starts PostgreSQL and the ledger API. PostgreSQL applies
-migrations 001 through 003 and synthetic opening exposure when it initializes
-its data volume. Apply migrations 004 through 018 manually using the
-instructions above for the current application schema.
-The Compose file uses placeholder credentials and a localhost-only Airwallex
-URL; it is configured for the read-only ledger demo, not provider operations.
+The single sandbox-live Compose configuration loads the root `.env` into both
+PostgreSQL and the ledger. Configure the required server credentials, operator
+settings, and verified Nova account mappings in that file first. PostgreSQL
+applies migrations 001 through 003 when it initializes an empty data volume.
+Apply migrations 004 through 020 manually using the host-side commands above.
+The ledger is available on port `8000`; PostgreSQL is bound to localhost on
+port `5432`.
 
 ```bash
-docker compose -p flowcard-ledger-demo up -d --build
-docker compose -p flowcard-ledger-demo ps
-curl http://localhost:3000/health
-curl http://localhost:3000/api/ledger
+docker compose up -d --build
+docker compose ps
+curl http://localhost:8000/health
+curl http://localhost:8000/api/ledger
 ```
 
-The ledger API is available at `http://localhost:3000`. Inspect service logs
-with `docker compose -p flowcard-ledger-demo logs -f ledger`. Stop the
-containers with `docker compose -p flowcard-ledger-demo down`. The named
-PostgreSQL volume preserves demo data when containers stop. Migrations 001
-through 003 run automatically only when PostgreSQL initializes an empty
-volume. Compose does not apply migrations 004 through 017.
+Inspect service logs with `docker compose logs -f ledger`. Stop the services
+with `docker compose down`. The named PostgreSQL volume preserves data when
+containers stop. Migrations 001 through 003 run automatically only when
+PostgreSQL initializes an empty volume.
 
 ### Webhook setup
 
@@ -444,10 +465,10 @@ the affected customer while other customers continue.
 | **First come, first served** | Two identical Tier A requests ($8,000 each). The first is funded; the second would breach the floor and is refused. After the first is repaid, the second customer's retried payment is funded. |
 | **Tight capital → human** | Two identical Tier A requests ($3,000 each) with $6,500 deployable. The first auto-funds and drops capital into *Critical*, where Tier A needs a person, so the second goes to a credit officer. |
 
-While a scenario plays, declines arrive about every 1.5 seconds. It stops when it needs you:
-**Re-evaluate** (Salesforce note), **Continue** after an auto-approval (a green callout shows
-what was funded), **Approve Bridge** (credit officer) or **Simulate Collection** (a repayment
-on a later day).
+While a scenario plays, declines arrive about every 1.5 seconds. It stops when
+you need to act: **Re-evaluate** (Salesforce note), **Continue** after an
+auto-approval (a green callout shows what was funded), **Approve Bridge**
+(credit officer), or **Simulate Collection** (a repayment on a later day).
 
 ### Statuses and dates
 
@@ -459,21 +480,23 @@ on a later day).
 | **Funded** | Bridge sent and **still owed**. Shows the funding date and the *collect by* date. |
 | **Repaid** | Fee and principal collected. Shows the repayment date. |
 
-*Collect by* = funding date + 30 days. The customer's default term is "as soon as money
-arrives", so we collect as soon as a deposit lands; 30 days is the latest we wait before the
-bridge is past due. After that the late ladder applies (days 1–2 grace, days 3–15 line
-frozen, day 16+ cards blocked), which is outside the demo. The 30 days is a placeholder until
-the team settles collection timing (Open item 1 in the source-of-truth doc); change it per
-request with **Collect within (days)** in the inputs panel, or `DEFAULT_TERM_DAYS` in
+*Collect by* = funding date + 30 days. The customer's default term is "as soon
+as money arrives", so we collect as soon as a deposit lands; 30 days is the
+latest we wait before the bridge is past due. After that the late ladder applies
+(days 1–2 grace, days 3–15 line frozen, day 16+ cards blocked), which is outside
+the demo. The 30 days is a placeholder until the team settles collection timing
+(Open item 1 in the source-of-truth doc); change it per request with **Collect
+within (days)** in the inputs panel, or `DEFAULT_TERM_DAYS` in
 `src/kit5/engine.ts`.
 
-In the inputs panel, changing a request's time changes who arrives first. In *First come, first
-served*, set Cedar's time to 9:10 and Maple gets funded instead.
+In the inputs panel, changing a request's time changes who arrives first. In
+*First come, first served*, set Cedar's time to 9:10 and Maple gets funded
+instead.
 
 ### GD original, click by click
 
-1. **Start state.** A $50,000 facility with $32,500 already lent out, $15,000 deployable,
-   $2,500 reserve floor. Capital band: *Less*.
+1. **Start state.** A $50,000 facility with $32,500 already lent out, $15,000
+   deployable, $2,500 reserve floor. Capital band: *Less*.
 2. **Scan Declines** pulls in four declined payments:
 
    | Customer     | Payment            | Shortfall | What the story shows                                                                                     |
@@ -520,8 +543,10 @@ tests/kit5/            Plays every Kit 5 scenario end to end and checks the outc
 
 Data flows one way in both versions, and both render the same components:
 
-- Kit 5: **`kit5/scenarios.ts` → `kit5/engine.ts` (uses `policy/`) → `useKit5Dashboard` → components**
-- GD: **`seed.ts` → `state/machine.ts` (uses `policy/`) → `useDashboard` → components**
+- Kit 5: **`kit5/scenarios.ts` → `kit5/engine.ts` (uses `policy/`) →
+  `useKit5Dashboard` → components**
+- GD: **`seed.ts` → `state/machine.ts` (uses `policy/`) → `useDashboard` →
+  components**
 
 ## Editing
 

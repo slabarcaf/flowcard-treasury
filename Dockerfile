@@ -11,7 +11,6 @@ RUN npm run server:build
 
 FROM node:22-alpine AS runtime
 
-ENV NODE_ENV=production
 WORKDIR /app
 
 COPY package.json package-lock.json ./
