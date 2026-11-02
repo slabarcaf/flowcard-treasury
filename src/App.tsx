@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useDashboard } from './hooks/useDashboard.js';
 import { CapitalBar } from './components/CapitalBar.js';
 import { BridgeQueue } from './components/BridgeQueue.js';
 import { ActivityFeed } from './components/ActivityFeed.js';
 import { FeedToast } from './components/FeedToast.js';
+import { OnboardingWizard } from './components/onboarding/OnboardingWizard.js';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: 'grid', active: true },
@@ -36,7 +38,7 @@ function NavIcon({ icon }: { icon: string }) {
   }
 }
 
-function App() {
+function Dashboard() {
   const { state, scan, selectCustomer, bloomReveal, bloomReEvaluate, approve, collect, reset } = useDashboard();
 
   const totalEligibleShortfall = state.queue
@@ -156,6 +158,16 @@ function App() {
       </div>
     </div>
   );
+}
+
+function App() {
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+
+  if (!onboardingComplete) {
+    return <OnboardingWizard onComplete={() => setOnboardingComplete(true)} />;
+  }
+
+  return <Dashboard />;
 }
 
 export default App;
