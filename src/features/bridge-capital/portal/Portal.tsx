@@ -3,17 +3,33 @@
  * and the current screen. Navigation is state, not a router.
  */
 import type { DataAdapter } from '../data/adapter.js';
+import type { PortalScreen } from './usePortal.js';
 import { color, font, glow, layout, radius, space } from './tokens.js';
 import { GlowBackground } from '../ui/Surface.js';
 import { usePortal } from './usePortal.js';
+import { TabBar, TAB_BAR_HEIGHT, type TabId } from './components/TabBar.js';
 import { WalletHome } from './screens/WalletHome.js';
+import { ActivityScreen } from './screens/ActivityScreen.js';
+import { BridgesScreen } from './screens/BridgesScreen.js';
+import { AccountScreen } from './screens/AccountScreen.js';
+import { TransactionScreen } from './screens/TransactionScreen.js';
 import { DeclineScreen } from './screens/DeclineScreen.js';
 import { AcceptedScreen } from './screens/AcceptedScreen.js';
 import { ActiveBridgeScreen } from './screens/ActiveBridgeScreen.js';
 
+/** Which tab a screen belongs to. The task screens keep the bar hidden. */
+const TAB_FOR_SCREEN: Partial<Record<PortalScreen['screen'], TabId>> = {
+  wallet: 'wallet',
+  activity: 'activity',
+  bridges: 'bridges',
+  bridge: 'bridges',
+  account: 'account',
+};
+
 export function Portal({ adapter, onExit }: { adapter?: DataAdapter; onExit?: () => void }) {
   const portal = usePortal(adapter);
-  const { data, customer, screen, selectCustomer } = portal;
+  const { data, customer, screen, selectCustomer, go } = portal;
+  const tab = TAB_FOR_SCREEN[screen.screen];
 
   return (
     <GlowBackground
@@ -94,6 +110,7 @@ export function Portal({ adapter, onExit }: { adapter?: DataAdapter; onExit?: ()
           maxWidth: layout.maxWidth,
           margin: '0 auto',
           padding: `${space['3xl']} ${layout.gutter} ${space['4xl']}`,
+          paddingBottom: tab === undefined ? space['4xl'] : `calc(${TAB_BAR_HEIGHT} + ${space['3xl']})`,
         }}
       >
         {data === null || customer === null ? (
@@ -101,6 +118,12 @@ export function Portal({ adapter, onExit }: { adapter?: DataAdapter; onExit?: ()
         ) : (
           <>
             {screen.screen === 'wallet' && <WalletHome portal={portal} />}
+            {screen.screen === 'activity' && <ActivityScreen portal={portal} />}
+            {screen.screen === 'bridges' && <BridgesScreen portal={portal} />}
+            {screen.screen === 'account' && <AccountScreen portal={portal} />}
+            {screen.screen === 'transaction' && (
+              <TransactionScreen portal={portal} transactionId={screen.transactionId} />
+            )}
             {screen.screen === 'decline' && (
               <DeclineScreen portal={portal} transactionId={screen.transactionId} />
             )}
@@ -113,6 +136,10 @@ export function Portal({ adapter, onExit }: { adapter?: DataAdapter; onExit?: ()
           </>
         )}
       </main>
+
+      {tab !== undefined && (
+        <TabBar active={tab} onSelect={(next) => go({ screen: next })} />
+      )}
     </GlowBackground>
   );
 }

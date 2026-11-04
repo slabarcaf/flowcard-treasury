@@ -1,10 +1,13 @@
-/** Balance, recent card spend, and a banner for any bridge that is running. */
-import type { Bridge, CardTransaction } from '../../types.js';
+/** Balance, this month at a glance, and a banner for any bridge that is running. */
+import { useMemo } from 'react';
+import type { Bridge } from '../../types.js';
 import { applyDelinquency } from '../../policy/delinquency.js';
 import { color, font, radius, space, stageToneFor } from '../tokens.js';
 import { usd, shortDate, titleCase } from '../../ui/format.js';
-import type { Portal } from '../usePortal.js';
-import { Amount, Card, ListRow, Pill, SectionTitle } from '../components/ui.js';
+import { addDays } from '../../policy/util.js';
+import { buildActivity, spendByCategory, totals } from '../activity.js';
+import { openerFor, type Portal } from '../usePortal.js';
+import { Amount, Button, Card, ListRow, Pill, SectionTitle } from '../components/ui.js';
 
 function BridgeBanner({ bridge, today, onOpen }: { bridge: Bridge; today: string; onOpen: () => void }) {
   const stage = applyDelinquency(bridge, today);
@@ -53,23 +56,92 @@ function BridgeBanner({ bridge, today, onOpen }: { bridge: Bridge; today: string
   );
 }
 
+/** Money in and money out this month, side by side. */
+function MonthTotals({ moneyIn, moneyOut }: { moneyIn: number; moneyOut: number }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: space.lg }}>
+      {[
+        { label: 'In, last 30 days', value: moneyIn, tone: color.positive },
+        { label: 'Out', value: moneyOut, tone: color.text },
+      ].map((t) => (
+        <div key={t.label} style={{ display: 'grid', gap: '2px' }}>
+          <span style={{ fontSize: font.size.sm, color: color.textSecondary }}>{t.label}</span>
+          <span
+            style={{
+              fontSize: font.size.xl,
+              fontWeight: font.weight.semibold,
+              color: t.tone,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {usd(t.value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Where the card went this month, biggest category first. */
+function CategoryBars({ rows }: { rows: Array<{ category: string; amount: number }> }) {
+  const top = rows.slice(0, 4);
+  const largest = top[0]?.amount ?? 0;
+  if (largest <= 0) return null;
+
+  return (
+    <div style={{ display: 'grid', gap: space.lg }}>
+      {top.map((row) => (
+        <div key={row.category} style={{ display: 'grid', gap: space.sm }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.size.md }}>
+            <span style={{ color: color.textSecondary }}>{titleCase(row.category)}</span>
+            <span style={{ color: color.text, fontVariantNumeric: 'tabular-nums' }}>
+              {usd(row.amount)}
+            </span>
+          </div>
+          <div style={{ height: '6px', borderRadius: radius.pill, background: color.surfaceSunken }}>
+            <div
+              style={{
+                width: `${(row.amount / largest) * 100}%`,
+                height: '100%',
+                borderRadius: radius.pill,
+                background: color.accent,
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function WalletHome({ portal }: { portal: Portal }) {
   const { data, customer, today, go } = portal;
+
+  const activity = useMemo(
+    () => (data === null || customer === null ? [] : buildActivity(data, customer.id)),
+    [data, customer],
+  );
+
   if (data === null || customer === null) return null;
 
   const balance = customer.balance_history.at(-1)?.balance ?? 0;
-  const transactions = data.transactions
-    .filter((t) => t.customer_id === customer.id)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const bridges = data.bridges.filter((b) => b.customer_id === customer.id && b.status !== 'REPAID');
 
-  const requestFor = (txn: CardTransaction) =>
-    data.requests.find((r) => r.transaction.id === txn.id);
+  // The last 30 days rather than the calendar month: three days into November
+  // a month-to-date figure says more about the date than about the business.
+  const since = addDays(today, -30);
+  const recentWindow = activity.filter((i) => i.at.slice(0, 10) >= since);
+  const month = totals(recentWindow);
+  const categories = spendByCategory(recentWindow);
+  const recent = activity.slice(0, 5);
 
   return (
     <div style={{ display: 'grid', gap: space['2xl'] }}>
       <Card>
-        <Amount label="Wallet balance" value={usd(balance)} />
+        <div style={{ display: 'grid', gap: space.xl }}>
+          <Amount label="Wallet balance" value={usd(balance)} />
+          <MonthTotals moneyIn={month.in} moneyOut={month.out} />
+        </div>
       </Card>
 
       {bridges.map((bridge) => (
@@ -81,38 +153,50 @@ export function WalletHome({ portal }: { portal: Portal }) {
         />
       ))}
 
+      {categories.length > 0 && (
+        <Card>
+          <div style={{ display: 'grid', gap: space.xl }}>
+            <SectionTitle>Where the card went, last 30 days</SectionTitle>
+            <CategoryBars rows={categories} />
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div style={{ display: 'grid', gap: space.md }}>
-          <SectionTitle>Recent card activity</SectionTitle>
+          <SectionTitle>Recent activity</SectionTitle>
           <div style={{ display: 'grid' }}>
-            {transactions.map((txn, i) => {
-              const declined = txn.status === 'DECLINED';
-              const request = requestFor(txn);
+            {recent.map((item, i) => {
+              const declined = item.kind === 'CARD_DECLINED';
+              const open = openerFor(item, go);
               return (
                 <ListRow
-                  key={txn.id}
+                  key={item.id}
                   first={i === 0}
-                  title={txn.merchant_name}
+                  title={item.title}
                   subtitle={
                     declined ? (
                       <span style={{ color: color.critical }}>
-                        Declined · {shortDate(txn.created_at)}
+                        Declined · {shortDate(item.at)}
                       </span>
                     ) : (
-                      `${titleCase(txn.merchant_category)} · ${shortDate(txn.created_at)}`
+                      `${titleCase(item.subtitle)} · ${shortDate(item.at)}`
                     )
                   }
-                  amount={usd(txn.amount)}
-                  tone={declined ? 'critical' : undefined}
-                  onClick={
-                    declined && request !== undefined
-                      ? () => go({ screen: 'decline', transactionId: txn.id })
-                      : undefined
+                  amount={
+                    declined
+                      ? usd(item.transaction?.amount ?? 0)
+                      : `${item.amount > 0 ? '+' : '\u2212'}${usd(Math.abs(item.amount))}`
                   }
+                  tone={declined ? 'critical' : item.amount > 0 ? 'positive' : undefined}
+                  onClick={open}
                 />
               );
             })}
           </div>
+          <Button variant="ghost" onClick={() => go({ screen: 'activity' })}>
+            See all activity
+          </Button>
         </div>
       </Card>
     </div>

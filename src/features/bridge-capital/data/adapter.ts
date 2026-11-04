@@ -32,6 +32,8 @@ export interface DataAdapter {
   /** Every card transaction, or one customer's. */
   listTransactions(customerId?: string): Promise<CardTransaction[]>;
   listDeclinedTransactions(): Promise<CardTransaction[]>;
+  /** Settled deposits, or one customer's. Derived from paid invoices. */
+  listDeposits(customerId?: string): Promise<Deposit[]>;
   listRequests(): Promise<BridgeRequest[]>;
 
   // Decisions

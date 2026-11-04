@@ -8,12 +8,19 @@ import type {
   Bridge,
   BridgeRequest,
   CardTransaction,
+  Deposit,
   PlatformCapital,
   TimelineEvent,
 } from '../types.js';
 import { criticalityForCategory } from '../policy/criticality.js';
 import { addDays } from '../policy/util.js';
-import type { CustomerBlueprint } from './generator.js';
+import {
+  generateBalanceHistory,
+  generateCardTransactions,
+  generateDeposits,
+  generateInvoices,
+  type CustomerBlueprint,
+} from './generator.js';
 
 /** The day all windows are measured back from. */
 export const AS_OF = '2026-11-03';
@@ -47,6 +54,15 @@ const northwind: CustomerBlueprint = {
     { name: 'Dorsey Grocers', share: 0.45, on_time_rate: 0.97, avg_days_late: 1, relationship_months: 28 },
     { name: 'Kestrel Markets', share: 0.35, on_time_rate: 0.95, avg_days_late: 2, relationship_months: 22 },
     { name: 'Tamarind Retail', share: 0.20, on_time_rate: 0.92, avg_days_late: 3, relationship_months: 14 },
+  ],
+  merchants: [
+    { name: 'Bramble Packaging', category: 'suppliers', amount: 2_100, cadence: 'WEEKLY' },
+    { name: 'Harlow Freight', category: 'logistics', amount: 1_180, cadence: 'FORTNIGHTLY' },
+    { name: 'Payroll run', category: 'payroll', amount: 21_500, cadence: 'MONTHLY' },
+    { name: 'Citywide Power', category: 'utilities', amount: 640, cadence: 'MONTHLY' },
+    { name: 'Rowe Packaging', category: 'suppliers', amount: 3_400, cadence: 'OCCASIONAL' },
+    { name: 'Netsuite', category: 'saas', amount: 480, cadence: 'MONTHLY' },
+    { name: 'Meridian Travel', category: 'travel', amount: 900, cadence: 'OCCASIONAL' },
   ],
   bridges: [
     { amount: 6_000, term_days: 30, outcome: 'ON_TIME', closed_days_ago: 320, days_outstanding: 24 },
@@ -99,6 +115,14 @@ const harbor: CustomerBlueprint = {
     { name: 'Pinewood Catering', share: 0.24, on_time_rate: 0.88, avg_days_late: 4, relationship_months: 12 },
     { name: 'Rowan Cafes', share: 0.14, on_time_rate: 0.90, avg_days_late: 3, relationship_months: 8 },
   ],
+  merchants: [
+    { name: 'Verity Produce', category: 'inventory', amount: 3_100, cadence: 'WEEKLY' },
+    { name: 'Coldline Storage', category: 'logistics', amount: 2_300, cadence: 'FORTNIGHTLY' },
+    { name: 'Payroll run', category: 'payroll', amount: 18_200, cadence: 'MONTHLY' },
+    { name: 'Gulf Seafood Co.', category: 'suppliers', amount: 4_200, cadence: 'FORTNIGHTLY' },
+    { name: 'Citywide Power', category: 'utilities', amount: 1_120, cadence: 'MONTHLY' },
+    { name: 'Toast POS', category: 'saas', amount: 310, cadence: 'MONTHLY' },
+  ],
   bridges: [
     { amount: 12_000, term_days: 60, outcome: 'DEFAULTED', closed_days_ago: 500, days_outstanding: 122 },
     { amount: 7_500, term_days: 30, outcome: 'ON_TIME', closed_days_ago: 240, days_outstanding: 28 },
@@ -144,6 +168,15 @@ const lumen: CustomerBlueprint = {
     { name: 'Juniper Brands', share: 0.3, on_time_rate: 0.9, avg_days_late: 4, relationship_months: 7 },
     { name: 'Selby Partners', share: 0.2, on_time_rate: 0.86, avg_days_late: 6, relationship_months: 5 },
   ],
+  merchants: [
+    { name: 'Orbit Print Co.', category: 'suppliers', amount: 1_050, cadence: 'FORTNIGHTLY' },
+    { name: 'Payroll run', category: 'payroll', amount: 12_400, cadence: 'MONTHLY' },
+    { name: 'Adobe Creative Cloud', category: 'saas', amount: 390, cadence: 'MONTHLY' },
+    { name: 'Figma', category: 'saas', amount: 180, cadence: 'MONTHLY' },
+    { name: 'Hallam & Reed', category: 'professional_services', amount: 1_600, cadence: 'MONTHLY' },
+    { name: 'Meridian Travel', category: 'travel', amount: 1_400, cadence: 'OCCASIONAL' },
+    { name: 'The Albany', category: 'entertainment', amount: 320, cadence: 'OCCASIONAL' },
+  ],
   bridges: [
     { amount: 4_000, term_days: 30, outcome: 'ON_TIME', closed_days_ago: 120, days_outstanding: 26 },
   ],
@@ -175,6 +208,13 @@ const vertex: CustomerBlueprint = {
   payers: [
     { name: 'Halcyon Health', share: 0.7, on_time_rate: 0.95, avg_days_late: 2, relationship_months: 2 },
     { name: 'Stride Clinics', share: 0.3, on_time_rate: 0.9, avg_days_late: 3, relationship_months: 2 },
+  ],
+  merchants: [
+    { name: 'Benchling', category: 'saas', amount: 860, cadence: 'MONTHLY' },
+    { name: 'Northstar Analytics', category: 'saas', amount: 640, cadence: 'MONTHLY' },
+    { name: 'Calder Lab Supply', category: 'inventory', amount: 1_900, cadence: 'FORTNIGHTLY' },
+    { name: 'Payroll run', category: 'payroll', amount: 9_800, cadence: 'MONTHLY' },
+    { name: 'Hallam & Reed', category: 'professional_services', amount: 1_200, cadence: 'MONTHLY' },
   ],
   bridges: [],
   receivables: [{ payer_name: 'Halcyon Health', amount: 18_000, due_in_days: 16 }],
@@ -300,10 +340,25 @@ export const APPROVED_TRANSACTIONS: CardTransaction[] = APPROVED.map((spec, i) =
   created_at: `${addDays(AS_OF, -spec.days_ago)}T13:0${i % 10}:00Z`,
 }));
 
+/**
+ * A year of ordinary card spend per customer, so the portal has a history to
+ * show. The hand-written transactions above are the scripted demo moments and
+ * sit on top of it.
+ */
+export const GENERATED_TRANSACTIONS: CardTransaction[] = DEMO_BLUEPRINTS.flatMap((bp) =>
+  generateCardTransactions(bp, AS_OF, generateBalanceHistory(bp, AS_OF)),
+);
+
 export const DEMO_TRANSACTIONS: CardTransaction[] = [
-  ...DECLINED_TRANSACTIONS,
+  ...GENERATED_TRANSACTIONS,
   ...APPROVED_TRANSACTIONS,
+  ...DECLINED_TRANSACTIONS,
 ];
+
+/** Deposits, from the same invoices the engine reads for inflow statistics. */
+export const DEMO_DEPOSITS: Deposit[] = DEMO_BLUEPRINTS.flatMap((bp) =>
+  generateDeposits(bp.id, generateInvoices(bp, AS_OF)),
+);
 
 /** One bridge request per declined transaction, for the shortfall. */
 export const DEMO_REQUESTS: BridgeRequest[] = DECLINES.map((spec, i) => {

@@ -8,14 +8,17 @@
 import type {
   BalanceStats,
   BridgeStats,
+  CardTransaction,
   CrmContext,
   Customer,
   DailyBalance,
+  Deposit,
   ExpectedReceivable,
   Invoice,
   PastBridge,
   BridgeOutcome,
 } from '../types.js';
+import { criticalityForCategory } from '../policy/criticality.js';
 import { addDays, daysBetween, mean, percentile, round2 } from '../policy/util.js';
 
 /** Days of balance history we generate when tenure allows it. */
@@ -83,6 +86,8 @@ export interface CustomerBlueprint {
   balance_noise: number;
   trend: 'UP' | 'FLAT' | 'DOWN';
   payers: PayerBlueprint[];
+  /** Where the card gets used, and how often. Drives a year of card spend. */
+  merchants: MerchantBlueprint[];
   bridges: PastBridgeBlueprint[];
   receivables: ReceivableBlueprint[];
   crm: CrmContext;
@@ -312,4 +317,104 @@ export function generateCustomers(
   opts: GeneratorOptions,
 ): Customer[] {
   return blueprints.map((bp) => generateCustomer(bp, opts));
+}
+
+// ---------------------------------------------------------------------------
+// Card spend
+// ---------------------------------------------------------------------------
+
+/** Days of card spend generated when tenure allows it. */
+export const CARD_DAYS = 365;
+
+/** How often a merchant is charged. */
+export type MerchantCadence = 'MONTHLY' | 'FORTNIGHTLY' | 'WEEKLY' | 'OCCASIONAL';
+
+export interface MerchantBlueprint {
+  name: string;
+  /** Key into CRITICALITY_BY_CATEGORY. Criticality is derived, never set here. */
+  category: string;
+  /** Typical charge; each one varies by up to a fifth either way. */
+  amount: number;
+  cadence: MerchantCadence;
+}
+
+/** Nominal days between charges, before jitter. */
+const CADENCE_DAYS: Record<MerchantCadence, number> = {
+  MONTHLY: 30,
+  FORTNIGHTLY: 14,
+  WEEKLY: 7,
+  OCCASIONAL: 21,
+};
+
+/**
+ * A year of settled card spend, oldest first.
+ *
+ * Each merchant is charged on its own cadence, counted back from the as-of
+ * date, with jitter on the day and the amount. Criticality comes from
+ * `criticalityForCategory`, so the portal and the engine read a merchant
+ * category the same way.
+ */
+export function generateCardTransactions(
+  bp: CustomerBlueprint,
+  asOf: string,
+  balances: DailyBalance[] = [],
+): CardTransaction[] {
+  const rand = rng(bp.seed + 13);
+  const days = Math.min(CARD_DAYS, Math.round(bp.tenure_months * 30));
+  const balanceOn = new Map(balances.map((b) => [b.date, b.balance]));
+
+  const out: CardTransaction[] = [];
+  bp.merchants.forEach((m, mi) => {
+    const step = CADENCE_DAYS[m.cadence];
+    let n = 0;
+    for (let back = 1; back < days; back += step) {
+      // Occasional merchants skip most of their slots, so they land unevenly.
+      if (m.cadence === 'OCCASIONAL' && rand() > 0.45) continue;
+      const jitter = m.cadence === 'MONTHLY' ? 0 : Math.floor(rand() * 3);
+      const date = addDays(asOf, -Math.min(days - 1, back + jitter));
+      const hour = String(8 + (mi % 9)).padStart(2, '0');
+      n += 1;
+      const minute = String((n * 7 + mi) % 60).padStart(2, '0');
+      out.push({
+        id: `txn_${bp.id}_m${mi}_${n}`,
+        customer_id: bp.id,
+        card_id: `card_${bp.id.replace('acct_', '')}`,
+        amount: round2(m.amount * (0.8 + rand() * 0.4)),
+        currency: 'USD',
+        merchant_name: m.name,
+        merchant_category: m.category,
+        criticality: criticalityForCategory(m.category),
+        status: 'SETTLED',
+        wallet_balance: balanceOn.get(date) ?? 0,
+        created_at: `${date}T${hour}:${minute}:00Z`,
+      });
+    }
+  });
+
+  return out.sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
+// ---------------------------------------------------------------------------
+// Deposits
+// ---------------------------------------------------------------------------
+
+/**
+ * Deposits, derived from the invoices that have been paid.
+ *
+ * Nothing new is invented here: the inflows the engine scores and the deposits
+ * the customer sees in the portal come from the same invoices.
+ */
+export function generateDeposits(customerId: string, invoices: Invoice[]): Deposit[] {
+  const out: Deposit[] = [];
+  for (const inv of invoices) {
+    if (inv.paid_date === null) continue;
+    out.push({
+      id: `dep_${inv.id}`,
+      customer_id: customerId,
+      amount: inv.amount,
+      payer_name: inv.payer_name,
+      settled_at: inv.paid_date,
+    });
+  }
+  return out.sort((a, b) => a.settled_at.localeCompare(b.settled_at));
 }

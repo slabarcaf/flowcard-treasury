@@ -7,6 +7,7 @@ import type {
   BridgeRequest,
   CardTransaction,
   Customer,
+  Deposit,
   PlatformCapital,
   TimelineEvent,
 } from '../types.js';
@@ -17,6 +18,7 @@ export interface BridgeData {
   customers: Customer[];
   capital: PlatformCapital;
   transactions: CardTransaction[];
+  deposits: Deposit[];
   requests: BridgeRequest[];
   bridges: Bridge[];
   timeline: TimelineEvent[];
@@ -33,15 +35,16 @@ export function useBridgeData(adapter?: DataAdapter): BridgeDataHandle {
   const [data, setData] = useState<BridgeData | null>(null);
 
   const reload = useCallback(async () => {
-    const [customers, capital, transactions, requests, bridges, timeline] = await Promise.all([
+    const [customers, capital, transactions, deposits, requests, bridges, timeline] = await Promise.all([
       client.listCustomers(),
       client.getCapital(),
       client.listTransactions(),
+      client.listDeposits(),
       client.listRequests(),
       client.listBridges(),
       client.listTimeline(),
     ]);
-    setData({ customers, capital, transactions, requests, bridges, timeline });
+    setData({ customers, capital, transactions, deposits, requests, bridges, timeline });
   }, [client]);
 
   useEffect(() => {

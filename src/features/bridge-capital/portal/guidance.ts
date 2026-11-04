@@ -6,8 +6,11 @@
  * ops team and names internal ids, so the portal says the same thing in the
  * customer's terms, using the numbers the decision carries.
  */
-import type { Decision, RuleResult } from '../types.js';
+import type { Customer, Decision, RuleResult } from '../types.js';
+import { computeTier } from '../policy/tiers.js';
+import { HISTORY, TIERS } from '../policy/policy.config.js';
 import { usd } from '../ui/format.js';
+
 export const RULE_GUIDANCE: Record<string, string> = {
   R1_HAS_HISTORY:
     'Keep running deposits and card spend through FlowCard. Bridges open up once you have three months with us and 90 days of balance history.',
@@ -61,4 +64,93 @@ export function reasonFor(rule: RuleResult, decision: Decision): string {
     default:
       return rule.detail;
   }
+}
+
+// ---------------------------------------------------------------------------
+// The customer's bridge line, in their own terms
+// ---------------------------------------------------------------------------
+
+/** One reason the line is the size it is. */
+export interface LinePoint {
+  label: string;
+  detail: string;
+  /** True when this is working in the customer's favour. */
+  good: boolean;
+}
+
+/**
+ * Why the line is what it is.
+ *
+ * Every point reads a value the engine already computed. Tier letters are
+ * deliberately not shown: they are an internal grade, and the customer only
+ * needs to know what moves the number.
+ */
+export function lineExplanation(customer: Customer): LinePoint[] {
+  const tier = computeTier(customer);
+  const { bridge_stats, balance_stats, inflow_stats, tenure_months } = customer;
+  const closed = bridge_stats.on_time_count + bridge_stats.late_count;
+
+  const points: LinePoint[] = [
+    {
+      label: 'Time with FlowCard',
+      detail: `${tenure_months} months`,
+      good: tenure_months >= TIERS.A.minTenureMonths,
+    },
+    {
+      label: 'Monthly deposits',
+      detail: `${usd(inflow_stats.monthly_inflows)} a month on average, and your limit is a share of that`,
+      good: inflow_stats.monthly_inflows > 0,
+    },
+  ];
+
+  if (closed > 0) {
+    points.push({
+      label: 'Repayment record',
+      detail:
+        bridge_stats.late_count === 0
+          ? `${bridge_stats.on_time_count} of ${closed} bridges repaid on time`
+          : `${bridge_stats.late_count} of ${closed} bridges repaid late`,
+      good: bridge_stats.late_count === 0,
+    });
+  }
+
+  points.push({
+    label: 'Balance stability',
+    detail:
+      balance_stats.days_near_zero_90d <= TIERS.A.maxDaysNearZero90d
+        ? `Your wallet stayed healthy on all but ${balance_stats.days_near_zero_90d} of the last 90 days`
+        : `Your wallet ran close to zero on ${balance_stats.days_near_zero_90d} of the last 90 days`,
+    good: balance_stats.days_near_zero_90d <= TIERS.A.maxDaysNearZero90d,
+  });
+
+  if (tier === 'NONE') {
+    points.push({
+      label: 'Not available yet',
+      detail: guidanceFor('R1_HAS_HISTORY'),
+      good: false,
+    });
+  }
+
+  return points;
+}
+
+/** The single most useful thing this customer could do to raise their line. */
+export function lineNextStep(customer: Customer): string | null {
+  const tier = computeTier(customer);
+  if (tier === 'NONE') {
+    const months = Math.max(0, HISTORY.minTenureMonths - customer.tenure_months);
+    return months > 0
+      ? `Bridges open up after ${HISTORY.minTenureMonths} months with FlowCard — ${months} to go.`
+      : `Bridges open up once you have ${HISTORY.minBalanceDays} days of balance history with us.`;
+  }
+  if (tier === 'C') {
+    return 'Repay your next bridges on time and keep your wallet above zero, and your limit moves up with your standing.';
+  }
+  if (tier === 'B') {
+    const months = Math.max(0, TIERS.A.minTenureMonths - customer.tenure_months);
+    return months > 0
+      ? `${months} more months with no late repayment would move you to our top limit.`
+      : 'Keep repaying on time and your limit moves up to our top band.';
+  }
+  return 'You are on our highest limit. It grows as your monthly deposits do.';
 }

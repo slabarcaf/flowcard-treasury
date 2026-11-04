@@ -27,6 +27,7 @@ import {
   DEMO_BLUEPRINTS,
   DEMO_BRIDGES,
   DEMO_CAPITAL,
+  DEMO_DEPOSITS,
   DEMO_REQUESTS,
   DEMO_TIMELINE,
   DEMO_TRANSACTIONS,
@@ -36,6 +37,7 @@ export interface MockAdapterSeed {
   customers?: Customer[];
   capital?: PlatformCapital;
   transactions?: CardTransaction[];
+  deposits?: Deposit[];
   requests?: BridgeRequest[];
   bridges?: Bridge[];
   timeline?: TimelineEvent[];
@@ -47,6 +49,7 @@ export function demoSeed(): Required<MockAdapterSeed> {
     customers: generateCustomers(DEMO_BLUEPRINTS, { as_of: AS_OF }),
     capital: { ...DEMO_CAPITAL },
     transactions: DEMO_TRANSACTIONS.map((t) => ({ ...t })),
+    deposits: DEMO_DEPOSITS.map((d) => ({ ...d })),
     requests: DEMO_REQUESTS.map((r) => ({ ...r })),
     bridges: DEMO_BRIDGES.map((b) => ({ ...b })),
     timeline: DEMO_TIMELINE.map((e) => ({ ...e })),
@@ -57,6 +60,7 @@ export class MockAdapter implements DataAdapter {
   private customers: Customer[];
   private capital: PlatformCapital;
   private transactions: CardTransaction[];
+  private deposits: Deposit[];
   private requests: BridgeRequest[];
   private decisions: Decision[] = [];
   private offers = new Map<string, BridgeOffer>();
@@ -70,6 +74,7 @@ export class MockAdapter implements DataAdapter {
     this.customers = seed.customers ?? base.customers;
     this.capital = seed.capital ?? base.capital;
     this.transactions = seed.transactions ?? base.transactions;
+    this.deposits = seed.deposits ?? base.deposits;
     this.requests = seed.requests ?? base.requests;
     for (const b of seed.bridges ?? base.bridges) this.bridges.set(b.id, b);
     this.timeline = [...(seed.timeline ?? base.timeline)];
@@ -100,6 +105,12 @@ export class MockAdapter implements DataAdapter {
 
   async listDeclinedTransactions(): Promise<CardTransaction[]> {
     return this.transactions.filter((t) => t.status === 'DECLINED');
+  }
+
+  async listDeposits(customerId?: string): Promise<Deposit[]> {
+    return customerId === undefined
+      ? this.deposits
+      : this.deposits.filter((d) => d.customer_id === customerId);
   }
 
   async listRequests(): Promise<BridgeRequest[]> {

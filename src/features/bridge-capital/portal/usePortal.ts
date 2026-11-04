@@ -5,6 +5,7 @@
  */
 import { useCallback, useState } from 'react';
 import type { Acceptance, Bridge, BridgeOffer, BridgeRequest, Customer } from '../types.js';
+import type { ActivityItem } from './activity.js';
 import type { DataAdapter } from '../data/adapter.js';
 import { AS_OF } from '../data/customers.js';
 import { useBridgeData, type BridgeData } from '../ui/useBridgeData.js';
@@ -12,6 +13,10 @@ import { usd } from '../ui/format.js';
 
 export type PortalScreen =
   | { screen: 'wallet' }
+  | { screen: 'activity' }
+  | { screen: 'bridges' }
+  | { screen: 'account' }
+  | { screen: 'transaction'; transactionId: string }
   | { screen: 'decline'; transactionId: string }
   | { screen: 'accepted'; transactionId: string }
   | { screen: 'bridge'; bridgeId: string };
@@ -141,4 +146,15 @@ export function usePortal(adapter?: DataAdapter): Portal {
     accept,
     retryPayment,
   };
+}
+
+/** Where an activity row leads: its payment, its bridge, or nowhere. */
+export function openerFor(item: ActivityItem, go: Portal['go']): (() => void) | undefined {
+  if (item.transaction !== undefined) {
+    const transactionId = item.transaction.id;
+    return () => go({ screen: 'transaction', transactionId });
+  }
+  const bridgeId = item.bridge_id;
+  if (bridgeId !== undefined) return () => go({ screen: 'bridge', bridgeId });
+  return undefined;
 }
