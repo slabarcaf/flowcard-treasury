@@ -1,4 +1,4 @@
-import type { CrmClient, CrmNote } from '../types.js';
+import type { CrmClient } from '../types.js';
 import { BLOOM_CRM_NOTE } from '../../seed.js';
 
 /**

@@ -1,11 +1,4 @@
-import type {
-  AirwallexClient,
-  TransferResponse,
-  ChargeResponse,
-  BalanceResponse,
-  CardSimulationResponse,
-  DepositResponse,
-} from '../types.js';
+import type { AirwallexClient } from '../types.js';
 
 let transferCounter = 0;
 let chargeCounter = 0;
@@ -27,7 +20,7 @@ export const mockAirwallexClient: AirwallexClient = {
     };
   },
 
-  async getBalance(accountId, currency) {
+  async getBalance(_accountId, currency) {
     // Returns a realistic balance structure; actual values
     // are managed by the demo state machine, not this mock.
     return {
@@ -54,7 +47,7 @@ export const mockAirwallexClient: AirwallexClient = {
     };
   },
 
-  async getTransfer(requestId) {
+  async getTransfer(_requestId) {
     // In mock mode, transfers are created synchronously, so we never
     // need to look up an existing one.
     return null;

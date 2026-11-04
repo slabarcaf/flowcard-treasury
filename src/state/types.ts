@@ -11,7 +11,7 @@ export type DashboardPhase = 'idle' | 'scanned' | 'funded';
 export interface PipelineStep {
   label: string;       // "Enough data?"
   sublabel: string;    // "90 days on platform"
-  status: 'pass' | 'fail' | 'skip';
+  status: 'pass' | 'fail' | 'skip' | 'flag'; // flag = needs attention (orange)
   value?: string;      // "730 days", "Tier A", "$6,000"
   tooltip?: string;    // hover explanation
 }
@@ -34,6 +34,10 @@ export interface QueueRow {
   rationale: string;
   eligible: boolean;
   ineligibleReason?: string;
+  // Kit 5 only: bridge dates
+  fundedOn?: string;
+  dueOn?: string;
+  repaidOn?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +69,20 @@ export interface CollectionRow {
 }
 
 // ---------------------------------------------------------------------------
+// Terms a credit officer approves (Human door)
+// ---------------------------------------------------------------------------
+export interface ApprovalTerms {
+  amount: number;
+  currency: string;
+  to: string;
+  covers: string;
+  term: string;
+  fee: string;
+  evidence: string;
+  capitalImpact: string;
+}
+
+// ---------------------------------------------------------------------------
 // Per-customer detail data (shown when a queue row is expanded)
 // ---------------------------------------------------------------------------
 export interface CustomerDetail {
@@ -85,6 +103,8 @@ export interface CustomerDetail {
   showApproval: boolean;      // Nova only
   awaitingApproval: boolean;  // Nova: true until funded
   ineligibleReason?: string;  // Pixel only
+  approvalTerms?: ApprovalTerms;    // terms built per request (falls back to NOVA_APPROVAL_TERMS)
+  collectionRows?: CollectionRow[]; // Kit 5: this request's own repayment
 }
 
 // ---------------------------------------------------------------------------

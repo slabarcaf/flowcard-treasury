@@ -9,6 +9,7 @@ const STATUS_STYLES: Record<PipelineStep['status'], { bg: string; border: string
   pass: { bg: 'bg-emerald-50', border: 'border-emerald-300', text: 'text-emerald-700' },
   fail: { bg: 'bg-red-50', border: 'border-red-300', text: 'text-red-700' },
   skip: { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-400' },
+  flag: { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-700' },
 };
 
 function StepNode({ step }: { step: PipelineStep }) {
@@ -19,7 +20,7 @@ function StepNode({ step }: { step: PipelineStep }) {
         className={`${style.bg} ${style.border} border rounded-lg px-3 py-2 min-w-[120px] text-center ${step.tooltip ? 'cursor-help' : ''}`}
       >
         <div className={`text-xs font-semibold ${style.text}`}>{step.label}</div>
-        <div className="text-[10px] text-gray-400 mt-0.5">{step.sublabel}</div>
+        {step.sublabel && <div className="text-[10px] text-gray-400 mt-0.5">{step.sublabel}</div>}
         {step.value && (
           <div className={`text-xs font-mono mt-1 ${style.text} font-medium`}>{step.value}</div>
         )}
@@ -95,7 +96,7 @@ function PrecheckLane({ steps }: { steps: PipelineStep[] }) {
       <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
         Daily precheck
       </div>
-      <div className="flex items-center gap-0 pb-1 overflow-visible">
+      <div className="flex flex-wrap items-center gap-y-2 pb-1 overflow-visible">
         {steps.map((step, i) => (
           <div key={i} className="flex items-center">
             {i > 0 && <Arrow failed={firstFailIdx >= 0 && i > firstFailIdx} />}
@@ -123,7 +124,7 @@ function PerRequestLane({ steps }: { steps: PipelineStep[] }) {
       <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
         Per request
       </div>
-      <div className="flex items-center gap-0 pb-1 overflow-visible">
+      <div className="flex flex-wrap items-center gap-y-2 pb-1 overflow-visible">
         {steps.map((step, i) => (
           <div key={i} className="flex items-center">
             {i > 0 && <Arrow failed={firstFailIdx >= 0 && i > firstFailIdx} />}

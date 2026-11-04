@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { OnboardingData } from '../../../hooks/useOnboarding.js';
 
 interface Props {
@@ -36,7 +35,6 @@ const EXCLUSION_ITEMS = [
 ];
 
 export function ComplianceStep({ data, onUpdate, onNext }: Props) {
-  const [touched, setTouched] = useState(false);
 
   const hasAnyChecked = data.complianceFlags.length > 0;
 
@@ -49,7 +47,6 @@ export function ComplianceStep({ data, onUpdate, onNext }: Props) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setTouched(true);
     if (!hasAnyChecked) onNext();
   }
 

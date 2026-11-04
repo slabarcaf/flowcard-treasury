@@ -1,7 +1,9 @@
 import { NOVA_APPROVAL_TERMS } from '../seed.js';
+import type { ApprovalTerms } from '../state/types.js';
 
 interface Props {
   visible: boolean;
+  terms?: ApprovalTerms;
   awaitingApproval: boolean;
   onApprove: () => void;
 }
@@ -10,10 +12,10 @@ function fmt(n: number): string {
   return '$' + n.toLocaleString('en-US');
 }
 
-export function ApprovalCard({ visible, awaitingApproval, onApprove }: Props) {
+export function ApprovalCard({ visible, terms, awaitingApproval, onApprove }: Props) {
   if (!visible) return null;
 
-  const t = NOVA_APPROVAL_TERMS;
+  const t = terms ?? NOVA_APPROVAL_TERMS;
 
   return (
     <div className="bg-white border border-amber-300 rounded-lg p-5 animate-panel-in">
@@ -28,7 +30,7 @@ export function ApprovalCard({ visible, awaitingApproval, onApprove }: Props) {
         )}
       </div>
 
-      <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm mb-5">
+      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm mb-5">
         <span className="text-gray-500">Amount</span>
         <span className="font-mono text-gray-900 font-semibold text-lg">
           {fmt(t.amount)} {t.currency}

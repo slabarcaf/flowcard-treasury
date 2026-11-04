@@ -100,13 +100,16 @@ export function CustomerDetailPanel({ detail, onBloomReveal, onBloomReEvaluate, 
       {detail.showApproval && (
         <ApprovalCard
           visible
+          terms={detail.approvalTerms}
           awaitingApproval={detail.awaitingApproval}
           onApprove={() => onApprove(detail.customerId)}
         />
       )}
 
       {/* Collection waterfall for funded customers */}
-      {detail.status === 'Funded' && showCollection && (
+      {detail.collectionRows ? (
+        <CollectionWaterfall visible rows={detail.collectionRows} />
+      ) : detail.status === 'Funded' && showCollection && (
         <CollectionWaterfall visible={showCollection} rows={collectionRows} />
       )}
     </div>
