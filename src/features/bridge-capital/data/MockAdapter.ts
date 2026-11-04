@@ -25,8 +25,10 @@ import { generateCustomers } from './generator.js';
 import {
   AS_OF,
   DEMO_BLUEPRINTS,
+  DEMO_BRIDGES,
   DEMO_CAPITAL,
   DEMO_REQUESTS,
+  DEMO_TIMELINE,
   DEMO_TRANSACTIONS,
 } from './customers.js';
 
@@ -35,6 +37,8 @@ export interface MockAdapterSeed {
   capital?: PlatformCapital;
   transactions?: CardTransaction[];
   requests?: BridgeRequest[];
+  bridges?: Bridge[];
+  timeline?: TimelineEvent[];
 }
 
 /** The demo data set, built from the blueprints. */
@@ -44,6 +48,8 @@ export function demoSeed(): Required<MockAdapterSeed> {
     capital: { ...DEMO_CAPITAL },
     transactions: DEMO_TRANSACTIONS.map((t) => ({ ...t })),
     requests: DEMO_REQUESTS.map((r) => ({ ...r })),
+    bridges: DEMO_BRIDGES.map((b) => ({ ...b })),
+    timeline: DEMO_TIMELINE.map((e) => ({ ...e })),
   };
 }
 
@@ -65,6 +71,8 @@ export class MockAdapter implements DataAdapter {
     this.capital = seed.capital ?? base.capital;
     this.transactions = seed.transactions ?? base.transactions;
     this.requests = seed.requests ?? base.requests;
+    for (const b of seed.bridges ?? base.bridges) this.bridges.set(b.id, b);
+    this.timeline = [...(seed.timeline ?? base.timeline)];
   }
 
   async listCustomers(): Promise<Customer[]> {

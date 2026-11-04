@@ -28,6 +28,8 @@ export {
   DEMO_BLUEPRINTS,
   DEMO_TRANSACTIONS,
   DEMO_REQUESTS,
+  DEMO_BRIDGES,
+  DEMO_TIMELINE,
 } from './data/customers.js';
 export {
   formatCustomerStatsReport,

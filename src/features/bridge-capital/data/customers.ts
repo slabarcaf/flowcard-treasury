@@ -4,8 +4,15 @@
  * The facility is sized so that bridging every request at once would breach the
  * reserve floor: $31,000 of shortfalls against $12,000 available above the floor.
  */
-import type { BridgeRequest, CardTransaction, PlatformCapital } from '../types.js';
+import type {
+  Bridge,
+  BridgeRequest,
+  CardTransaction,
+  PlatformCapital,
+  TimelineEvent,
+} from '../types.js';
 import { criticalityForCategory } from '../policy/criticality.js';
+import { addDays } from '../policy/util.js';
 import type { CustomerBlueprint } from './generator.js';
 
 /** The day all windows are measured back from. */
@@ -45,6 +52,15 @@ const northwind: CustomerBlueprint = {
     { amount: 6_000, term_days: 30, outcome: 'ON_TIME', closed_days_ago: 320, days_outstanding: 24 },
     { amount: 9_000, term_days: 30, outcome: 'ON_TIME', closed_days_ago: 190, days_outstanding: 27 },
     { amount: 5_500, term_days: 15, outcome: 'ON_TIME', closed_days_ago: 70, days_outstanding: 12 },
+    {
+      amount: 5_500,
+      term_days: 30,
+      outcome: 'OPEN',
+      days_outstanding: 18,
+      outstanding_balance: 3_000,
+      due_in_days: 12,
+      transaction_id: 'txn_northwind_prior',
+    },
   ],
   receivables: [
     { payer_name: 'Dorsey Grocers', amount: 34_000, due_in_days: 11 },
@@ -87,6 +103,15 @@ const harbor: CustomerBlueprint = {
     { amount: 12_000, term_days: 60, outcome: 'DEFAULTED', closed_days_ago: 500, days_outstanding: 122 },
     { amount: 7_500, term_days: 30, outcome: 'ON_TIME', closed_days_ago: 240, days_outstanding: 28 },
     { amount: 9_000, term_days: 30, outcome: 'LATE', closed_days_ago: 60, days_outstanding: 44 },
+    {
+      amount: 9_000,
+      term_days: 30,
+      outcome: 'OPEN',
+      days_outstanding: 40,
+      outstanding_balance: 9_230,
+      due_in_days: -10,
+      transaction_id: 'txn_harbor_prior',
+    },
   ],
   receivables: [
     { payer_name: 'Calder Distribution', amount: 58_000, due_in_days: 21 },
@@ -178,12 +203,22 @@ interface DeclineSpec {
 }
 
 const DECLINES: DeclineSpec[] = [
+  // Above the $5,000 Tight threshold, so a person has to approve it.
   {
     customer_id: 'acct_northwind',
     merchant_name: 'Rowe Packaging',
     merchant_category: 'suppliers',
-    amount: 4_600,
+    amount: 7_600,
     wallet_balance: 600,
+    term_days: 30,
+  },
+  // Under the threshold, so it clears automatically.
+  {
+    customer_id: 'acct_northwind',
+    merchant_name: 'Calloway Inventory',
+    merchant_category: 'inventory',
+    amount: 3_300,
+    wallet_balance: 300,
     term_days: 30,
   },
   {
@@ -243,3 +278,103 @@ export const DEMO_REQUESTS: BridgeRequest[] = DECLINES.map((spec, i) => {
     requested_at: AS_OF,
   };
 });
+
+// ---------------------------------------------------------------------------
+// Bridges already on the books, so the back office has live stages to show.
+// Each one matches an OPEN or closed entry in its customer's bridge_history.
+// Fees are what priceOffer gives for the principal and term.
+// ---------------------------------------------------------------------------
+
+export const DEMO_BRIDGES: Bridge[] = [
+  {
+    id: 'bridge_northwind_1',
+    customer_id: 'acct_northwind',
+    transaction_id: 'txn_northwind_prior',
+    principal: 5_500,
+    fee: 160,
+    term_days: 30,
+    status: 'COLLECTING',
+    disbursed_at: addDays(AS_OF, -18),
+    due_date: addDays(AS_OF, 12),
+    principal_outstanding: 3_000,
+    fee_outstanding: 0,
+    accrued_fee: 0,
+  },
+  {
+    id: 'bridge_harbor_1',
+    customer_id: 'acct_harbor',
+    transaction_id: 'txn_harbor_prior',
+    principal: 9_000,
+    fee: 230,
+    term_days: 30,
+    status: 'DELINQUENT',
+    disbursed_at: addDays(AS_OF, -40),
+    due_date: addDays(AS_OF, -10),
+    principal_outstanding: 9_000,
+    fee_outstanding: 230,
+    accrued_fee: 0,
+  },
+  {
+    id: 'bridge_lumen_1',
+    customer_id: 'acct_lumen',
+    transaction_id: 'txn_lumen_past_1',
+    principal: 4_000,
+    fee: 130,
+    term_days: 30,
+    status: 'REPAID',
+    disbursed_at: addDays(AS_OF, -146),
+    due_date: addDays(AS_OF, -116),
+    principal_outstanding: 0,
+    fee_outstanding: 0,
+    accrued_fee: 0,
+  },
+];
+
+function event(
+  bridge_id: string,
+  customer_id: string,
+  daysAgo: number,
+  time: string,
+  type: TimelineEvent['type'],
+  text: string,
+): TimelineEvent {
+  return {
+    id: `${bridge_id}_${type}_${daysAgo}_${time.replace(':', '')}`,
+    at: `${addDays(AS_OF, -daysAgo)}T${time}:00Z`,
+    customer_id,
+    bridge_id,
+    type,
+    text,
+  };
+}
+
+/** Decline through to closing, for each bridge on the books. */
+export const DEMO_TIMELINE: TimelineEvent[] = [
+  // Northwind: funded, retried, partly collected, still inside its term.
+  event('bridge_northwind_1', 'acct_northwind', 18, '08:41', 'DECLINE', 'Card declined for $5,500 at Rowe Packaging — INSUFFICIENT_FUNDS, wallet held $410.'),
+  event('bridge_northwind_1', 'acct_northwind', 18, '08:42', 'OFFER', 'Offered $5,500 over 30 days, fee $160 (service $50 + 2%/month prorated).'),
+  event('bridge_northwind_1', 'acct_northwind', 18, '08:49', 'ACCEPTANCE', 'Customer accepted the offer at $5,500 / 30 days / $160.'),
+  event('bridge_northwind_1', 'acct_northwind', 18, '08:50', 'DISBURSEMENT', 'Transfer to connected account SETTLED — $5,500.'),
+  event('bridge_northwind_1', 'acct_northwind', 18, '08:53', 'NOTICE', 'Card payment retried and approved.'),
+  event('bridge_northwind_1', 'acct_northwind', 6, '11:12', 'DEPOSIT', 'Deposit $2,660 received from Dorsey Grocers.'),
+  event('bridge_northwind_1', 'acct_northwind', 6, '11:12', 'COLLECTION', 'Collected $160 fee, then $2,500 principal. $3,000 principal remaining.'),
+
+  // Harbor: funded, then missed its due date and walked up the ladder.
+  event('bridge_harbor_1', 'acct_harbor', 40, '09:20', 'DECLINE', 'Card declined for $9,000 at Calder Distribution — INSUFFICIENT_FUNDS.'),
+  event('bridge_harbor_1', 'acct_harbor', 40, '09:21', 'OFFER', 'Offered $9,000 over 30 days, fee $230.'),
+  event('bridge_harbor_1', 'acct_harbor', 40, '09:38', 'ACCEPTANCE', 'Customer accepted the offer at $9,000 / 30 days / $230.'),
+  event('bridge_harbor_1', 'acct_harbor', 40, '09:39', 'DISBURSEMENT', 'Transfer to connected account SETTLED — $9,000.'),
+  event('bridge_harbor_1', 'acct_harbor', 40, '09:44', 'NOTICE', 'Card payment retried and approved.'),
+  event('bridge_harbor_1', 'acct_harbor', 10, '00:05', 'NOTICE', 'Due date passed with nothing collected; no qualifying deposit landed.'),
+  event('bridge_harbor_1', 'acct_harbor', 9, '08:00', 'STATUS_CHANGE', 'Moved to Watch at 1 day past due. Daily reminders started, new bridges blocked.'),
+  event('bridge_harbor_1', 'acct_harbor', 2, '08:00', 'STATUS_CHANGE', 'Moved to Delinquent at 8 days past due. Card restricted to critical spend, tier downgraded one level, ops notified.'),
+
+  // Lumen: funded and closed on time.
+  event('bridge_lumen_1', 'acct_lumen', 146, '14:02', 'DECLINE', 'Card declined for $4,000 at Ardent Media — INSUFFICIENT_FUNDS.'),
+  event('bridge_lumen_1', 'acct_lumen', 146, '14:03', 'OFFER', 'Offered $4,000 over 30 days, fee $130.'),
+  event('bridge_lumen_1', 'acct_lumen', 146, '14:15', 'ACCEPTANCE', 'Customer accepted the offer at $4,000 / 30 days / $130.'),
+  event('bridge_lumen_1', 'acct_lumen', 146, '14:16', 'DISBURSEMENT', 'Transfer to connected account SETTLED — $4,000.'),
+  event('bridge_lumen_1', 'acct_lumen', 124, '10:30', 'DEPOSIT', 'Deposit $21,000 received from Ardent Media.'),
+  event('bridge_lumen_1', 'acct_lumen', 124, '10:30', 'COLLECTION', 'Collected $130 fee and $4,000 principal in full.'),
+  event('bridge_lumen_1', 'acct_lumen', 124, '10:31', 'STATUS_CHANGE', 'Repaid on time, 22 days outstanding. Restrictions lifted, tier recomputed.'),
+];
