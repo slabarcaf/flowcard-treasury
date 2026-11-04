@@ -8,58 +8,46 @@ export function AuroraBackground() {
         zIndex: 0,
         overflow: 'hidden',
         pointerEvents: 'none',
+        backgroundColor: '#0D1421',
       }}
     >
-      {/* Blob 1 — top-left purple */}
+      {/* Revolut-style deep blue glow — left side */}
       <div
         className="aurora-blob animate-aurora1"
         style={{
           position: 'absolute',
-          width: '45vw',
-          height: '45vw',
+          width: '60vw',
+          height: '80vh',
           top: '-10%',
-          left: '-10%',
-          background: 'radial-gradient(circle, rgba(82,102,235,0.35) 0%, transparent 70%)',
-          filter: 'blur(100px)',
+          left: '-20%',
+          background: 'radial-gradient(ellipse at center, rgba(20,60,120,0.6) 0%, rgba(15,40,80,0.3) 40%, transparent 70%)',
+          filter: 'blur(80px)',
         }}
       />
-      {/* Blob 2 — top-right lavender */}
+      {/* Secondary teal accent — bottom left */}
       <div
         className="aurora-blob animate-aurora2"
         style={{
           position: 'absolute',
-          width: '40vw',
-          height: '40vw',
-          top: '-5%',
-          right: '-8%',
-          background: 'radial-gradient(circle, rgba(196,181,253,0.4) 0%, transparent 70%)',
-          filter: 'blur(90px)',
+          width: '50vw',
+          height: '50vh',
+          bottom: '-15%',
+          left: '-10%',
+          background: 'radial-gradient(ellipse at center, rgba(15,80,120,0.4) 0%, transparent 70%)',
+          filter: 'blur(100px)',
         }}
       />
-      {/* Blob 3 — bottom-left ice-blue */}
+      {/* Subtle top-right warmth */}
       <div
         className="aurora-blob animate-aurora3"
         style={{
           position: 'absolute',
-          width: '50vw',
-          height: '50vw',
-          bottom: '-15%',
-          left: '-5%',
-          background: 'radial-gradient(circle, rgba(147,197,253,0.3) 0%, transparent 70%)',
-          filter: 'blur(120px)',
-        }}
-      />
-      {/* Blob 4 — bottom-right soft pink */}
-      <div
-        className="aurora-blob animate-aurora4"
-        style={{
-          position: 'absolute',
-          width: '35vw',
-          height: '35vw',
-          bottom: '-8%',
-          right: '-5%',
-          background: 'radial-gradient(circle, rgba(221,214,254,0.35) 0%, transparent 70%)',
-          filter: 'blur(80px)',
+          width: '30vw',
+          height: '30vh',
+          top: '10%',
+          right: '5%',
+          background: 'radial-gradient(ellipse at center, rgba(20,45,80,0.25) 0%, transparent 70%)',
+          filter: 'blur(60px)',
         }}
       />
     </div>

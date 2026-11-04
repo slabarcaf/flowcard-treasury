@@ -4,6 +4,8 @@ import { CapitalBar } from './components/CapitalBar.js';
 import { BridgeQueue } from './components/BridgeQueue.js';
 import { ActivityFeed } from './components/ActivityFeed.js';
 import { FeedToast } from './components/FeedToast.js';
+import { LandingPage } from './components/onboarding/LandingPage.js';
+import { LoginPage } from './components/onboarding/LoginPage.js';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard.js';
 
 const NAV_ITEMS = [
@@ -161,10 +163,28 @@ function Dashboard() {
 }
 
 function App() {
-  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [screen, setScreen] = useState<'landing' | 'login' | 'onboarding' | 'dashboard'>('landing');
 
-  if (!onboardingComplete) {
-    return <OnboardingWizard onComplete={() => setOnboardingComplete(true)} />;
+  if (screen === 'landing') {
+    return (
+      <LandingPage
+        onGetStarted={() => setScreen('onboarding')}
+        onLogin={() => setScreen('login')}
+      />
+    );
+  }
+
+  if (screen === 'login') {
+    return (
+      <LoginPage
+        onLogin={() => setScreen('dashboard')}
+        onBack={() => setScreen('landing')}
+      />
+    );
+  }
+
+  if (screen === 'onboarding') {
+    return <OnboardingWizard onComplete={() => setScreen('dashboard')} />;
   }
 
   return <Dashboard />;

@@ -35,7 +35,7 @@ const EXCLUSION_ITEMS = [
   },
 ];
 
-export function ComplianceStep({ data, onUpdate, onNext, onBack }: Props) {
+export function ComplianceStep({ data, onUpdate, onNext }: Props) {
   const [touched, setTouched] = useState(false);
 
   const hasAnyChecked = data.complianceFlags.length > 0;
@@ -50,72 +50,57 @@ export function ComplianceStep({ data, onUpdate, onNext, onBack }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setTouched(true);
-    // If none are checked, user is eligible → proceed
     if (!hasAnyChecked) onNext();
   }
 
   return (
     <form onSubmit={handleSubmit} className="animate-step-in">
-      <h2 className="text-2xl font-bold mb-2" style={{ color: '#25252D' }}>Compliance check</h2>
-      <p className="text-sm mb-8" style={{ color: '#55555E' }}>
+      <h2 className="text-2xl font-bold mb-2 text-white">Compliance check</h2>
+      <p className="text-sm mb-8" style={{ color: '#8B95A5' }}>
         Do any of the following apply to your company? Check all that apply.
       </p>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {EXCLUSION_ITEMS.map((item) => {
           const checked = data.complianceFlags.includes(item.id);
           return (
             <label
               key={item.id}
-              className="flex items-start gap-3 cursor-pointer py-2"
+              className="flex items-center gap-3 cursor-pointer rounded-xl px-4 transition-colors"
+              style={{
+                backgroundColor: checked ? 'rgba(227,72,80,0.1)' : '#1A2332',
+                border: `1px solid ${checked ? 'rgba(227,72,80,0.3)' : '#2A3545'}`,
+                minHeight: '56px',
+              }}
             >
               <input
                 type="checkbox"
                 checked={checked}
                 onChange={() => toggle(item.id)}
-                className="mt-0.5 w-4 h-4 rounded cursor-pointer"
-                style={{ accentColor: '#5266EB' }}
+                className="shrink-0 w-4 h-4 rounded cursor-pointer accent-blue-500"
               />
-              <span className="text-sm leading-relaxed" style={{ color: '#55555E' }}>{item.text}</span>
+              <span className="text-sm leading-snug py-3" style={{ color: '#C5CDD8' }}>{item.text}</span>
             </label>
           );
         })}
       </div>
 
-      {/* Warning if any exclusion is checked */}
       {hasAnyChecked && (
         <div
-          className="mt-4 p-3 rounded-lg text-sm"
-          style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#E34850' }}
+          className="mt-4 p-3 rounded-xl text-sm"
+          style={{ backgroundColor: 'rgba(227,72,80,0.1)', border: '1px solid rgba(227,72,80,0.3)', color: '#E34850' }}
         >
           Based on your selections, your company may not be eligible for a FlowCard account.
         </div>
       )}
 
-      <div className="mt-8 flex justify-center sm:justify-start">
+      <div className="mt-auto pt-10">
         <button
           type="submit"
           disabled={hasAnyChecked}
-          className="w-full sm:w-auto px-8 py-3 text-sm font-semibold text-white rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ backgroundColor: '#5266EB' }}
-          onMouseEnter={(e) => { if (!hasAnyChecked) e.currentTarget.style.backgroundColor = '#4355D0'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#5266EB'; }}
-          onMouseDown={(e) => { if (!hasAnyChecked) e.currentTarget.style.backgroundColor = '#3848B8'; }}
-          onMouseUp={(e) => { if (!hasAnyChecked) e.currentTarget.style.backgroundColor = '#4355D0'; }}
+          className="revolut-btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          None of the above →
-        </button>
-      </div>
-      <div className="mt-3 text-center sm:text-left">
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-sm font-medium transition-colors cursor-pointer"
-          style={{ color: '#8E8E99' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = '#55555E'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = '#8E8E99'; }}
-        >
-          Back
+          None of the above — Continue
         </button>
       </div>
     </form>

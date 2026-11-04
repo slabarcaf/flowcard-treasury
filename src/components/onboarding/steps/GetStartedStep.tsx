@@ -20,46 +20,36 @@ export function GetStartedStep({ data, onUpdate, onNext }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="animate-step-in">
-      <h2 className="text-2xl font-bold mb-2" style={{ color: '#25252D' }}>Get started</h2>
-      <p className="text-sm mb-8" style={{ color: '#55555E' }}>Tell us about yourself to begin.</p>
+      <h2 className="text-2xl font-bold mb-2 text-white">Let's get started!</h2>
+      <p className="text-sm mb-8" style={{ color: '#8B95A5' }}>Tell us about yourself to begin.</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1.5" style={{ color: '#55555E' }}>First name</label>
+      <div className="space-y-4">
+        <div className="relative">
           <input
             type="text"
             value={data.firstName}
             onChange={(e) => onUpdate({ firstName: e.target.value })}
-            placeholder="Jane"
-            className="w-full px-4 py-3 rounded-lg text-sm outline-none transition-colors"
+            placeholder="First name"
+            className="revolut-input w-full"
             style={{
-              backgroundColor: '#F6F5FA',
-              border: `1px solid ${touched && !data.firstName.trim() ? '#E34850' : '#E2E1E9'}`,
-              color: '#25252D',
+              borderColor: touched && !data.firstName.trim() ? '#E34850' : undefined,
             }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = touched && !data.firstName.trim() ? '#E34850' : '#5266EB'; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = touched && !data.firstName.trim() ? '#E34850' : '#E2E1E9'; }}
           />
           {touched && !data.firstName.trim() && (
             <p className="text-xs mt-1" style={{ color: '#E34850' }}>First name is required</p>
           )}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1.5" style={{ color: '#55555E' }}>Last name</label>
+        <div className="relative">
           <input
             type="text"
             value={data.lastName}
             onChange={(e) => onUpdate({ lastName: e.target.value })}
-            placeholder="Doe"
-            className="w-full px-4 py-3 rounded-lg text-sm outline-none transition-colors"
+            placeholder="Last name"
+            className="revolut-input w-full"
             style={{
-              backgroundColor: '#F6F5FA',
-              border: `1px solid ${touched && !data.lastName.trim() ? '#E34850' : '#E2E1E9'}`,
-              color: '#25252D',
+              borderColor: touched && !data.lastName.trim() ? '#E34850' : undefined,
             }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = touched && !data.lastName.trim() ? '#E34850' : '#5266EB'; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = touched && !data.lastName.trim() ? '#E34850' : '#E2E1E9'; }}
           />
           {touched && !data.lastName.trim() && (
             <p className="text-xs mt-1" style={{ color: '#E34850' }}>Last name is required</p>
@@ -67,17 +57,12 @@ export function GetStartedStep({ data, onUpdate, onNext }: Props) {
         </div>
       </div>
 
-      <div className="mt-8 flex justify-center sm:justify-start">
-        <button
-          type="submit"
-          className="w-full sm:w-auto px-8 py-3 text-sm font-semibold text-white rounded-full transition-colors cursor-pointer"
-          style={{ backgroundColor: '#5266EB' }}
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#4355D0'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#5266EB'; }}
-          onMouseDown={(e) => { e.currentTarget.style.backgroundColor = '#3848B8'; }}
-          onMouseUp={(e) => { e.currentTarget.style.backgroundColor = '#4355D0'; }}
-        >
-          Start Application
+      <div className="mt-auto pt-10">
+        <p className="text-center text-xs mb-4" style={{ color: '#5A6577' }}>
+          By proceeding, you agree to our <span className="revolut-link">Terms of Service</span> and that you have read and understood our <span className="revolut-link">Privacy Policy</span>
+        </p>
+        <button type="submit" className="revolut-btn-primary w-full">
+          Continue
         </button>
       </div>
     </form>
