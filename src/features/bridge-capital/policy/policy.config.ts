@@ -209,3 +209,79 @@ export const WHILE_BRIDGED = {
   restrictedTiers: ['C'] as Tier[],
   allowedCriticality: ['CRITICAL'] as SpendCriticality[],
 } as const;
+
+// ---------------------------------------------------------------------------
+// §4 The eligibility rules themselves, in the order the engine runs them.
+//
+// The engine takes each rule's label from here, and the back office renders
+// this same list, so the rules shown to ops and the rules applied cannot drift.
+// ---------------------------------------------------------------------------
+export interface RuleSpec {
+  id: string;
+  /** Short name, as it appears on a decision. */
+  label: string;
+  /** What the rule actually checks, for the rules reference. */
+  checks: string;
+  /** Where it comes from in docs/bridge-capital-spec.md. */
+  source: string;
+}
+
+export const RULE_CATALOGUE: RuleSpec[] = [
+  {
+    id: 'R1_HAS_HISTORY',
+    label: 'Has history',
+    checks: `Tenure of at least ${HISTORY.minTenureMonths} months and at least ${HISTORY.minBalanceDays} days of balance data.`,
+    source: '§3, §4 rule 1',
+  },
+  {
+    id: 'R2_NO_PAST_DUE',
+    label: 'No bridge currently past due',
+    checks: 'No open bridge is past its due date.',
+    source: '§4 rule 2',
+  },
+  {
+    id: 'R3_WITHIN_LIMIT',
+    label: 'Outstanding + new bridge within limit',
+    checks: 'Everything already outstanding plus this bridge stays inside the tier limit.',
+    source: '§3, §4 rule 3',
+  },
+  {
+    id: 'R4_CRITICALITY_ALLOWED',
+    label: 'Spend criticality allowed in current capital regime',
+    checks: 'The merchant category maps to a criticality the current regime still covers.',
+    source: '§4 rule 4, §6',
+  },
+  {
+    id: 'R5_RESERVE_FLOOR',
+    label: 'Bridge does not breach the platform reserve floor',
+    checks: 'The principal fits inside the capital available above the reserve floor. Bridges are never partial.',
+    source: '§4 rule 5, §6',
+  },
+  {
+    id: 'R6_NO_DUPLICATE',
+    label: 'No duplicate bridge for the same transaction',
+    checks: 'The same card transaction has not already been decided.',
+    source: '§4 rule 6',
+  },
+  {
+    id: 'R7_RECEIVABLE_IN_TERM',
+    label: 'An expected receivable is due before the term ends',
+    checks: 'There is an invoice due inside the chosen term, so there is something to collect from.',
+    source: '§4 rule 7',
+  },
+  {
+    id: 'R8_REGIME_TIER',
+    label: 'Tier allowed in current capital regime',
+    checks: 'The customer’s tier clears the floor the current regime sets. Not one of the spec’s seven: §6 gates by tier as well, so the engine states it as its own rule.',
+    source: '§6',
+  },
+];
+
+const RULE_LABELS: Record<string, string> = Object.fromEntries(
+  RULE_CATALOGUE.map((r) => [r.id, r.label]),
+);
+
+/** The label the engine puts on a rule result. */
+export function ruleLabel(ruleId: string): string {
+  return RULE_LABELS[ruleId] ?? ruleId;
+}

@@ -18,7 +18,6 @@ import type { BackOffice } from '../useBackOffice.js';
 import {
   Badge,
   Breadcrumb,
-  Button,
   Card,
   CardHeader,
   Empty,
@@ -29,6 +28,7 @@ import {
   Td,
   Th,
 } from '../components/primitives.js';
+import { ApprovalPanel } from '../components/ApprovalPanel.js';
 import { BalanceChart } from '../components/BalanceChart.js';
 import { RuleList } from '../components/RuleList.js';
 
@@ -160,22 +160,17 @@ export function RequestDetailScreen({ office, requestId }: { office: BackOffice;
             </div>
 
             {showActions ? (
-              <div style={{ display: 'grid', gap: space.lg }}>
-                <div style={{ display: 'flex', gap: space.md, flexWrap: 'wrap' }}>
-                  <Button variant="primary" onClick={() => void approve(request, offer)}>
-                    Approve {usd(offer.principal)} for {customer.name} — {offer.term_days} days, fee{' '}
-                    {usd(offer.fee, { cents: true })}
-                  </Button>
-                  <Button variant="danger" onClick={() => void decline(request, decision.reasons[0] ?? 'Declined on review.')}>
-                    Decline
-                  </Button>
-                  <Button onClick={() => void escalate(request)}>Escalate</Button>
-                </div>
-                <div style={{ fontSize: font.size.sm, color: color.textMuted, lineHeight: 1.5 }}>
-                  Approval is bound to this customer, amount, fee and term. Change any of them and it
-                  is void, and a new offer has to be issued.
-                </div>
-              </div>
+              <ApprovalPanel
+                request={request}
+                customer={customer}
+                capital={data.capital}
+                today={today}
+                onApprove={(principal, termDays) =>
+                  void approve(request, buildOffer(request, principal, termDays))
+                }
+                onDecline={(reason) => void decline(request, decision.reasons[0] ?? reason)}
+                onEscalate={() => void escalate(request)}
+              />
             ) : (
               <div style={{ fontSize: font.size.md, color: color.textSecondary }}>
                 {outcome !== undefined

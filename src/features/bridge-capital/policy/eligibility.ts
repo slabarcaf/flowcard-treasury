@@ -11,7 +11,7 @@ import type {
 } from '../types.js';
 import { computeTier, customerLimit, historyGap, outstandingBalance, tierAtLeast } from './tiers.js';
 import { availableAboveFloor, currentRegime, regimeRule } from './regime.js';
-import { REGIME_LABELS } from './policy.config.js';
+import { REGIME_LABELS, ruleLabel } from './policy.config.js';
 import { addDays, daysBetween, round2 } from './util.js';
 
 export interface EvaluationContext {
@@ -64,14 +64,15 @@ export function evaluate(
   const criticality = request.transaction.criticality;
 
   const rules: RuleResult[] = [];
-  const add = (rule_id: string, label: string, passed: boolean, detail: string) =>
-    rules.push({ rule_id, label, passed, detail });
+  // Labels come from the rule catalogue in policy.config, which the back
+  // office renders as its rules reference.
+  const add = (rule_id: string, passed: boolean, detail: string) =>
+    rules.push({ rule_id, label: ruleLabel(rule_id), passed, detail });
 
   // 1 — Has history
   const gap = historyGap(customer);
   add(
     'R1_HAS_HISTORY',
-    'Has history',
     gap === null,
     gap === null
       ? `${customer.tenure_months} months tenure, ${customer.balance_history.length} days of balances`
@@ -84,7 +85,6 @@ export function evaluate(
   );
   add(
     'R2_NO_PAST_DUE',
-    'No bridge currently past due',
     pastDue.length === 0,
     pastDue.length === 0
       ? 'No open bridge past its due date'
@@ -95,7 +95,6 @@ export function evaluate(
   const withinLimit = tier !== 'NONE' && round2(outstanding + request.principal) <= limit;
   add(
     'R3_WITHIN_LIMIT',
-    'Outstanding + new bridge within limit',
     withinLimit,
     tier === 'NONE'
       ? 'No limit: customer is not in a tier'
@@ -106,7 +105,6 @@ export function evaluate(
   const criticalityOk = rule.allowedCriticality.includes(criticality);
   add(
     'R4_CRITICALITY_ALLOWED',
-    'Spend criticality allowed in current capital regime',
     criticalityOk,
     criticalityOk
       ? `${criticality} spend is allowed in ${REGIME_LABELS[regime]}`
@@ -117,7 +115,6 @@ export function evaluate(
   const floorOk = request.principal <= available;
   add(
     'R5_RESERVE_FLOOR',
-    'Bridge does not breach the platform reserve floor',
     floorOk,
     floorOk
       ? `${money(request.principal)} fits the ${money(available)} available above the floor`
@@ -128,7 +125,6 @@ export function evaluate(
   const existingForTxn = customer.bridge_history.filter((b) => b.transaction_id === transactionId);
   add(
     'R6_NO_DUPLICATE',
-    'No duplicate bridge for the same transaction',
     existingForTxn.length === 0,
     existingForTxn.length === 0
       ? `No existing bridge for transaction ${transactionId}`
@@ -142,7 +138,6 @@ export function evaluate(
   );
   add(
     'R7_RECEIVABLE_IN_TERM',
-    'An expected receivable is due before the term ends',
     covering.length > 0,
     covering.length > 0
       ? `${covering.length} receivable(s) due by ${termEnd}, earliest ${covering[0].payer_name} on ${covering[0].due_date}`
@@ -155,7 +150,6 @@ export function evaluate(
     rule.approval !== 'CLOSED' && tier !== 'NONE' && (minTier === null || tierAtLeast(tier, minTier));
   add(
     'R8_REGIME_TIER',
-    'Tier allowed in current capital regime',
     tierOk,
     rule.approval === 'CLOSED'
       ? `No new bridges in ${REGIME_LABELS[regime]}`

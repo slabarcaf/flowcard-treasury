@@ -15,15 +15,18 @@ import { OverviewScreen } from './screens/OverviewScreen.js';
 import { RequestDetailScreen } from './screens/RequestDetailScreen.js';
 import { BridgeDetailScreen } from './screens/BridgeDetailScreen.js';
 import { CustomersScreen } from './screens/CustomersScreen.js';
+import { RulesScreen } from './screens/RulesScreen.js';
 
 const NAV: Array<{ label: string; view: View }> = [
   { label: 'Overview', view: { screen: 'overview' } },
   { label: 'Customers', view: { screen: 'customers' } },
+  { label: 'Rules', view: { screen: 'rules' } },
 ];
 
 const SCREEN_TITLE: Record<View['screen'], string> = {
   overview: 'Bridge Capital',
   customers: 'Customers',
+  rules: 'Rules and thresholds',
   request: 'Request',
   bridge: 'Bridge',
 };
@@ -144,6 +147,7 @@ export function BackOffice({
         <main style={{ flex: 1, minWidth: 0, padding: `${space.lg} ${space['3xl']} ${space['4xl']}`, overflowY: 'auto' }}>
           {view.screen === 'overview' && <OverviewScreen office={office} />}
           {view.screen === 'customers' && <CustomersScreen office={office} />}
+          {view.screen === 'rules' && <RulesScreen office={office} />}
           {view.screen === 'request' && (
             <RequestDetailScreen office={office} requestId={view.requestId} />
           )}

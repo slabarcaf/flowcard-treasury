@@ -55,8 +55,12 @@ export function accruedLateFee(principalOutstanding: number, daysPastDue: number
 }
 
 /** Build the offer a customer accepts. Its fee and due date are bound to the terms. */
-export function buildOffer(request: BridgeRequest, principal = request.principal): BridgeOffer {
-  const price = priceOffer(principal, request.term_days);
+export function buildOffer(
+  request: BridgeRequest,
+  principal = request.principal,
+  termDays = request.term_days,
+): BridgeOffer {
+  const price = priceOffer(principal, termDays);
   return {
     id: `offer_${request.id}`,
     customer_id: request.customer_id,

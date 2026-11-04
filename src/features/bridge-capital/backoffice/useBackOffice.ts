@@ -15,6 +15,7 @@ import { buildOffer } from '../policy/pricing.js';
 export type View =
   | { screen: 'overview' }
   | { screen: 'customers' }
+  | { screen: 'rules' }
   | { screen: 'request'; requestId: string }
   | { screen: 'bridge'; bridgeId: string };
 
