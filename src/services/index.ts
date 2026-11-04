@@ -6,6 +6,7 @@ export type {
   ChargeResponse,
   BalanceResponse,
   CardSimulationResponse,
+  CardDeclineReason,
   DepositResponse,
   CrmNote,
   AgentSignalExtraction,
