@@ -1,6 +1,6 @@
 /** One bridge: its whole life, and what the ladder requires if it is late. */
-import { color, font, space, stageToneFor } from '../tokens.js';
-import { usd, shortDate, titleCase } from '../format.js';
+import { color, font, space, stageToneFor, timelineColors } from '../tokens.js';
+import { usd, shortDate, titleCase } from '../../ui/format.js';
 import type { BackOffice } from '../useBackOffice.js';
 import {
   Badge,
@@ -11,7 +11,7 @@ import {
   Row,
   Stat,
 } from '../components/primitives.js';
-import { Timeline } from '../components/Timeline.js';
+import { Timeline } from '../../ui/Timeline.js';
 import { DelinquencyPanel } from '../components/DelinquencyPanel.js';
 
 export function BridgeDetailScreen({ office, bridgeId }: { office: BackOffice; bridgeId: string }) {
@@ -67,7 +67,7 @@ export function BridgeDetailScreen({ office, bridgeId }: { office: BackOffice; b
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(0, 1fr)', gap: space.xl, alignItems: 'start' }}>
         <Card>
           <CardHeader title="Timeline" meta={`${events.length} events`} />
-          <Timeline events={events} />
+          <Timeline events={events} colors={timelineColors} />
         </Card>
 
         <div style={{ display: 'grid', gap: space.xl }}>

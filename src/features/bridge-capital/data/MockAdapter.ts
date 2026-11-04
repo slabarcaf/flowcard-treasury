@@ -92,6 +92,12 @@ export class MockAdapter implements DataAdapter {
     return { ...this.capital };
   }
 
+  async listTransactions(customerId?: string): Promise<CardTransaction[]> {
+    return customerId === undefined
+      ? this.transactions
+      : this.transactions.filter((t) => t.customer_id === customerId);
+  }
+
   async listDeclinedTransactions(): Promise<CardTransaction[]> {
     return this.transactions.filter((t) => t.status === 'DECLINED');
   }

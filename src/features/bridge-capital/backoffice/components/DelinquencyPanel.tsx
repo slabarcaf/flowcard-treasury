@@ -2,7 +2,7 @@
 import type { Bridge } from '../../types.js';
 import { applyDelinquency, type DelinquencyAction } from '../../policy/delinquency.js';
 import { color, font, radius, space, stageToneFor, tone } from '../tokens.js';
-import { usd, titleCase } from '../format.js';
+import { usd, titleCase } from '../../ui/format.js';
 import { Badge, Label, Row } from './primitives.js';
 
 const ACTION_COPY: Record<DelinquencyAction, string> = {

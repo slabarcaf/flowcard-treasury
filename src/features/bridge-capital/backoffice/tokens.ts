@@ -1,11 +1,21 @@
 /**
- * Every colour, space, radius and type size the back office uses.
+ * The back office's palette.
  *
  * This is the one file to swap when the shared design style lands: nothing in
  * backoffice/ hard-codes a colour or a pixel value, and no Tailwind utility
- * classes are used for anything but nothing — layout included comes from here.
+ * classes are used there. Spacing, type and status tones come from the shared
+ * ui/ layer and are re-exported here so a swap only has to touch colour.
  */
-import type { BridgeStatus, Regime, SpendCriticality, Tier } from '../types.js';
+export { space, radius, font, shadow } from '../ui/scale.js';
+export {
+  tone,
+  stageToneFor,
+  REGIME_TONE,
+  TIER_TONE,
+  CRITICALITY_TONE,
+  STAGE_TONE,
+} from '../ui/tone.js';
+export type { ToneName, ToneStyle } from '../ui/tone.js';
 
 export const color = {
   /** Page canvas. */
@@ -43,51 +53,6 @@ export const color = {
   neutralSubtle: '#f0f0f3',
 } as const;
 
-/** 4px base scale. */
-export const space = {
-  px: '1px',
-  xs: '4px',
-  sm: '6px',
-  md: '8px',
-  lg: '12px',
-  xl: '16px',
-  '2xl': '20px',
-  '3xl': '24px',
-  '4xl': '32px',
-} as const;
-
-export const radius = {
-  sm: '4px',
-  md: '6px',
-  lg: '8px',
-  pill: '999px',
-} as const;
-
-export const font = {
-  sans: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif",
-  mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace",
-  size: {
-    '2xs': '10px',
-    xs: '11px',
-    sm: '12px',
-    md: '13px',
-    lg: '15px',
-    xl: '18px',
-    '2xl': '22px',
-    '3xl': '28px',
-  },
-  weight: {
-    regular: 400,
-    medium: 500,
-    semibold: 600,
-  },
-} as const;
-
-export const shadow = {
-  card: '0 1px 2px rgba(16,16,20,0.04)',
-  raised: '0 2px 8px rgba(16,16,20,0.08)',
-} as const;
-
 /** Chart geometry, so the sparkline matches the rest of the spacing scale. */
 export const chart = {
   height: 96,
@@ -98,59 +63,9 @@ export const chart = {
   lowPoint: color.critical,
 } as const;
 
-export interface ToneStyle {
-  fg: string;
-  bg: string;
-}
-
-export const tone = {
-  positive: { fg: color.positive, bg: color.positiveSubtle },
-  warning: { fg: color.warning, bg: color.warningSubtle },
-  critical: { fg: color.critical, bg: color.criticalSubtle },
-  neutral: { fg: color.neutral, bg: color.neutralSubtle },
-  accent: { fg: color.accent, bg: color.accentSubtle },
-} as const satisfies Record<string, ToneStyle>;
-
-export type ToneName = keyof typeof tone;
-
-/** Capital regimes, worst to best. */
-export const REGIME_TONE: Record<Regime, ToneName> = {
-  ABUNDANT: 'positive',
-  NORMAL: 'positive',
-  TIGHT: 'warning',
-  CRITICAL: 'critical',
-  AT_FLOOR: 'critical',
-};
-
-export const TIER_TONE: Record<Tier, ToneName> = {
-  A: 'positive',
-  B: 'accent',
-  C: 'warning',
-  NONE: 'neutral',
-};
-
-export const CRITICALITY_TONE: Record<SpendCriticality, ToneName> = {
-  CRITICAL: 'critical',
-  STANDARD: 'neutral',
-  DISCRETIONARY: 'accent',
-};
-
-/** Bridge status / delinquency stage. */
-export const STAGE_TONE: Partial<Record<BridgeStatus, ToneName>> = {
-  OFFERED: 'neutral',
-  ACCEPTED: 'accent',
-  NEEDS_APPROVAL: 'warning',
-  DISBURSED: 'accent',
-  COLLECTING: 'accent',
-  REPAID: 'positive',
-  WATCH: 'warning',
-  DELINQUENT: 'warning',
-  SERIOUS: 'critical',
-  DEFAULTED: 'critical',
-  WITHDRAWN: 'neutral',
-  DECLINED: 'critical',
-};
-
-export function stageToneFor(status: string): ToneName {
-  return STAGE_TONE[status as BridgeStatus] ?? 'neutral';
-}
+/** Neutrals the shared Timeline needs to sit on a back-office card. */
+export const timelineColors = {
+  text: color.text,
+  textMuted: color.textMuted,
+  border: color.border,
+} as const;

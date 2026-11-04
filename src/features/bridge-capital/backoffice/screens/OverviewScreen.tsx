@@ -3,7 +3,7 @@ import type { Bridge } from '../../types.js';
 import { applyDelinquency } from '../../policy/delinquency.js';
 import { rankRequests } from '../../policy/ranking.js';
 import { CRITICALITY_TONE, color, font, space, stageToneFor, TIER_TONE } from '../tokens.js';
-import { usd, titleCase } from '../format.js';
+import { usd, titleCase } from '../../ui/format.js';
 import type { BackOffice } from '../useBackOffice.js';
 import {
   Badge,

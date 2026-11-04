@@ -4,7 +4,7 @@
  */
 import type { BalanceStats, DailyBalance } from '../../types.js';
 import { chart, color, font, space } from '../tokens.js';
-import { usd, shortDate } from '../format.js';
+import { usd, shortDate } from '../../ui/format.js';
 import { Label } from './primitives.js';
 
 export function BalanceChart({

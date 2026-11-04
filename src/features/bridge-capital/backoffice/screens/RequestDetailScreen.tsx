@@ -13,7 +13,7 @@ import {
   radius,
   space,
 } from '../tokens.js';
-import { usd, pct, shortDate, timeOf, titleCase } from '../format.js';
+import { usd, pct, shortDate, timeOf, titleCase } from '../../ui/format.js';
 import type { BackOffice } from '../useBackOffice.js';
 import {
   Badge,

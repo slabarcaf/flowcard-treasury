@@ -7,7 +7,7 @@ import type { DataAdapter } from '../data/adapter.js';
 import { currentRegime } from '../policy/regime.js';
 import { REGIME_LABELS } from '../policy/policy.config.js';
 import { REGIME_TONE, color, font, radius, space } from './tokens.js';
-import { shortDate } from './format.js';
+import { shortDate } from '../ui/format.js';
 import { useBackOffice, type View } from './useBackOffice.js';
 import { Badge } from './components/primitives.js';
 import { OverviewScreen } from './screens/OverviewScreen.js';

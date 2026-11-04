@@ -5,19 +5,11 @@
  * a data source directly. The policy engine is pure and is called from the
  * screens themselves.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type {
-  Bridge,
-  BridgeOffer,
-  BridgeRequest,
-  CardTransaction,
-  Customer,
-  PlatformCapital,
-  TimelineEvent,
-} from '../types.js';
+import { useCallback, useState } from 'react';
+import type { Bridge, BridgeOffer, BridgeRequest, Customer } from '../types.js';
 import type { DataAdapter } from '../data/adapter.js';
-import { MockAdapter } from '../data/MockAdapter.js';
 import { AS_OF } from '../data/customers.js';
+import { useBridgeData, type BridgeData } from '../ui/useBridgeData.js';
 import { buildOffer } from '../policy/pricing.js';
 
 export type View =
@@ -28,14 +20,7 @@ export type View =
 
 export type RequestOutcome = 'APPROVED' | 'DECLINED' | 'ESCALATED';
 
-export interface BackOfficeData {
-  customers: Customer[];
-  capital: PlatformCapital;
-  transactions: CardTransaction[];
-  requests: BridgeRequest[];
-  bridges: Bridge[];
-  timeline: TimelineEvent[];
-}
+export type BackOfficeData = BridgeData;
 
 export interface BackOffice {
   today: string;
@@ -52,29 +37,9 @@ export interface BackOffice {
 }
 
 export function useBackOffice(adapter?: DataAdapter): BackOffice {
-  const client = useMemo<DataAdapter>(() => adapter ?? new MockAdapter(), [adapter]);
-  const [data, setData] = useState<BackOfficeData | null>(null);
+  const { client, data, reload } = useBridgeData(adapter);
   const [view, setView] = useState<View>({ screen: 'overview' });
   const [outcomes, setOutcomes] = useState<Record<string, RequestOutcome>>({});
-
-  const reload = useCallback(async () => {
-    const [customers, capital, transactions, requests, bridges, timeline] = await Promise.all([
-      client.listCustomers(),
-      client.getCapital(),
-      client.listDeclinedTransactions(),
-      client.listRequests(),
-      client.listBridges(),
-      client.listTimeline(),
-    ]);
-    setData({ customers, capital, transactions, requests, bridges, timeline });
-  }, [client]);
-
-  useEffect(() => {
-    // Loading through the adapter is exactly the external system an effect is
-    // for; reload is async, so no state is set during this render.
-    // oxlint-disable-next-line react/set-state-in-effect
-    void reload();
-  }, [reload]);
 
   const approve = useCallback(
     async (request: BridgeRequest, offer: BridgeOffer) => {

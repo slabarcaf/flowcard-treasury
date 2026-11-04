@@ -9,7 +9,7 @@ import {
 } from '../../policy/regime.js';
 import { REGIME_LABELS } from '../../policy/policy.config.js';
 import { color, font, radius, space, REGIME_TONE } from '../tokens.js';
-import { usd, pct } from '../format.js';
+import { usd, pct } from '../../ui/format.js';
 import { Badge, Label } from './primitives.js';
 
 export function CapitalGauge({ capital }: { capital: PlatformCapital }) {

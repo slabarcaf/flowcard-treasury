@@ -28,7 +28,9 @@ export interface DataAdapter {
   getCapital(): Promise<PlatformCapital>;
   setOutstanding(outstanding: number): Promise<PlatformCapital>;
 
-  // Declines and requests
+  // Card transactions and requests
+  /** Every card transaction, or one customer's. */
+  listTransactions(customerId?: string): Promise<CardTransaction[]>;
   listDeclinedTransactions(): Promise<CardTransaction[]>;
   listRequests(): Promise<BridgeRequest[]>;
 

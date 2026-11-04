@@ -1,8 +1,13 @@
-/** A bridge's life, decline to closing. */
-import type { TimelineEvent, TimelineEventType } from '../../types.js';
-import { color, font, radius, space, tone, type ToneName } from '../tokens.js';
-import { shortDate, timeOf, titleCase } from '../format.js';
-import { Empty } from './primitives.js';
+/**
+ * A bridge's life, decline to closing. Shared by the back office and the portal.
+ *
+ * Status colours come from the shared tone palette; the surrounding neutrals
+ * are passed in, so the same component sits correctly on either surface.
+ */
+import type { TimelineEvent, TimelineEventType } from '../types.js';
+import { font, radius, space } from './scale.js';
+import { tone, type ToneName } from './tone.js';
+import { shortDate, timeOf, titleCase } from './format.js';
 
 const EVENT_TONE: Record<TimelineEventType, ToneName> = {
   DECLINE: 'critical',
@@ -16,8 +21,28 @@ const EVENT_TONE: Record<TimelineEventType, ToneName> = {
   NOTICE: 'warning',
 };
 
-export function Timeline({ events }: { events: TimelineEvent[] }) {
-  if (events.length === 0) return <Empty>No events yet</Empty>;
+export interface TimelineColors {
+  text: string;
+  textMuted: string;
+  border: string;
+}
+
+export function Timeline({
+  events,
+  colors,
+  emptyLabel = 'No events yet',
+}: {
+  events: TimelineEvent[];
+  colors: TimelineColors;
+  emptyLabel?: string;
+}) {
+  if (events.length === 0) {
+    return (
+      <div style={{ padding: space['3xl'], textAlign: 'center', color: colors.textMuted, fontSize: font.size.md }}>
+        {emptyLabel}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'grid' }}>
@@ -37,7 +62,7 @@ export function Timeline({ events }: { events: TimelineEvent[] }) {
                   marginTop: '5px',
                 }}
               />
-              {!isLast && <span style={{ width: '1px', flex: 1, background: color.border }} />}
+              {!isLast && <span style={{ width: '1px', flex: 1, background: colors.border }} />}
             </div>
 
             <div style={{ display: 'grid', gap: space.xs, paddingBottom: isLast ? 0 : space.xl, minWidth: 0 }}>
@@ -56,7 +81,7 @@ export function Timeline({ events }: { events: TimelineEvent[] }) {
                 <span
                   style={{
                     fontSize: font.size.xs,
-                    color: color.textMuted,
+                    color: colors.textMuted,
                     fontVariantNumeric: 'tabular-nums',
                   }}
                 >
@@ -64,7 +89,7 @@ export function Timeline({ events }: { events: TimelineEvent[] }) {
                   {timeOf(event.at) !== '' ? ` · ${timeOf(event.at)}` : ''}
                 </span>
               </div>
-              <span style={{ fontSize: font.size.md, color: color.text, lineHeight: 1.5 }}>
+              <span style={{ fontSize: font.size.md, color: colors.text, lineHeight: 1.5 }}>
                 {event.text}
               </span>
             </div>

@@ -264,11 +264,50 @@ function transactionFor(spec: DeclineSpec, index: number): CardTransaction {
   };
 }
 
-export const DEMO_TRANSACTIONS: CardTransaction[] = DECLINES.map(transactionFor);
+export const DECLINED_TRANSACTIONS: CardTransaction[] = DECLINES.map(transactionFor);
+
+/** Ordinary card spend that went through, so a wallet is not all declines. */
+interface ApprovedSpec {
+  customer_id: string;
+  merchant_name: string;
+  merchant_category: string;
+  amount: number;
+  days_ago: number;
+}
+
+const APPROVED: ApprovedSpec[] = [
+  { customer_id: 'acct_northwind', merchant_name: 'Harlow Freight', merchant_category: 'logistics', amount: 1_240, days_ago: 1 },
+  { customer_id: 'acct_northwind', merchant_name: 'Citywide Power', merchant_category: 'utilities', amount: 680, days_ago: 3 },
+  { customer_id: 'acct_northwind', merchant_name: 'Bramble Packaging', merchant_category: 'suppliers', amount: 2_150, days_ago: 6 },
+  { customer_id: 'acct_harbor', merchant_name: 'Coldline Storage', merchant_category: 'logistics', amount: 2_400, days_ago: 2 },
+  { customer_id: 'acct_harbor', merchant_name: 'Verity Produce', merchant_category: 'inventory', amount: 3_180, days_ago: 5 },
+  { customer_id: 'acct_lumen', merchant_name: 'Figma', merchant_category: 'saas', amount: 420, days_ago: 2 },
+  { customer_id: 'acct_lumen', merchant_name: 'Orbit Print Co.', merchant_category: 'suppliers', amount: 1_120, days_ago: 7 },
+  { customer_id: 'acct_vertex', merchant_name: 'Benchling', merchant_category: 'saas', amount: 890, days_ago: 4 },
+];
+
+export const APPROVED_TRANSACTIONS: CardTransaction[] = APPROVED.map((spec, i) => ({
+  id: `txn_approved_${i + 1}`,
+  customer_id: spec.customer_id,
+  card_id: `card_${spec.customer_id.replace('acct_', '')}`,
+  amount: spec.amount,
+  currency: 'USD',
+  merchant_name: spec.merchant_name,
+  merchant_category: spec.merchant_category,
+  criticality: criticalityForCategory(spec.merchant_category),
+  status: 'SETTLED',
+  wallet_balance: 0,
+  created_at: `${addDays(AS_OF, -spec.days_ago)}T13:0${i % 10}:00Z`,
+}));
+
+export const DEMO_TRANSACTIONS: CardTransaction[] = [
+  ...DECLINED_TRANSACTIONS,
+  ...APPROVED_TRANSACTIONS,
+];
 
 /** One bridge request per declined transaction, for the shortfall. */
 export const DEMO_REQUESTS: BridgeRequest[] = DECLINES.map((spec, i) => {
-  const transaction = DEMO_TRANSACTIONS[i];
+  const transaction = DECLINED_TRANSACTIONS[i];
   return {
     id: `req_${spec.customer_id.replace('acct_', '')}_${i + 1}`,
     customer_id: spec.customer_id,
