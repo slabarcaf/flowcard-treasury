@@ -121,7 +121,7 @@ export function ActiveBridgeScreen({ portal, bridgeId }: { portal: Portal; bridg
                       style={{
                         background: isCurrent ? tone[stageToneFor(step.status)].bg : color.surfaceSubtle,
                         border: `1px solid ${isCurrent ? tone[stageToneFor(step.status)].fg : 'transparent'}`,
-                        borderRadius: radius.lg,
+                        borderRadius: radius.xl,
                         padding: space.xl,
                         display: 'grid',
                         gap: space.xs,

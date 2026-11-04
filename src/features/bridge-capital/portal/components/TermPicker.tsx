@@ -26,10 +26,10 @@ export function TermPicker({
               style={{
                 flex: '1 1 0',
                 minWidth: '64px',
-                background: active ? color.accent : color.surface,
-                color: active ? color.textInverse : color.text,
-                border: `1px solid ${active ? color.accent : color.borderStrong}`,
-                borderRadius: radius.lg,
+                background: active ? color.accent : color.surfaceSubtle,
+                color: color.text,
+                border: 'none',
+                borderRadius: radius.pill,
                 padding: `${space.lg} ${space.md}`,
                 fontSize: font.size.lg,
                 fontWeight: font.weight.medium,
@@ -59,8 +59,8 @@ export function TermPicker({
           }}
           style={{
             width: '96px',
-            background: color.surface,
-            border: `1px solid ${isCustom ? color.accent : color.borderStrong}`,
+            background: color.surfaceSubtle,
+            border: `1px solid ${isCustom ? color.accent : 'transparent'}`,
             borderRadius: radius.lg,
             padding: `${space.lg} ${space.xl}`,
             fontSize: font.size.lg,

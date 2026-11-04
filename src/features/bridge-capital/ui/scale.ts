@@ -1,8 +1,8 @@
 /**
  * Spacing, radii and type, shared by the back office and the customer portal.
  *
- * Colour is NOT here: each surface keeps its own palette (the back office is
- * cool and dense, the portal is warmer), and each has its own tokens file.
+ * Colour is NOT here: it lives in ui/theme.ts, which both surfaces share, with
+ * per-surface overrides in their own tokens files.
  */
 
 /** 4px base scale. */
@@ -18,11 +18,14 @@ export const space = {
   '4xl': '32px',
 } as const;
 
+/** The reference leans on large radii: 16px panels, 12px controls, pill buttons. */
 export const radius = {
-  sm: '4px',
-  md: '6px',
-  lg: '8px',
-  xl: '14px',
+  sm: '6px',
+  md: '8px',
+  /** Controls: inputs, dropdowns, segmented buttons. */
+  lg: '12px',
+  /** Cards and panels. */
+  xl: '16px',
   pill: '999px',
 } as const;
 

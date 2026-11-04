@@ -3,7 +3,8 @@
  * and the current screen. Navigation is state, not a router.
  */
 import type { DataAdapter } from '../data/adapter.js';
-import { color, font, layout, radius, space } from './tokens.js';
+import { color, font, glow, layout, radius, space } from './tokens.js';
+import { GlowBackground } from '../ui/Surface.js';
 import { usePortal } from './usePortal.js';
 import { WalletHome } from './screens/WalletHome.js';
 import { DeclineScreen } from './screens/DeclineScreen.js';
@@ -15,10 +16,10 @@ export function Portal({ adapter, onExit }: { adapter?: DataAdapter; onExit?: ()
   const { data, customer, screen, selectCustomer } = portal;
 
   return (
-    <div
+    <GlowBackground
+      canvas={color.bg}
+      glow={glow}
       style={{
-        minHeight: '100vh',
-        background: color.bg,
         color: color.text,
         fontFamily: font.sans,
         fontSize: font.size.lg,
@@ -26,9 +27,8 @@ export function Portal({ adapter, onExit }: { adapter?: DataAdapter; onExit?: ()
     >
       <header
         style={{
-          background: color.surface,
-          borderBottom: `1px solid ${color.border}`,
-          padding: `${space.lg} ${layout.gutter}`,
+          boxShadow: `inset 0 -1px 0 ${color.border}`,
+          padding: `${space.xl} ${layout.gutter}`,
         }}
       >
         <div
@@ -51,9 +51,9 @@ export function Portal({ adapter, onExit }: { adapter?: DataAdapter; onExit?: ()
                 aria-label="Signed in as"
                 style={{
                   background: color.surfaceSubtle,
-                  border: `1px solid ${color.border}`,
+                  border: 'none',
                   borderRadius: radius.pill,
-                  padding: `${space.sm} ${space.lg}`,
+                  padding: `${space.md} ${space.lg}`,
                   fontSize: font.size.md,
                   fontFamily: font.sans,
                   color: color.text,
@@ -113,6 +113,6 @@ export function Portal({ adapter, onExit }: { adapter?: DataAdapter; onExit?: ()
           </>
         )}
       </main>
-    </div>
+    </GlowBackground>
   );
 }

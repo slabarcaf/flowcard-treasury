@@ -1,6 +1,6 @@
 /** Small styled building blocks. Every value comes from tokens.ts. */
 import type { CSSProperties, ReactNode } from 'react';
-import { color, font, radius, shadow, space, tone, type ToneName } from '../tokens.js';
+import { color, font, radius, space, tone, type ToneName } from '../tokens.js';
 
 export function Card({
   children,
@@ -15,10 +15,9 @@ export function Card({
     <div
       style={{
         background: color.surface,
-        border: `1px solid ${color.border}`,
-        borderRadius: radius.lg,
-        boxShadow: shadow.card,
-        padding: padded ? space['2xl'] : 0,
+        borderRadius: radius.xl,
+        padding: padded ? space['3xl'] : 0,
+        overflow: 'hidden',
         ...style,
       }}
     >
@@ -32,16 +31,16 @@ export function CardHeader({ title, meta }: { title: string; meta?: ReactNode })
     <div
       style={{
         display: 'flex',
-        alignItems: 'baseline',
+        alignItems: 'center',
         justifyContent: 'space-between',
         gap: space.lg,
-        marginBottom: space.xl,
+        marginBottom: space['2xl'],
       }}
     >
       <h2
         style={{
           margin: 0,
-          fontSize: font.size.md,
+          fontSize: font.size.lg,
           fontWeight: font.weight.semibold,
           color: color.text,
           letterSpacing: '-0.01em',
@@ -50,26 +49,16 @@ export function CardHeader({ title, meta }: { title: string; meta?: ReactNode })
         {title}
       </h2>
       {meta !== undefined && (
-        <div style={{ fontSize: font.size.sm, color: color.textMuted }}>{meta}</div>
+        <div style={{ fontSize: font.size.md, color: color.textSecondary }}>{meta}</div>
       )}
     </div>
   );
 }
 
-/** Uppercase micro-label used above values and over table sections. */
+/** Grey label above a value. Sentence case — the reference never shouts in caps. */
 export function Label({ children }: { children: ReactNode }) {
   return (
-    <div
-      style={{
-        fontSize: font.size['2xs'],
-        fontWeight: font.weight.semibold,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        color: color.textMuted,
-      }}
-    >
-      {children}
-    </div>
+    <div style={{ fontSize: font.size.md, color: color.textSecondary }}>{children}</div>
   );
 }
 
@@ -91,10 +80,10 @@ export function Badge({
         gap: space.xs,
         background: t.bg,
         color: t.fg,
-        borderRadius: radius.sm,
-        padding: `2px ${space.sm}`,
-        fontSize: font.size.xs,
-        fontWeight: font.weight.semibold,
+        borderRadius: radius.pill,
+        padding: `3px ${space.lg}`,
+        fontSize: font.size.sm,
+        fontWeight: font.weight.medium,
         fontFamily: mono ? font.mono : font.sans,
         whiteSpace: 'nowrap',
       }}
@@ -118,9 +107,9 @@ export function Button({
   title?: string;
 }) {
   const palette: Record<string, CSSProperties> = {
-    primary: { background: color.accent, color: color.textInverse, border: '1px solid transparent' },
-    secondary: { background: color.surface, color: color.text, border: `1px solid ${color.borderStrong}` },
-    danger: { background: color.surface, color: color.critical, border: `1px solid ${color.borderStrong}` },
+    primary: { background: color.accent, color: color.text },
+    secondary: { background: color.surfaceSubtle, color: color.text },
+    danger: { background: color.surfaceSubtle, color: color.critical },
   };
   return (
     <button
@@ -130,15 +119,16 @@ export function Button({
       title={title}
       style={{
         ...palette[variant],
-        borderRadius: radius.md,
-        padding: `${space.md} ${space.lg}`,
+        border: 'none',
+        borderRadius: radius.pill,
+        padding: `${space.lg} ${space['2xl']}`,
         fontSize: font.size.md,
         fontWeight: font.weight.medium,
         fontFamily: font.sans,
         cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.45 : 1,
         textAlign: 'left',
-        lineHeight: 1.35,
+        lineHeight: 1.4,
       }}
     >
       {children}
@@ -163,7 +153,7 @@ export function Stat({
       <Label>{label}</Label>
       <div
         style={{
-          fontSize: font.size.xl,
+          fontSize: font.size['2xl'],
           fontWeight: font.weight.semibold,
           color: toneName ? tone[toneName].fg : color.text,
           letterSpacing: '-0.02em',
@@ -173,14 +163,14 @@ export function Stat({
         {value}
       </div>
       {sub !== undefined && (
-        <div style={{ fontSize: font.size.sm, color: color.textMuted }}>{sub}</div>
+        <div style={{ fontSize: font.size.md, color: color.textMuted }}>{sub}</div>
       )}
     </div>
   );
 }
 
 /** Label / value row, used down the customer snapshot. */
-export function Row({ label, value }: { label: string; value: ReactNode }) {
+export function Row({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
     <div
       style={{
@@ -188,8 +178,8 @@ export function Row({ label, value }: { label: string; value: ReactNode }) {
         alignItems: 'baseline',
         justifyContent: 'space-between',
         gap: space.lg,
-        padding: `${space.sm} 0`,
-        borderBottom: `1px solid ${color.border}`,
+        padding: `${space.lg} 0`,
+        boxShadow: `inset 0 -1px 0 ${color.border}`,
         fontSize: font.size.md,
       }}
     >
@@ -210,6 +200,7 @@ export function Row({ label, value }: { label: string; value: ReactNode }) {
 
 export function Table({ children }: { children: ReactNode }) {
   return (
+    <div style={{ overflowX: 'auto' }}>
     <table
       style={{
         width: '100%',
@@ -220,6 +211,7 @@ export function Table({ children }: { children: ReactNode }) {
     >
       {children}
     </table>
+    </div>
   );
 }
 
@@ -229,12 +221,10 @@ export function Th({ children, align = 'left' }: { children: ReactNode; align?: 
       style={{
         textAlign: align,
         padding: `${space.md} ${space.lg}`,
-        borderBottom: `1px solid ${color.border}`,
-        fontSize: font.size['2xs'],
-        fontWeight: font.weight.semibold,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        color: color.textMuted,
+        boxShadow: `inset 0 -1px 0 ${color.border}`,
+        fontSize: font.size.md,
+        fontWeight: font.weight.regular,
+        color: color.textSecondary,
         whiteSpace: 'nowrap',
       }}
     >
@@ -258,9 +248,9 @@ export function Td({
     <td
       style={{
         textAlign: align,
-        padding: `${space.lg}`,
-        borderBottom: `1px solid ${color.border}`,
-        color: muted ? color.textMuted : color.text,
+        padding: `${space.xl} ${space.lg}`,
+        boxShadow: `inset 0 -1px 0 ${color.border}`,
+        color: muted ? color.textSecondary : color.text,
         fontFamily: mono ? font.mono : font.sans,
         fontVariantNumeric: 'tabular-nums',
         verticalAlign: 'middle',
@@ -276,9 +266,9 @@ export function ClickableTr({ children, onClick }: { children: ReactNode; onClic
   return (
     <tr
       onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default' }}
+      style={{ cursor: onClick ? 'pointer' : 'default', transition: 'background 120ms ease' }}
       onMouseEnter={(e) => {
-        if (onClick) e.currentTarget.style.background = color.surfaceSubtle;
+        if (onClick) e.currentTarget.style.background = color.surfaceHover;
       }}
       onMouseLeave={(e) => {
         if (onClick) e.currentTarget.style.background = 'transparent';
@@ -291,7 +281,7 @@ export function ClickableTr({ children, onClick }: { children: ReactNode; onClic
 
 export function Breadcrumb({ items }: { items: Array<{ label: string; onClick?: () => void }> }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, fontSize: font.size.sm }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, fontSize: font.size.md }}>
       {items.map((item, i) => (
         <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
           {i > 0 && <span style={{ color: color.textMuted }}>/</span>}
@@ -304,7 +294,7 @@ export function Breadcrumb({ items }: { items: Array<{ label: string; onClick?: 
                 border: 'none',
                 padding: 0,
                 color: color.accent,
-                fontSize: font.size.sm,
+                fontSize: font.size.md,
                 fontFamily: font.sans,
                 cursor: 'pointer',
               }}
@@ -324,7 +314,7 @@ export function Empty({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
-        padding: space['3xl'],
+        padding: space['4xl'],
         textAlign: 'center',
         color: color.textMuted,
         fontSize: font.size.md,

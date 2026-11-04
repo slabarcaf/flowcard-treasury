@@ -1,11 +1,12 @@
 /**
- * The back office's palette.
+ * The back office's palette: the shared dark theme, at ops density.
  *
- * This is the one file to swap when the shared design style lands: nothing in
+ * This is still the one file to swap for a back-office restyle. Nothing in
  * backoffice/ hard-codes a colour or a pixel value, and no Tailwind utility
- * classes are used there. Spacing, type and status tones come from the shared
- * ui/ layer and are re-exported here so a swap only has to touch colour.
+ * classes are used there. Spacing, type and status tones come from ui/.
  */
+import { color as theme, glow } from '../ui/theme.js';
+
 export { space, radius, font, shadow } from '../ui/scale.js';
 export {
   tone,
@@ -16,54 +17,57 @@ export {
   STAGE_TONE,
 } from '../ui/tone.js';
 export type { ToneName, ToneStyle } from '../ui/tone.js';
+export { glow };
 
+/**
+ * Key names are kept from the previous light palette so every call site still
+ * reads the same; only the values moved to the dark theme. `border` is now a
+ * hairline divider rather than a drawn edge — panels get their depth from tone.
+ */
 export const color = {
-  /** Page canvas. */
-  bg: '#f7f7f8',
-  /** Cards, tables, headers. */
-  surface: '#ffffff',
-  /** Zebra rows, inset panels, chart fills. */
-  surfaceSubtle: '#f3f3f5',
-  surfaceHover: '#eeeef1',
-  /** Sidebar. */
-  sidebar: '#16161a',
-  sidebarText: '#9c9ca8',
-  sidebarTextActive: '#ffffff',
-  sidebarActiveBg: 'rgba(255,255,255,0.08)',
+  bg: theme.canvas,
+  surface: theme.surface,
+  surfaceSubtle: theme.surfaceRaised,
+  surfaceHover: theme.surfaceHover,
 
-  border: '#e6e6ea',
-  borderStrong: '#d2d2d9',
+  sidebar: theme.sidebar,
+  sidebarText: theme.textSecondary,
+  sidebarTextActive: theme.text,
+  sidebarActiveBg: theme.surfaceHover,
 
-  text: '#16161a',
-  textSecondary: '#55555f',
-  textMuted: '#8b8b96',
-  textInverse: '#ffffff',
+  border: theme.divider,
+  borderStrong: theme.dividerStrong,
 
-  accent: '#2f5fe0',
-  accentHover: '#2750c4',
-  accentSubtle: '#eef2fd',
+  text: theme.text,
+  textSecondary: theme.textSecondary,
+  textMuted: theme.textMuted,
+  textInverse: theme.textInverse,
 
-  positive: '#167a4c',
-  positiveSubtle: '#e8f5ee',
-  warning: '#9a6400',
-  warningSubtle: '#fdf3e0',
-  critical: '#b3261e',
-  criticalSubtle: '#fdeceb',
-  neutral: '#55555f',
-  neutralSubtle: '#f0f0f3',
+  accent: theme.accent,
+  accentHover: theme.accentHover,
+  accentSubtle: theme.accentSubtle,
+
+  positive: theme.positive,
+  positiveSubtle: 'rgba(47, 212, 143, 0.14)',
+  warning: theme.warning,
+  warningSubtle: 'rgba(255, 176, 32, 0.14)',
+  critical: theme.critical,
+  criticalSubtle: 'rgba(255, 107, 107, 0.14)',
+  neutral: theme.textSecondary,
+  neutralSubtle: 'rgba(255, 255, 255, 0.07)',
 } as const;
 
-/** Chart geometry, so the sparkline matches the rest of the spacing scale. */
+/** Chart geometry and colours for the balance sparkline. */
 export const chart = {
   height: 96,
   strokeWidth: 1.5,
-  line: color.accent,
-  fill: 'rgba(47,95,224,0.10)',
-  gridline: color.border,
-  lowPoint: color.critical,
+  line: theme.accent,
+  fill: 'rgba(91, 108, 240, 0.18)',
+  gridline: theme.divider,
+  lowPoint: theme.critical,
 } as const;
 
-/** Neutrals the shared Timeline needs to sit on a back-office card. */
+/** Neutrals the shared Timeline needs on a back-office card. */
 export const timelineColors = {
   text: color.text,
   textMuted: color.textMuted,

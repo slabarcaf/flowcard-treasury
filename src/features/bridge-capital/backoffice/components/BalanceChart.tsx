@@ -81,6 +81,8 @@ export function BalanceChart({
         style={{
           display: 'flex',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: space.sm,
           fontSize: font.size.xs,
           color: color.textMuted,
         }}

@@ -19,7 +19,7 @@ function BridgeBanner({ bridge, today, onOpen }: { bridge: Bridge; today: string
         width: '100%',
         textAlign: 'left',
         background: pastDue ? color.criticalSubtle : color.surface,
-        border: `1px solid ${pastDue ? color.critical : color.borderStrong}`,
+        border: 'none',
         borderRadius: radius.xl,
         padding: space['2xl'],
         display: 'grid',
@@ -85,12 +85,13 @@ export function WalletHome({ portal }: { portal: Portal }) {
         <div style={{ display: 'grid', gap: space.md }}>
           <SectionTitle>Recent card activity</SectionTitle>
           <div style={{ display: 'grid' }}>
-            {transactions.map((txn) => {
+            {transactions.map((txn, i) => {
               const declined = txn.status === 'DECLINED';
               const request = requestFor(txn);
               return (
                 <ListRow
                   key={txn.id}
+                  first={i === 0}
                   title={txn.merchant_name}
                   subtitle={
                     declined ? (

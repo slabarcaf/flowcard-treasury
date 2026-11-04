@@ -142,7 +142,7 @@ export function OverviewScreen({ office }: { office: BackOffice }) {
                       ) : row.decision.eligible ? (
                         <Badge tone="warning">Needs approval</Badge>
                       ) : (
-                        <div style={{ display: 'grid', gap: space.xs, maxWidth: '280px' }}>
+                        <div style={{ display: 'grid', gap: space.xs, maxWidth: '220px' }}>
                           <Badge tone="critical">Declined</Badge>
                           <span style={{ fontSize: font.size.sm, color: color.textMuted, lineHeight: 1.4 }}>
                             {row.reason}

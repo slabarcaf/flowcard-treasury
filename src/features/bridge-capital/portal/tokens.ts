@@ -1,39 +1,41 @@
 /**
- * The customer portal's palette: warmer and softer than the back office.
+ * The customer portal's palette: the same dark theme as the back office, with
+ * roomier controls and bigger touch targets.
  *
  * As with the back office, this is the one file to swap for a restyle.
- * Spacing, type and status tones come from the shared ui/ layer.
  */
+import { color as theme, glow } from '../ui/theme.js';
+
 export { space, radius, font, shadow } from '../ui/scale.js';
 export { tone, stageToneFor, STAGE_TONE } from '../ui/tone.js';
 export type { ToneName, ToneStyle } from '../ui/tone.js';
+export { glow };
 
 export const color = {
-  /** Warm off-white canvas. */
-  bg: '#faf7f4',
-  surface: '#ffffff',
-  surfaceSubtle: '#f5f1ec',
-  surfaceSunken: '#efe9e1',
+  bg: theme.canvas,
+  surface: theme.surface,
+  surfaceSubtle: theme.surfaceRaised,
+  surfaceSunken: theme.surfaceSunken,
+  surfaceHover: theme.surfaceHover,
 
-  border: '#ebe4db',
-  borderStrong: '#dbd2c6',
+  border: theme.divider,
+  borderStrong: theme.dividerStrong,
 
-  text: '#2a2520',
-  textSecondary: '#5e564d',
-  textMuted: '#8d8377',
-  textInverse: '#ffffff',
+  text: theme.text,
+  textSecondary: theme.textSecondary,
+  textMuted: theme.textMuted,
+  textInverse: theme.textInverse,
 
-  /** Terracotta: the one action colour. */
-  accent: '#c04e2a',
-  accentHover: '#a84222',
-  accentSubtle: '#fdf1ec',
+  accent: theme.accent,
+  accentHover: theme.accentHover,
+  accentSubtle: theme.accentSubtle,
 
-  positive: '#167a4c',
-  positiveSubtle: '#e9f5ee',
-  warning: '#8a5a00',
-  warningSubtle: '#fdf3e2',
-  critical: '#ad281f',
-  criticalSubtle: '#fcece9',
+  positive: theme.positive,
+  positiveSubtle: 'rgba(47, 212, 143, 0.14)',
+  warning: theme.warning,
+  warningSubtle: 'rgba(255, 176, 32, 0.14)',
+  critical: theme.critical,
+  criticalSubtle: 'rgba(255, 107, 107, 0.14)',
 } as const;
 
 /** The portal is a single phone-width column, centred on larger screens. */
@@ -42,7 +44,7 @@ export const layout = {
   gutter: '16px',
 } as const;
 
-/** Neutrals the shared Timeline needs to sit on a portal card. */
+/** Neutrals the shared Timeline needs on a portal card. */
 export const timelineColors = {
   text: color.text,
   textMuted: color.textMuted,

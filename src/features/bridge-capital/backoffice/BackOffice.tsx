@@ -6,7 +6,8 @@
 import type { DataAdapter } from '../data/adapter.js';
 import { currentRegime } from '../policy/regime.js';
 import { REGIME_LABELS } from '../policy/policy.config.js';
-import { REGIME_TONE, color, font, radius, space } from './tokens.js';
+import { REGIME_TONE, color, font, glow, radius, space } from './tokens.js';
+import { GlowBackground } from '../ui/Surface.js';
 import { shortDate } from '../ui/format.js';
 import { useBackOffice, type View } from './useBackOffice.js';
 import { Badge } from './components/primitives.js';
@@ -39,11 +40,11 @@ export function BackOffice({
   const regime = data === null ? null : currentRegime(data.capital);
 
   return (
-    <div
+    <GlowBackground
+      canvas={color.bg}
+      glow={glow}
       style={{
-        minHeight: '100vh',
         display: 'flex',
-        background: color.bg,
         color: color.text,
         fontFamily: font.sans,
         fontSize: font.size.md,
@@ -52,18 +53,18 @@ export function BackOffice({
       {/* Sidebar */}
       <aside
         style={{
-          width: '216px',
+          width: '232px',
           flexShrink: 0,
-          background: color.sidebar,
+          background: 'transparent',
           display: 'flex',
           flexDirection: 'column',
         }}
       >
-        <div style={{ padding: `${space['2xl']} ${space.xl}`, display: 'grid', gap: space.xs }}>
-          <div style={{ color: color.sidebarTextActive, fontSize: font.size.md, fontWeight: font.weight.semibold }}>
+        <div style={{ padding: `${space['3xl']} ${space['2xl']} ${space['2xl']}`, display: 'grid', gap: space.xs }}>
+          <div style={{ color: color.sidebarTextActive, fontSize: font.size.xl, fontWeight: font.weight.semibold, letterSpacing: '-0.02em' }}>
             FlowCard
           </div>
-          <div style={{ color: color.sidebarText, fontSize: font.size.xs }}>Bridge Capital · Back office</div>
+          <div style={{ color: color.sidebarText, fontSize: font.size.md }}>Bridge Capital</div>
         </div>
 
         <nav style={{ padding: `0 ${space.md}`, display: 'grid', gap: '2px', alignContent: 'start', flex: 1 }}>
@@ -80,9 +81,9 @@ export function BackOffice({
                   background: active ? color.sidebarActiveBg : 'transparent',
                   color: active ? color.sidebarTextActive : color.sidebarText,
                   border: 'none',
-                  borderRadius: radius.md,
-                  padding: `${space.md} ${space.lg}`,
-                  fontSize: font.size.md,
+                  borderRadius: radius.lg,
+                  padding: `${space.lg} ${space.xl}`,
+                  fontSize: font.size.lg,
                   fontFamily: font.sans,
                   fontWeight: active ? font.weight.medium : font.weight.regular,
                   cursor: 'pointer',
@@ -95,7 +96,7 @@ export function BackOffice({
         </nav>
 
         {onExit !== undefined && (
-          <div style={{ padding: space.md, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ padding: space.md, boxShadow: `inset 0 1px 0 ${color.border}` }}>
             <button
               type="button"
               onClick={onExit}
@@ -122,16 +123,14 @@ export function BackOffice({
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <header
           style={{
-            background: color.surface,
-            borderBottom: `1px solid ${color.border}`,
-            padding: `${space.lg} ${space['3xl']}`,
+            padding: `${space['2xl']} ${space['3xl']} ${space.md}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: space.lg,
           }}
         >
-          <h1 style={{ margin: 0, fontSize: font.size.lg, fontWeight: font.weight.semibold, letterSpacing: '-0.01em' }}>
+          <h1 style={{ margin: 0, fontSize: font.size['2xl'], fontWeight: font.weight.semibold, letterSpacing: '-0.02em' }}>
             {SCREEN_TITLE[view.screen]}
           </h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: space.lg }}>
@@ -142,7 +141,7 @@ export function BackOffice({
           </div>
         </header>
 
-        <main style={{ flex: 1, minWidth: 0, padding: space['3xl'], overflowY: 'auto' }}>
+        <main style={{ flex: 1, minWidth: 0, padding: `${space.lg} ${space['3xl']} ${space['4xl']}`, overflowY: 'auto' }}>
           {view.screen === 'overview' && <OverviewScreen office={office} />}
           {view.screen === 'customers' && <CustomersScreen office={office} />}
           {view.screen === 'request' && (
@@ -151,6 +150,6 @@ export function BackOffice({
           {view.screen === 'bridge' && <BridgeDetailScreen office={office} bridgeId={view.bridgeId} />}
         </main>
       </div>
-    </div>
+    </GlowBackground>
   );
 }
