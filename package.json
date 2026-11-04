@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bridge:stats": "vitest run tests/features/bridge-capital/customerStats.report.test.ts --reporter=verbose"
   },
   "dependencies": {
     "react": "^19.3.1",

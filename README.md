@@ -44,8 +44,10 @@ vercel deploy --prod
 
 The app opens on the existing FlowCard landing page. **Get started** runs the six-step
 onboarding flow (get started, account, company name, compliance, company information,
-welcome); **Go to Dashboard** opens the Kit 5 dashboard. **Log in** also opens that dashboard
-through the existing demo login screen. These forms remain a frontend demo, without real
+welcome); **Go to Dashboard** opens the latest Bridge Capital back office. **Log in** also opens that dashboard
+through the existing demo login screen. The back-office sidebar opens **Customer portal**;
+**Exit** in the portal returns to the back office. Direct demo links are `#bridge-capital`
+and `#portal`; the older Kit 5 demo remains available at `#kit5`. These forms remain a frontend demo, without real
 authentication or account creation. Form values stay in memory and reset on refresh.
 
 The onboarding UI lives in `src/components/onboarding/`, its state in
