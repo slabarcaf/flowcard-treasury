@@ -16,6 +16,7 @@ export type View =
   | { screen: 'overview' }
   | { screen: 'customers' }
   | { screen: 'rules' }
+  | { screen: 'admin' }
   | { screen: 'request'; requestId: string }
   | { screen: 'bridge'; bridgeId: string };
 

@@ -16,17 +16,20 @@ import { RequestDetailScreen } from './screens/RequestDetailScreen.js';
 import { BridgeDetailScreen } from './screens/BridgeDetailScreen.js';
 import { CustomersScreen } from './screens/CustomersScreen.js';
 import { RulesScreen } from './screens/RulesScreen.js';
+import { AdminScreen } from './screens/AdminScreen.js';
 
 const NAV: Array<{ label: string; view: View }> = [
   { label: 'Overview', view: { screen: 'overview' } },
   { label: 'Customers', view: { screen: 'customers' } },
   { label: 'Rules', view: { screen: 'rules' } },
+  { label: 'Admin', view: { screen: 'admin' } },
 ];
 
 const SCREEN_TITLE: Record<View['screen'], string> = {
   overview: 'Bridge Capital',
   customers: 'Customers',
   rules: 'Rules and thresholds',
+  admin: 'Admin — demo controls',
   request: 'Request',
   bridge: 'Bridge',
 };
@@ -148,6 +151,7 @@ export function BackOffice({
           {view.screen === 'overview' && <OverviewScreen office={office} />}
           {view.screen === 'customers' && <CustomersScreen office={office} />}
           {view.screen === 'rules' && <RulesScreen office={office} />}
+          {view.screen === 'admin' && <AdminScreen office={office} />}
           {view.screen === 'request' && (
             <RequestDetailScreen office={office} requestId={view.requestId} />
           )}
