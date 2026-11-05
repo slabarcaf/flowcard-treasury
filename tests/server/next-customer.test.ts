@@ -344,7 +344,7 @@ describe("Kit 5 next-customer persistence", () => {
 
   it("claims the action before one provider create and persists Airwallex's returned lifecycle", async () => {
     const pool = new MemoryPool();
-    const provider = gateway(async (request) => {
+    const provider = gateway(async (_request) => {
       const attempt = pool.attempts.get(`${scenarioId}/action-1`);
       expect(attempt?.status).toBe("submitting");
       expect(attempt?.lifecycleId).toBeNull();

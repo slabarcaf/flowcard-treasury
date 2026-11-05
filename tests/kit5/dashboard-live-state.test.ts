@@ -208,15 +208,18 @@ describe('Kit 5 live dashboard recovery state', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'authenticated' }) })
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ error: 'kit5_attempt_not_found' }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({
-        status: 'completed',
-        attemptId: 'original:txn_bloom_payroll_001',
-        attemptedAmount: { amountCents: 900_000, currency: 'USD' },
-        result: {
-          processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS',
-          cardTransactionEventId: 'event', cardTransactionId: 'transaction', cardTransactionLifecycleId: 'lifecycle',
-        },
-      }) });
+      .mockImplementationOnce(async (_url, options) => {
+        const request = JSON.parse(String((options as RequestInit).body)) as { actionId: string };
+        return { ok: true, json: async () => ({
+          status: 'completed',
+          attemptId: request.actionId,
+          attemptedAmount: { amountCents: 900_000, currency: 'USD' },
+          result: {
+            processResult: 'DECLINED', failureReason: 'INSUFFICIENT_FUNDS',
+            cardTransactionEventId: 'event', cardTransactionId: 'transaction', cardTransactionLifecycleId: 'lifecycle',
+          },
+        }) };
+      });
     vi.stubGlobal('fetch', fetchMock);
     let dashboard = renderDashboard();
     await dashboard.authenticateOperator('runtime-only-token');
@@ -239,7 +242,6 @@ describe('Kit 5 live dashboard recovery state', () => {
     await dashboard.submitNextCustomer();
     dashboard = renderDashboard();
     expect(dashboard.liveAction?.status).toBe('completed');
-    expect(dashboard.liveAction?.attemptId).toBe('original:txn_bloom_payroll_001');
     expect(dashboard.liveHistory).toHaveLength(1);
     const postCalls = fetchMock.mock.calls.filter(([url]) => url === 'http://localhost:8000/api/kit5/next-customer');
     expect(postCalls).toHaveLength(2);
@@ -249,6 +251,7 @@ describe('Kit 5 live dashboard recovery state', () => {
     expect(retryRequest).toMatchObject({ customerId: 'acct_bloom001' });
     expect(retryRequest.scenarioId).toMatch(/^original:[0-9a-f-]{36}$/i);
     expect(retryRequest.actionId).toBe(`${retryRequest.scenarioId}:live:txn_bloom_payroll_001`);
+    expect(dashboard.liveAction?.attemptId).toBe(firstRequest.actionId);
   });
 
   it('releases the submission lock after an explicit rejection and retries the same customer', async () => {

@@ -58,17 +58,74 @@ a mocked Airwallex gateway and do not create sandbox customers or cards.
 | Pixel Studio | `pixel` / `acct_pixel001` | `awx-demo-ca-pixel` | `awx-demo-holder-pixel` | `awx-demo-card-pixel` | `awx-demo-ga-pixel` |
 | Juniper Labs | `juniper` / `acct_juniper001` | `awx-demo-ca-juniper` | `awx-demo-holder-juniper` | `awx-demo-card-juniper` | `awx-demo-ga-juniper` |
 
-## Fixture amounts
+## Opening balances and expected card attempts
 
-The local Bloom scenario uses the values in the Kit 5 source of truth:
+The target USD balances are the available balances after preflight seeding, not
+guaranteed gross deposit amounts. Read each connected account after seeding and
+reconcile any deposit fee or other balance change.
 
-| Customer | Opening USD balance | Card attempt | Shortfall |
-| --- | ---: | ---: | ---: |
-| Bloom & Co. | $2,000 | $9,000 supplier | $7,000 |
+| Customer | Target available USD | First card attempt | Shortfall | Policy outcome |
+| --- | ---: | ---: | ---: | --- |
+| Bloom & Co. | $2,000 | $9,000 supplier | $7,000 | Block while evidence is under review; after resolution, refuse at Tier C's $4,000 line. |
+| Atlas SaaS | $1,500 | $6,500 supplier | $5,000 | Auto bridge after a verified insufficient-funds decline. |
+| Nova Agency | $1,000 | $7,000 contractor | $6,000 | Human approval; the later $8,000 settled deposit triggers collection. |
+| Pixel Studio | $500 | $2,500 advertising | $2,000 | Refuse at the 90-day history gate. |
+| Juniper Labs | $1,000 | $7,000 contractor | $6,000 | Refuse because only $4,000 remains above the facility floor. |
 
-The original and Kit 5 target scenarios both use these values. The fixture's
-`INSUFFICIENT_FUNDS` reason is synthetic and is not proof of a natural provider
-decline.
+Bloom's $9,000 attempt is below Airwallex's $9,999.99 maximum for one issuing
+simulation. Keep the connected-account balance at $2,000 and set the card's
+per-transaction limit high enough to allow $9,000. The $7,000 shortfall remains
+above Bloom's revised $4,000 line.
+
+## Card and funding configuration
+
+- Use one active USD wallet-funded card and one `READY` cardholder for each
+  connected account. Confirm Airwallex enables this card program for the
+  platform and region.
+- Set each card's per-transaction limit at or above its first attempt and its
+  monthly limit to at least $100,000. Allow the merchant category used by each
+  scenario.
+- Set the account home currency to USD. Keep other available currency balances
+  at zero and do not attach cards to a funded Platform Liquidity Program or
+  another fallback source that could cover the purchase.
+- Use fresh connected accounts for repeatable runs, or read current balances
+  before seeding. Do not replay opening-balance deposits without reconciliation.
+
+## Preflight funding through sandbox deposits
+
+Use `POST /api/v1/simulation/deposit/create` to seed connected accounts before
+the presenter sequence. The USD currency comes from each USD
+`global_account_id`. Send the request on behalf of the customer with
+`x-on-behalf-of` and set `status: SETTLED`. Deposit only enough to reach the
+target available balance above, then verify it with
+`GET /api/v1/balances/current` using the same `x-on-behalf-of` account.
+
+Nova's later $8,000 deposit is a separate sandbox event. Create it only after
+the bridge settles, then begin fee-first collection after Airwallex confirms
+the deposit as `SETTLED`.
+
+## Failure simulation options
+
+Airwallex's `transaction_failure_reason` input does not accept
+`INSUFFICIENT_FUNDS`. Do not send that value or translate a different provider
+reason into it.
+
+1. **Use natural account state for the final sandbox run.** Create the issuing
+   attempt with the actual card and balance, omit `transaction_failure_reason`,
+   and require Airwallex to return `INSUFFICIENT_FUNDS`. This proves the
+   intended provider decline and can enter bridge policy.
+2. **Use `TRANSACTION_BLOCKED` for a forced API smoke test.** Show its actual
+   provider reason and stop before bridge evaluation. This checks the API and
+   dashboard decline handling without standing in for a shortfall.
+3. **Use the local fixture for the video and deterministic tests.** The
+   fixture may carry `INSUFFICIENT_FUNDS`, but label it as fixture data and
+   make no Airwallex call. It does not satisfy sandbox-live acceptance.
+
+Recommended sequence: use fixture mode for the video, `TRANSACTION_BLOCKED`
+only for a provider smoke check, and a naturally balance-driven decline for
+the final sandbox run. If the account setup does not produce the expected
+reason, stop that live scenario and ask Airwallex to confirm the supported
+sandbox funding configuration.
 
 ## Local server configuration
 
@@ -87,12 +144,13 @@ or logged:
 Variable presence does not verify authentication, key scopes, product
 enablement, customer mappings, webhook delivery, or provider success. Do not
 copy credentials into this worktree, tests, browser code, or source control.
-Node does not load `.env` automatically. From this develop worktree, export the
-ignored main-checkout file into the server process without copying its values:
+Node does not load `.env` automatically. From the repository root, export the
+ignored `.env` into the server process. From a worktree, source the main
+checkout's `.env` by absolute path instead of copying it:
 
 ```bash
 set -a
-source ../../.env
+source .env
 set +a
 PORT=8000 npm run server:start
 ```

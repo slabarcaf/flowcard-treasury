@@ -460,15 +460,16 @@ the affected customer while other customers continue.
 
 | Scenario | What it shows |
 | --- | --- |
-| **Original** | GD's four customers on our facility. Bloom's $9,000 supplier attempt, $2,000 opening USD balance, and $7,000 shortfall are declined at Tier C. Atlas is auto-funded, Nova goes to a credit officer, Pixel is ineligible, and Nova repays on day 9 ($27 fee). |
+| **Original** | GD's four customers on our facility. Bloom's $9,000 supplier attempt has a $2,000 opening USD balance and $7,000 shortfall. Unresolved Salesforce evidence blocks Bloom pending review; after resolution, Tier C's $4,000 line and closed door decline the request. Atlas is auto-funded, Nova goes to a credit officer, Pixel is ineligible, and Nova repays on day 9 ($27 fee). |
 | **Kit 5 target** | Original plus **Juniper Labs**, whose $6,000 request arrives at 9:16. Bloom keeps the same $9,000 attempt, $2,000 opening USD balance, and $7,000 shortfall. Only $4,000 remains above the floor, so Juniper gets a firm no. |
 | **First come, first served** | Two identical Tier A requests ($8,000 each). The first is funded; the second would breach the floor and is refused. After the first is repaid, the second customer's retried payment is funded. |
 | **Tight capital → human** | Two identical Tier A requests ($3,000 each) with $6,500 deployable. The first auto-funds and drops capital into *Critical*, where Tier A needs a person, so the second goes to a credit officer. |
 
-While a scenario plays, declines arrive about every 1.5 seconds. It stops when
-you need to act: **Re-evaluate** (Salesforce note), **Continue** after an
-auto-approval (a green callout shows what was funded), **Approve Bridge**
-(credit officer), or **Simulate Collection** (a repayment on a later day).
+In fixture mode, scenario events advance in arrival order. Review-required evidence
+blocks its customer while other customers continue. The presenter can continue after an
+auto-approval, approve a human decision, or simulate a later repayment. In sandbox-live
+mode, each **Next customer** action sends one card attempt through the server; the dashboard
+shows the provider result and any subsequent policy decision.
 
 ### Statuses and dates
 
@@ -476,6 +477,7 @@ auto-approval (a green callout shows what was funded), **Approve Bridge**
 | --- | --- |
 | **Declined** | Firm no for this request, with the rule that failed. |
 | **Ineligible** | No credit line at all, e.g. Pixel: 41 days of history against the 90-day minimum. |
+| **Blocked** | Required data or evidence is unresolved for this customer. Other customers can proceed. |
 | **Pending approval** | Waiting on a credit officer. |
 | **Funded** | Bridge sent and **still owed**. Shows the funding date and the *collect by* date. |
 | **Repaid** | Fee and principal collected. Shows the repayment date. |
@@ -501,7 +503,7 @@ instead.
 
    | Customer     | Payment            | Shortfall | What the story shows                                                                                     |
    | ------------ | ------------------ | --------- | -------------------------------------------------------------------------------------------------------- |
-   | Bloom & Co.  | $12,000 payroll    | $10,000   | The AI agent finds a Salesforce note (largest client disputing an invoice), re-scores Bloom from Tier A to Tier C, and the bridge ends up declined. |
+   | Bloom & Co.  | $9,000 supplier    | $7,000    | Unresolved Salesforce evidence blocks the customer pending review. After resolution, the Tier C line and closed door decline the bridge. |
    | Atlas SaaS   | $6,500 supplier    | $5,000    | Clean Tier A customer — auto-approved and funded.                                                                   |
    | Nova Agency  | $7,000 contractor  | $6,000    | Tier B at a *Less* band → needs a human to approve.                                                      |
    | Pixel Studio | $2,500 ad spend    | $2,000    | Only 41 days on platform (< 90 required) → ineligible.                                                   |

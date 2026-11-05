@@ -16,6 +16,16 @@ import { nextEvent, shortDate } from './engine.js';
 import { SettingsPanel } from './SettingsPanel.js';
 import { formatCollectionCharge } from './live-format.js';
 
+const FEED_KEY = 'flowcard.activityCollapsed';
+
+function storedCollapsed(): boolean {
+  try {
+    return localStorage.getItem(FEED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 /** Kit 5 version: 20% reserve floor, requests decided one at a time as they arrive. */
 export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
   const k = useKit5Dashboard();
@@ -23,6 +33,18 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [operatorToken, setOperatorToken] = useState('');
   const [checkpointLifecycleId, setCheckpointLifecycleId] = useState('');
+  const [feedCollapsed, setFeedCollapsed] = useState(storedCollapsed);
+
+  const toggleFeed = () => {
+    setFeedCollapsed((collapsed) => {
+      try {
+        localStorage.setItem(FEED_KEY, collapsed ? '0' : '1');
+      } catch {
+        // Storage unavailable: the choice just won't be remembered.
+      }
+      return !collapsed;
+    });
+  };
 
   const upcoming = nextEvent(state);
   const awaitingCollection = state.phase !== 'idle' && !state.pause && upcoming?.type === 'repayment';
@@ -56,6 +78,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
   const fixtureMode = k.mode !== 'sandbox-live';
   const checkpointChoiceRequired = k.mode === 'fixture-checkpoint' &&
     k.fixtureCheckpointPaused && k.fixtureCheckpointResolution === 'awaiting';
+  const funded = state.queue.filter((request) => request.fundedOn);
 
   let statusLine = k.scenario.summary;
   if (autoApproved) statusLine = `${autoApproved.customerName} was auto-approved. Continue when you're ready for the next request.`;
@@ -188,6 +211,22 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
                 <span className="ml-2 text-[11px] font-medium text-amber-800">
                   Checkpoint unavailable: restore Bloom’s approved event terms.
                 </span>
+              )}
+              {funded.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  <span className="font-semibold text-gray-900">Funded:</span>
+                  {funded.map((request) => (
+                    <span key={request.id} className="text-gray-700">
+                      <span className="font-medium">{request.customerName}</span>{' '}
+                      <span className="font-mono">${request.allocation.toLocaleString('en-US')}</span>{' '}
+                      {request.repaidOn ? (
+                        <span className="text-emerald-600">(repaid {request.repaidOn})</span>
+                      ) : (
+                        <span className="text-gray-500">(collect by {request.dueOn})</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -522,7 +561,7 @@ export function Kit5Dashboard({ versionToggle }: { versionToggle: ReactNode }) {
             )}
           </div>
 
-          <ActivityFeed events={state.feed} />
+          <ActivityFeed events={state.feed} collapsed={feedCollapsed} onToggle={toggleFeed} />
         </div>
       </div>
 
