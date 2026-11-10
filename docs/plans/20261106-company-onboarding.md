@@ -31,16 +31,18 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `services/company-onboarding/internal/platform/airwallex/testdata/`
 
 - [ ] Use Docs MCP to pin US business create/update/submit, consent and file
-      contracts; record sources and API version.
+      contracts; record sources and API version (MCP unavailable in environment;
+      fell back to public official documentation with provisional versioning).
 - [ ] Resolve role and document ambiguities; document supported RFI and webhook
-      payloads.
-- [ ] Document uncertain-create recovery; keep manual hold when no safe lookup
-      exists.
-- [ ] Record that reviewed revisions remain undecided and block final submit
+      payloads (role and country-document matrix remain unresolved external gates).
+- [x] Document uncertain-create recovery; keep manual hold when no safe lookup
+      exists (lookup unverified; manual hold enforced).
+- [x] Record that reviewed revisions remain undecided and block final submit
       contract until resolved.
-- [ ] Add sanitized contract fixtures and fixture-shape checks; never invent
-      missing platform behavior.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Add sanitized contract fixtures and fixture-shape checks; never invent
+      missing platform behavior (tracked in testdata/PROVENANCE.md).
+- [x] Run relevant checks and resolve failures before proceeding (native go test
+      file execution passed).
 
 ### Task 2: Establish the isolated service
 
@@ -51,14 +53,14 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `services/company-onboarding/cmd/worker/main.go`
 - Create/modify: `services/company-onboarding/internal/config/config.go`
 
-- [ ] Create an independent module under services/company-onboarding with
+- [x] Create an independent module under services/company-onboarding with
       separate API and worker commands.
-- [ ] Use standard HTTP routing and separate domain, application and adapter
+- [x] Use standard HTTP routing and separate domain, application and adapter
       packages.
-- [ ] Define only necessary configuration; use sourced .env, brief comments, and
+- [x] Define only necessary configuration; use sourced .env, brief comments, and
       ask before uncertain new settings.
-- [ ] Add startup/configuration tests and run module checks.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Add startup/configuration tests and run module checks.
+- [x] Run relevant checks and resolve failures before proceeding.
 
 ### Task 3: Implement Company rules
 
@@ -67,15 +69,15 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `services/company-onboarding/internal/domain/company.go`
 - Create/modify: `services/company-onboarding/internal/domain/company_test.go`
 
-- [ ] Model Company, embedded People, identification entities and value objects
+- [x] Model Company, embedded People, identification entities and value objects
       as agreed.
-- [ ] Implement draft edits, audited identifier corrections and archive/deletion
+- [x] Implement draft edits, audited identifier corrections and archive/deletion
       eligibility.
-- [ ] Allow duplicate legal identities; preserve free-text role and products
+- [x] Allow duplicate legal identities; preserve free-text role and products
       max500.
-- [ ] Test aggregate invariants and archive/open-application coordination
+- [x] Test aggregate invariants and archive/open-application coordination
       requirements.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Run relevant checks and resolve failures before proceeding.
 
 ### Task 4: Implement application and account state machines
 
@@ -85,14 +87,14 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `services/company-onboarding/internal/domain/platform_account.go`
 - Create/modify: `services/company-onboarding/internal/domain/application_test.go`
 
-- [ ] Model application, Submission, Document and Information Request children
+- [x] Model application, Submission, Document and Information Request children
       plus independent Platform Account.
-- [ ] Implement frozen copies, consent data, text answers and all approved
+- [x] Implement frozen copies, consent data, text answers and all approved
       scenario transitions.
-- [ ] Preserve completed histories and distinguish submission refusal from
+- [x] Preserve completed histories and distinguish submission refusal from
       verification rejection.
-- [ ] Test success, RFI, rejection, cancellation and uncertainty scenarios.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Test success, RFI, rejection, cancellation and uncertainty scenarios.
+- [x] Run relevant checks and resolve failures before proceeding.
 
 ### Task 5: Persist aggregates and durable operations
 
@@ -102,17 +104,17 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `services/company-onboarding/internal/postgres/`
 - Create/modify: `services/company-onboarding/internal/postgres/repository_test.go`
 
-- [ ] Create numbered migrations scoped to dedicated onboarding schema/role and
+- [x] Create numbered migrations scoped to dedicated onboarding schema/role and
       migration ownership.
-- [ ] Enforce one open application and one Platform Account per
+- [x] Enforce one open application and one Platform Account per
       Company/platform; do not deduplicate companies.
-- [ ] Persist immutable snapshots and idempotency results atomically with queued
+- [x] Persist immutable snapshots and idempotency results atomically with queued
       operations.
-- [ ] Use transaction coordination for archive versus application creation, and
+- [x] Use transaction coordination for archive versus application creation, and
       leased job claims.
-- [ ] Test constraints, concurrent commands, rollback and restart behavior using
+- [x] Test constraints, concurrent commands, rollback and restart behavior using
       isolated PostgreSQL tests.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Run relevant checks and resolve failures before proceeding.
 
 ### Task 6: Expose resource and validation contracts
 
@@ -122,17 +124,17 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `services/company-onboarding/internal/validation/`
 - Create/modify: `services/company-onboarding/internal/http/handlers_test.go`
 
-- [ ] Implement Company/application CRUD scope, cursor lists, account/submission
+- [x] Implement Company/application CRUD scope, cursor lists, account/submission
       reads and action endpoints.
-- [ ] Use go-playground validator native rule codes and JSON names; do not
+- [x] Use go-playground validator native rule codes and JSON names; do not
       expose supplied sensitive values.
-- [ ] Implement saved-data POST verify with 200 VALIDATION_PASSED or 422
+- [x] Implement saved-data POST verify with 200 VALIDATION_PASSED or 422
       exhaustive field errors.
 - [ ] Finalize submit request only after explicit resolution of deferred
       revision policy; do not choose a default.
-- [ ] Test error envelopes, draft permissiveness, submission completeness and
+- [x] Test error envelopes, draft permissiveness, submission completeness and
       pagination.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Run relevant checks and resolve failures before proceeding.
 
 ### Task 7: Add private document storage
 
@@ -142,17 +144,17 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `services/company-onboarding/internal/http/documents.go`
 - Create/modify: `services/company-onboarding/internal/storage/storage_test.go`
 
-- [ ] Implement encrypted private object storage and authenticated streamed
+- [x] Implement encrypted private object storage and authenticated streamed
       upload/read access.
-- [ ] Enforce local PDF/JPEG/PNG 10MiB policy and verified document-specific
+- [x] Enforce local PDF/JPEG/PNG 10MiB policy and verified document-specific
       constraints.
-- [ ] Store immutable local metadata and separately tracked platform upload
+- [x] Store immutable local metadata and separately tracked platform upload
       references.
-- [ ] Provide fixture test storage and audit access without leaking identity
+- [x] Provide fixture test storage and audit access without leaking identity
       data.
-- [ ] Test boundaries, access denial, invalid formats, replacement and
+- [x] Test boundaries, access denial, invalid formats, replacement and
       historical references.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Run relevant checks and resolve failures before proceeding.
 
 ### Task 8: Run recoverable platform submissions
 
@@ -162,17 +164,17 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `services/company-onboarding/internal/worker/`
 - Create/modify: `services/company-onboarding/internal/worker/submission_test.go`
 
-- [ ] Implement verified token authentication and platform adapter contracts
+- [x] Implement verified token authentication and platform adapter contracts
       with timeouts and sanitized errors.
-- [ ] Execute durable create, upload, update and submit steps; never hold DB
+- [x] Execute durable create, upload, update and submit steps; never hold DB
       transactions during HTTP calls.
-- [ ] Require idempotency key and replay original accepted command response
+- [x] Require idempotency key and replay original accepted command response
       before state checks.
-- [ ] Persist external IDs immediately; use safe documented reconciliation or
+- [x] Persist external IDs immediately; use safe documented reconciliation or
       manual hold after ambiguity.
-- [ ] Test crashes at each boundary, retries, duplicate commands, outages and
+- [x] Test crashes at each boundary, retries, duplicate commands, outages and
       refusal classification.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Run relevant checks and resolve failures before proceeding.
 
 ### Task 9: Integrate authentication and webhook delivery
 
@@ -185,17 +187,17 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `server/src/db/migrations/`
 - Create/modify: `services/company-onboarding/internal/webhooks/`
 
-- [ ] Add Node proxy and signed short-lived operator assertions; strip untrusted
+- [x] Add Node proxy and signed short-lived operator assertions; strip untrusted
       identity headers and verify fixed algorithm/issuer/audience/expiry.
-- [ ] Revisit cookie path and allowed HTTP methods so existing session reaches
+- [x] Revisit cookie path and allowed HTTP methods so existing session reaches
       onboarding routes safely.
-- [ ] Persist reliable webhook-forwarding work on Node side and deduplicate into
+- [x] Persist reliable webhook-forwarding work on Node side and deduplicate into
       Go-owned inbox.
-- [ ] Apply verified events without regressions and reconcile missed
+- [x] Apply verified events without regressions and reconcile missed
       observations periodically.
-- [ ] Add boundary tests for session scope, forged assertions, forwarding
+- [x] Add boundary tests for session scope, forged assertions, forwarding
       outages, duplicate/stale events and unknown accounts.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Run relevant checks and resolve failures before proceeding.
 
 ### Task 10: Verify acceptance and operating documentation
 
@@ -206,17 +208,17 @@ scope changes without silently resolving decisions parked in the backlog.
 - Create/modify: `services/company-onboarding/Dockerfile`
 - Create/modify: `docs/designs/company-onboarding.md`
 
-- [ ] Package separate API and worker commands; retain current backend, schema
+- [x] Package separate API and worker commands; retain current backend, schema
       and roster ownership.
-- [ ] Reference .env through env_file; never copy credentials or enumerate env
+- [x] Reference .env through env_file; never copy credentials or enumerate env
       mappings in Compose.
-- [ ] Run module tests, race checks and static checks plus affected Node
+- [x] Run module tests, race checks and static checks plus affected Node
       tests/build/lint.
-- [ ] Exercise all four approved scenarios using mocked platform and real
+- [x] Exercise all four approved scenarios using mocked platform and real
       isolated PostgreSQL/storage.
-- [ ] Document migrations, manual holds, webhook forwarding recovery and
+- [x] Document migrations, manual holds, webhook forwarding recovery and
       external acceptance gates.
-- [ ] Run relevant checks and resolve failures before proceeding.
+- [x] Run relevant checks and resolve failures before proceeding.
 
 ## Post-completion
 

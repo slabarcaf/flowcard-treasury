@@ -513,6 +513,104 @@ instead.
 4. **Approve** Nova → funding completes after a short delay.
 5. **Simulate Collection** shows the repayment waterfall. **Reset** starts over.
 
+## Company Onboarding Service
+
+The company onboarding subsystem provides automated underwriting, KYC document ingestion, and Airwallex connected-account integration. It consists of a Go API service (`cmd/api`), a background worker (`cmd/worker`), and an authenticated Node.js gateway proxy.
+
+### Local Build and Run
+
+Prerequisites: Go 1.24+ and PostgreSQL 16+.
+
+```bash
+# Build binaries
+cd services/company-onboarding
+go build -o bin/api ./cmd/api
+go build -o bin/worker ./cmd/worker
+go build -o bin/migrate ./cmd/migrate
+
+# 1. Run migrations using a privileged administrative connection
+./bin/migrate
+
+# 2. Run Go API on port 8080 (overriding PORT=3000 to avoid Node collision)
+./bin/api -port 8080
+
+# 3. Run Background Worker in a separate terminal
+./bin/worker
+```
+
+### PostgreSQL Migrations and Least-Privilege Runtime
+
+The onboarding subsystem uses dedicated migrations in `services/company-onboarding/internal/postgres/migrations/`:
+- `001_initial_onboarding_schema.sql`: Core onboarding schema, companies, applications, submissions, and platform accounts.
+- `002_submission_dispatch_steps.sql`: Durable dispatch step state machine (`NOT_STARTED`, `DISPATCHING`, `CONFIRMED`, `UNRESOLVED`).
+- `003_platform_creation_coordinator.sql`: Atomic account creation coordinator.
+- `004_webhook_inbox.sql`: Webhook inbox, deduplication, and lease fencing.
+- `005_webhook_inbox_lease_token.sql`: Fenced worker lease token tracking.
+- `006_reconciliation_next_check_and_inbox_processing.sql`: Outbox and inbox processing state indices.
+
+In addition, migration `server/src/db/migrations/021_onboarding_webhook_forwarding.sql` provisions the Node forwarder inbox in the main PostgreSQL database.
+
+Apply Go migrations to PostgreSQL using the dedicated `bin/migrate` CLI:
+```bash
+DATABASE_URL="$DATABASE_URL_HOST" ./bin/migrate
+```
+
+**Security Boundary**: In accordance with least-privilege security, runtime API (`cmd/api`) and worker (`cmd/worker`) processes do **NOT** execute DDL. On startup, both processes invoke `postgres.VerifySchemaReadiness` to verify that all 6 migrations have been applied and required tables exist. If the database is unreachable or schema is missing, the service fails startup immediately rather than running degraded. Connection strings, credentials, and passwords are strictly sanitized and never printed to logs or stdout. Production `cmd/api` contains zero secret-holding command line flags (test harnesses use programmatic constructor injection or test wrappers).
+
+### PostgreSQL Role Provisioning
+
+For production or least-privilege environments, provision the `onboarding_service` role without embedding secret literals in scripts:
+
+```sql
+-- Run as superuser/admin; supply password via psql variable or environment
+CREATE ROLE onboarding_service WITH LOGIN PASSWORD :'ONBOARDING_DB_PASSWORD';
+GRANT CONNECT ON DATABASE flowcard TO onboarding_service;
+GRANT USAGE ON SCHEMA onboarding TO onboarding_service;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA onboarding TO onboarding_service;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA onboarding TO onboarding_service;
+ALTER DEFAULT PRIVILEGES IN SCHEMA onboarding GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO onboarding_service;
+ALTER DEFAULT PRIVILEGES IN SCHEMA onboarding GRANT USAGE, SELECT ON SEQUENCES TO onboarding_service;
+```
+
+Never store secret literals in tracked files or repository commits.
+
+### Runtime Ports and Docker Compose
+
+- **Node HTTP Server & Proxy**: Runs on port `3000` (or `8000` when mapped in Compose).
+- **Go Onboarding API**: Runs on port `8080` (specified via command flag `-port 8080` to prevent collision with Node's `PORT=3000` when sharing `.env`).
+- **PostgreSQL**: Standard port `5432` (or ephemeral `54329` for isolated test suites).
+
+In `compose.yaml`, both `onboarding-api` and `onboarding-worker` are configured using `env_file: .env` without per-variable mappings or newly invented variables. The multi-stage `Dockerfile` uses pinned builder `golang:1.27.3-alpine3.24`, minimal `alpine:3.21` runtime with installed `ca-certificates`, non-root user `app:app` (10001:10001), and defaults to `CMD ["/bin/api"]` without `ENTRYPOINT` so Compose commands (`/bin/api -port 8080` and `/bin/worker`) cleanly override execution paths.
+
+### Unconfigured Behavior & Safe Defaults
+
+When live Airwallex API credentials or S3 bucket configurations are absent, the service starts safely in fail-closed mode:
+- **Authentication**: Falls back to `DenyAllAuthenticator` if `JWT_SHARED_SECRET` is shorter than 32 characters.
+- **Contract Gate**: Active `UnverifiedPlatformContractGate` blocks live external API dispatches until formal platform verification is established.
+- **Object Storage**: Active `UnavailableStore` rejects document upload operations with explicit 503 Service Unavailable when S3 is unconfigured.
+- **Platform Client**: Active `UnconfiguredClient` fails closed on external account creation or updates, preventing accidental live API calls.
+
+### Webhook Routing & Forwarding Architecture
+
+1. External Airwallex webhooks enter through the Node server at `POST /api/webhooks/airwallex` (or `/webhooks/airwallex`).
+2. The Node ingress verifies the raw HMAC-SHA256 signature against `AIRWALLEX_WEBHOOK_SECRET` and commits the event to `onboarding_forwarder_inbox` in PostgreSQL.
+3. The Node background forwarder claims events using expiring leases (`leased_until`, `lease_token`) and proxies them to the Go API at `POST /api/v1/webhooks/airwallex` using a short-lived service-to-service JWT assertion (`ONBOARDING_JWT_SECRET`).
+4. The Go webhook processor idempotently applies account status transitions and records audit trails.
+
+### Manual Hold & Unreferenced Object Cleanup
+
+- **Crash-Safe Dispatch Steps**: Outbound platform requests record intent before network dispatch. If an ambiguous network failure (5xx or connection timeout) occurs, the step transitions to `UNRESOLVED` and halts automatic retries.
+- **Manual Hold**: Ambiguous submissions are placed on manual operator hold. The worker will never blindly re-dispatch an ambiguous create or update call.
+- **Document Cleanup**: Quarantined and unreferenced temporary uploads are periodically pruned via storage lifecycle cleanup scripts.
+
+### Platform Live Acceptance Conditions
+
+Before enabling live Airwallex connected-account onboarding:
+1. Operator must provide explicit written authorization and configure verified production credentials.
+2. Verified US entity, beneficial ownership, and KYC role mappings must be confirmed.
+3. Live webhook endpoints and signature secrets must be registered and verified in the Airwallex console.
+4. Auto-enrollment remains disabled; all onboarding submissions require authenticated operator initiation.
+
 ## How the code is organized
 
 ```text
