@@ -1,0 +1,4 @@
+{
+  "code": "rate_limit_exceeded",
+  "message": "Rate limit exceeded. Please retry after backoff."
+}

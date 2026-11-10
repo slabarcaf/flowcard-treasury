@@ -1,0 +1,34 @@
+{
+  "account_details": {
+    "business_details": {
+      "business_name": "Acme Innovations LLC",
+      "business_registration_number": "12-3456789",
+      "business_structure": "LIMITED_LIABILITY_COMPANY",
+      "description_of_goods_or_services": "SaaS bridge underwriting infrastructure and financial analytics platform",
+      "registration_address": {
+        "city": "San Francisco",
+        "country_code": "US",
+        "postcode": "94105",
+        "state": "CA",
+        "street_address": "100 Market St, Suite 400"
+      }
+    },
+    "legal_entity_type": "BUSINESS"
+  },
+  "customer_agreements": {
+    "agreed_to_data_usage": true,
+    "agreed_to_terms_and_conditions": true,
+    "terms_and_conditions": {
+      "agreed_at": "2026-11-06T10:00:00Z",
+      "service_agreement_type": "FULL"
+    }
+  },
+  "id": "acct_sandbox_test001",
+  "primary_contact": {
+    "email": "operator.contact@acme-innovations.example.com",
+    "first_name": "Alex",
+    "last_name": "Morgan",
+    "phone_number": "+14155550199"
+  },
+  "status": "CREATED"
+}
