@@ -31,7 +31,7 @@ export function handleKit5Session(
       send(response, 401, { error: "operator_auth_required" });
       return;
     }
-    response.setHeader("Set-Cookie", `${COOKIE_NAME}=${createOperatorSessionCookie(config.operatorToken!, Date.now(), config.operatorId)}; Path=/api/kit5; HttpOnly; Secure; SameSite=None; Max-Age=${SESSION_TTL_SECONDS}`);
+    response.setHeader("Set-Cookie", `${COOKIE_NAME}=${createOperatorSessionCookie(config.operatorToken!, Date.now(), config.operatorId)}; Path=/api; HttpOnly; Secure; SameSite=None; Max-Age=${SESSION_TTL_SECONDS}`);
     send(response, 200, { status: "authenticated", approvalAvailable: Boolean(config.operatorId) });
   }).catch(() => send(response, 400, { error: "invalid_request" }));
 }
@@ -71,8 +71,8 @@ export function handleKit5Preflight(
     return;
   }
   response.writeHead(204, {
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type, authorization, if-match, if-none-match, idempotency-key",
     "Access-Control-Max-Age": "600",
   });
   response.end();

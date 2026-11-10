@@ -24,6 +24,10 @@ export const AIRWALLEX_WEBHOOK_EVENTS = [
   "issuing.card_transaction.declined",
 ] as const;
 
+export function isOnboardingWebhookEvent(eventType: string): boolean {
+  return eventType.startsWith("account.") || eventType.startsWith("rfi.");
+}
+
 /** Stores verified bytes once. The route acknowledges only after this durable insert completes. */
 export async function insertWebhookOnce(
   pool: DatabasePool,
@@ -36,5 +40,14 @@ export async function insertWebhookOnce(
      RETURNING provider_event_id AS id`,
     [event.id, event.type, event.rawBody],
   );
-  return result.rowCount === 1;
+  const isNew = result.rowCount === 1;
+  if (isNew && isOnboardingWebhookEvent(event.type)) {
+    await pool.query(
+      `INSERT INTO onboarding_webhook_forwarding (provider_event_id, event_type)
+       VALUES ($1, $2)
+       ON CONFLICT (provider_event_id) DO NOTHING`,
+      [event.id, event.type],
+    );
+  }
+  return isNew;
 }

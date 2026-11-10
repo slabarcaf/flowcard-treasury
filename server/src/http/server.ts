@@ -17,6 +17,8 @@ import {
   type RemoteAuthorizationNonceClaimer,
   type RemoteAuthorizationResolver,
 } from "./routes/remote-authorization.js";
+import { handleOnboardingProxy } from "./routes/onboarding-proxy.js";
+import type { OnboardingWebhookForwarder } from "../webhooks/onboarding-forwarder.js";
 
 type BridgeDecisionResolver = (requestId: string) => Promise<TrustedBridgeDecisionResult>;
 type BridgeDecisionOrKit5 = BridgeDecisionResolver | Kit5DemoRouteDependencies;
@@ -30,9 +32,10 @@ export function createHttpServer(
   claimRemoteAuthorizationNonce?: RemoteAuthorizationNonceClaimer,
   confirmRemoteAuthorizationDispatch?: RemoteAuthorizationDispatchConfirmer,
   kit5Demo?: Kit5DemoRouteDependencies,
+  onboardingForwarder?: OnboardingWebhookForwarder,
 ): Server {
   return createServer(createRequestHandler(config, pool, webhookWorker, bridgeDecisionOrKit5,
-    resolveRemoteAuthorization, claimRemoteAuthorizationNonce, confirmRemoteAuthorizationDispatch, kit5Demo));
+    resolveRemoteAuthorization, claimRemoteAuthorizationNonce, confirmRemoteAuthorizationDispatch, kit5Demo, onboardingForwarder));
 }
 
 /** Exposed so route wiring can be tested directly without opening a TCP listener. */
@@ -45,6 +48,7 @@ export function createRequestHandler(
   claimRemoteAuthorizationNonce?: RemoteAuthorizationNonceClaimer,
   confirmRemoteAuthorizationDispatch?: RemoteAuthorizationDispatchConfirmer,
   kit5Demo?: Kit5DemoRouteDependencies,
+  onboardingForwarder?: OnboardingWebhookForwarder,
 ): RequestListener {
   const resolveBridgeDecision = typeof bridgeDecisionOrKit5 === "function" ? bridgeDecisionOrKit5 : undefined;
   const activeKit5Demo = bridgeDecisionOrKit5 && typeof bridgeDecisionOrKit5 !== "function"
@@ -56,6 +60,14 @@ export function createRequestHandler(
       operatorId: config.kit5OperatorId,
       allowedOrigins: config.kit5AllowedOrigins,
     };
+    if (isOnboardingRoute(request.url)) {
+      handleOnboardingProxy(request, response, {
+        upstreamUrl: config.onboardingServiceUrl,
+        serviceSecret: config.onboardingServiceSecret,
+        operatorAuth,
+      });
+      return;
+    }
     if (request.url === "/api/kit5/session" && request.method === "OPTIONS") {
       handleKit5Preflight(request, response, operatorAuth);
       return;
@@ -148,7 +160,14 @@ export function createRequestHandler(
       return;
     }
     if (request.method === "POST" && request.url === "/webhooks/airwallex" && pool) {
-      void handleAirwallexWebhook(request, response, { pool, secret: config.airwallexWebhookSecret, onReceived: () => webhookWorker?.nudge() });
+      void handleAirwallexWebhook(request, response, {
+        pool,
+        secret: config.airwallexWebhookSecret,
+        onReceived: () => {
+          webhookWorker?.nudge();
+          onboardingForwarder?.nudge();
+        },
+      });
       return;
     }
     if (request.method === "GET" && request.url === "/api/ledger" && pool) {
@@ -173,6 +192,24 @@ export function createRequestHandler(
     }
     handleRequest(request, response);
   };
+}
+
+function isOnboardingRoute(url: string | undefined): boolean {
+  if (!url) return false;
+  const qIdx = url.indexOf("?");
+  const pathname = qIdx >= 0 ? url.slice(0, qIdx) : url;
+  return (
+    pathname === "/api/onboarding" ||
+    pathname.startsWith("/api/onboarding/") ||
+    pathname === "/api/companies" ||
+    pathname.startsWith("/api/companies/") ||
+    pathname === "/api/onboarding-applications" ||
+    pathname.startsWith("/api/onboarding-applications/") ||
+    pathname === "/api/submissions" ||
+    pathname.startsWith("/api/submissions/") ||
+    pathname === "/api/platform-accounts" ||
+    pathname.startsWith("/api/platform-accounts/")
+  );
 }
 
 function sameSecret(provided: string, expected: string): boolean {
