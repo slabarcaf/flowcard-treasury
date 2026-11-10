@@ -1,0 +1,14 @@
+{
+  "accountId": "acct_sandbox_test001",
+  "data": {
+    "accountDetails": {
+      "businessDetails": {
+        "businessName": "Acme Innovations LLC"
+      }
+    },
+    "reason": "compliance_periodic_review",
+    "status": "SUSPENDED"
+  },
+  "id": "evt_sandbox_susp001",
+  "name": "account.suspended"
+}

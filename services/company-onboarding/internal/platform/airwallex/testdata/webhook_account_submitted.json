@@ -1,0 +1,13 @@
+{
+  "accountId": "acct_sandbox_test001",
+  "data": {
+    "accountDetails": {
+      "businessDetails": {
+        "businessName": "Acme Innovations LLC"
+      }
+    },
+    "status": "SUBMITTED"
+  },
+  "id": "evt_sandbox_sub001",
+  "name": "account.submitted"
+}

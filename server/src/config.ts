@@ -26,6 +26,10 @@ export interface ServerConfig {
   salesforceSnapshotReadToken?: string;
   /** Snapshot source selected for this server process, when configured. */
   salesforceSnapshotMode?: "demo" | "production_mcp";
+  /** Upstream URL for Go onboarding service proxy (constructor injection or test). */
+  onboardingServiceUrl?: string;
+  /** Shared secret for service-to-service JWT assertions (constructor injection or test). */
+  onboardingServiceSecret?: string;
 }
 
 /** API version required by the sandbox issuing-simulation endpoint. */

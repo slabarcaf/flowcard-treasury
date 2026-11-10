@@ -36,5 +36,33 @@ services:
       retries: 12
       start_period: 5s
 
+  onboarding-api:
+    build:
+      context: services/company-onboarding
+      dockerfile: Dockerfile
+    command: ["/bin/api", "-port", "8080"]
+    env_file: .env
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  onboarding-worker:
+    build:
+      context: services/company-onboarding
+      dockerfile: Dockerfile
+    command: ["/bin/worker"]
+    env_file: .env
+    depends_on:
+      database:
+        condition: service_healthy
+
 volumes:
   ledger-data:

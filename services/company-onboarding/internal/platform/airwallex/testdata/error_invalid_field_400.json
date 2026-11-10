@@ -1,0 +1,5 @@
+{
+  "code": "invalid_argument",
+  "message": "Value does not match required format for US EIN",
+  "source": "account_details.business_details.business_registration_number"
+}
