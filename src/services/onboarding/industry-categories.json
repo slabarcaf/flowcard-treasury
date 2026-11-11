@@ -1,0 +1,1009 @@
+[
+  {
+    "name": "Professional services",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0813XX"
+      },
+      {
+        "name": "Art and design",
+        "type": "CODE",
+        "value": "ICCV3_0802XX"
+      },
+      {
+        "name": "Photography",
+        "type": "CODE",
+        "value": "ICCV3_0810XX"
+      },
+      {
+        "name": "Management consulting",
+        "type": "CODE",
+        "value": "ICCV3_0808XX"
+      },
+      {
+        "name": "Marketing and advertising",
+        "type": "CODE",
+        "value": "ICCV3_0809XX"
+      },
+      {
+        "name": "Warehousing and distribution",
+        "type": "CODE",
+        "value": "ICCV3_0812XX"
+      },
+      {
+        "name": "IT consulting",
+        "type": "CODE",
+        "value": "ICCV3_0806XX"
+      },
+      {
+        "name": "Administrative services",
+        "type": "CODE",
+        "value": "ICCV3_0801XX"
+      },
+      {
+        "name": "Legal services",
+        "type": "CODE",
+        "value": "ICCV3_0807XX"
+      },
+      {
+        "name": "Accounting, auditing and tax",
+        "question": "Does your company hold, collect, or disburse funds on behalf of your customers?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_080001"
+          },
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_0800XX"
+          }
+        ]
+      },
+      {
+        "name": "Human resources solutions",
+        "type": "CODE",
+        "value": "ICCV3_0805XX"
+      },
+      {
+        "name": "Publishing and printing",
+        "type": "CODE",
+        "value": "ICCV3_0811XX"
+      },
+      {
+        "name": "Government and public services",
+        "type": "CODE",
+        "value": "ICCV3_0804XX"
+      },
+      {
+        "name": "Courier and shipping",
+        "type": "CODE",
+        "value": "ICCV3_0803XX"
+      }
+    ]
+  },
+  {
+    "name": "Property and real estate",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Construction",
+        "type": "CODE",
+        "value": "ICCV3_0902XX"
+      },
+      {
+        "name": "Plumbing, heating and air-conditioning",
+        "type": "CODE",
+        "value": "ICCV3_0904XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0908XX"
+      },
+      {
+        "name": "Architectural and engineering services",
+        "type": "CODE",
+        "value": "ICCV3_0900XX"
+      },
+      {
+        "name": "Special trade contractors",
+        "type": "CODE",
+        "value": "ICCV3_0906XX"
+      },
+      {
+        "name": "Electrical work",
+        "type": "CODE",
+        "value": "ICCV3_0903XX"
+      },
+      {
+        "name": "Real estate agents and managers",
+        "question": "Does your company hold, collect, or disburse funds on behalf of your customers?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_090501"
+          },
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_0905XX"
+          }
+        ]
+      },
+      {
+        "name": "Clearning and sanitization",
+        "type": "CODE",
+        "value": "ICCV3_0901XX"
+      },
+      {
+        "name": "Utilities",
+        "type": "CODE",
+        "value": "ICCV3_0907XX"
+      }
+    ]
+  },
+  {
+    "name": "Retail",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Auto parts and accessories",
+        "type": "CODE",
+        "value": "ICCV3_1001XX"
+      },
+      {
+        "name": "Florists",
+        "type": "CODE",
+        "value": "ICCV3_1008XX"
+      },
+      {
+        "name": "Gardening",
+        "type": "CODE",
+        "value": "ICCV3_1011XX"
+      },
+      {
+        "name": "Medical devices",
+        "type": "CODE",
+        "value": "ICCV3_1016XX"
+      },
+      {
+        "name": "Pet supplies",
+        "type": "CODE",
+        "value": "ICCV3_1021XX"
+      },
+      {
+        "name": "Beauty and cosmetics",
+        "type": "CODE",
+        "value": "ICCV3_1003XX"
+      },
+      {
+        "name": "Toys and hobbies",
+        "type": "CODE",
+        "value": "ICCV3_1025XX"
+      },
+      {
+        "name": "Adult products",
+        "type": "CODE",
+        "value": "ICCV3_1000XX"
+      },
+      {
+        "name": "Food and beverage",
+        "type": "CODE",
+        "value": "ICCV3_1009XX"
+      },
+      {
+        "name": "Office and school supplies",
+        "type": "CODE",
+        "value": "ICCV3_1019XX"
+      },
+      {
+        "name": "Mother and baby goods",
+        "type": "CODE",
+        "value": "ICCV3_1017XX"
+      },
+      {
+        "name": "Online marketplaces",
+        "type": "CODE",
+        "value": "ICCV3_1020XX"
+      },
+      {
+        "name": "Devices and electronics",
+        "type": "CODE",
+        "value": "ICCV3_1005XX"
+      },
+      {
+        "name": "Eyeglasses and other optical goods",
+        "type": "CODE",
+        "value": "ICCV3_1007XX"
+      },
+      {
+        "name": "Fast food outlets",
+        "type": "CODE",
+        "value": "ICCV3_1029XX"
+      },
+      {
+        "name": "Jewelry, watches, precious stones and metals",
+        "question": "Does any of your products have a unit price which is above USD$10k?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_101500"
+          },
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_101501"
+          }
+        ]
+      },
+      {
+        "name": "Vapes, e-cigarettes, e-juice and related products",
+        "type": "CODE",
+        "value": "ICCV3_1026XX"
+      },
+      {
+        "name": "Clothing and accessories",
+        "type": "CODE",
+        "value": "ICCV3_1004XX"
+      },
+      {
+        "name": "Automotive dealers",
+        "type": "CODE",
+        "value": "ICCV3_1002XX"
+      },
+      {
+        "name": "Musical instruments",
+        "type": "CODE",
+        "value": "ICCV3_1018XX"
+      },
+      {
+        "name": "Drugstore and personal care",
+        "question": "Does your business engage in the sale of prescription drugs?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_100600"
+          },
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_100601"
+          }
+        ]
+      },
+      {
+        "name": "Supplements and nutraceuticals\tnutrition, vitamins, health",
+        "question": "Do your products contain any substances which are controlled substances (e.g., controlled cannabinoids) under local laws?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_102802"
+          },
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_102801"
+          }
+        ]
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_1027XX"
+      },
+      {
+        "name": "Restaurants and bars",
+        "type": "CODE",
+        "value": "ICCV3_1022XX"
+      },
+      {
+        "name": "Sports and outdoor",
+        "type": "CODE",
+        "value": "ICCV3_1023XX"
+      },
+      {
+        "name": "Home appliances",
+        "type": "CODE",
+        "value": "ICCV3_1013XX"
+      },
+      {
+        "name": "Household goods",
+        "type": "CODE",
+        "value": "ICCV3_1014XX"
+      },
+      {
+        "name": "Furniture",
+        "type": "CODE",
+        "value": "ICCV3_1010XX"
+      },
+      {
+        "name": "Grocery stores",
+        "type": "CODE",
+        "value": "ICCV3_1012XX"
+      },
+      {
+        "name": "Tobacco and marijuana related products",
+        "type": "CODE",
+        "value": "ICCV3_1024XX"
+      }
+    ]
+  },
+  {
+    "name": "Wholesale",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Drugstore and personal care",
+        "question": "Does your business engage in the sale of prescription drugs?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_120600"
+          },
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_120601"
+          }
+        ]
+      },
+      {
+        "name": "Auto parts and accessories",
+        "type": "CODE",
+        "value": "ICCV3_1201XX"
+      },
+      {
+        "name": "Beauty and cosmetics",
+        "type": "CODE",
+        "value": "ICCV3_1203XX"
+      },
+      {
+        "name": "Furniture",
+        "type": "CODE",
+        "value": "ICCV3_1210XX"
+      },
+      {
+        "name": "Food and beverage",
+        "type": "CODE",
+        "value": "ICCV3_1209XX"
+      },
+      {
+        "name": "Office and school supplies",
+        "type": "CODE",
+        "value": "ICCV3_1219XX"
+      },
+      {
+        "name": "Sports and outdoor",
+        "type": "CODE",
+        "value": "ICCV3_1221XX"
+      },
+      {
+        "name": "Supplements and nutraceuticals\tnutrition, vitamins, health",
+        "question": "Do your products contain any substances which are controlled substances (e.g., controlled cannabinoids) under local laws?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_122501"
+          },
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_122502"
+          }
+        ]
+      },
+      {
+        "name": "Mother and baby goods",
+        "type": "CODE",
+        "value": "ICCV3_1217XX"
+      },
+      {
+        "name": "Tobacco and marijuana related products",
+        "type": "CODE",
+        "value": "ICCV3_1222XX"
+      },
+      {
+        "name": "Gardening",
+        "type": "CODE",
+        "value": "ICCV3_1211XX"
+      },
+      {
+        "name": "Groceries",
+        "type": "CODE",
+        "value": "ICCV3_1212XX"
+      },
+      {
+        "name": "Adult products",
+        "type": "CODE",
+        "value": "ICCV3_1200XX"
+      },
+      {
+        "name": "Musical instruments",
+        "type": "CODE",
+        "value": "ICCV3_1218XX"
+      },
+      {
+        "name": "Automotive",
+        "type": "CODE",
+        "value": "ICCV3_1202XX"
+      },
+      {
+        "name": "Home appliances",
+        "type": "CODE",
+        "value": "ICCV3_1213XX"
+      },
+      {
+        "name": "Jewelry, watches, precious stones and metals",
+        "question": "Does any of your products have a unit price which is above USD$10k?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_121501"
+          },
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_121500"
+          }
+        ]
+      },
+      {
+        "name": "Pet supplies",
+        "type": "CODE",
+        "value": "ICCV3_1220XX"
+      },
+      {
+        "name": "Clothing and accessories",
+        "type": "CODE",
+        "value": "ICCV3_1204XX"
+      },
+      {
+        "name": "Florists",
+        "type": "CODE",
+        "value": "ICCV3_1208XX"
+      },
+      {
+        "name": "Devices and electronics",
+        "type": "CODE",
+        "value": "ICCV3_1205XX"
+      },
+      {
+        "name": "Household goods",
+        "type": "CODE",
+        "value": "ICCV3_1214XX"
+      },
+      {
+        "name": "Medical devices",
+        "type": "CODE",
+        "value": "ICCV3_1216XX"
+      },
+      {
+        "name": "Eyeglasses and other optical goods",
+        "type": "CODE",
+        "value": "ICCV3_1207XX"
+      },
+      {
+        "name": "Toys and hobbies",
+        "type": "CODE",
+        "value": "ICCV3_1223XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_1224XX"
+      }
+    ]
+  },
+  {
+    "name": "Digital and tech",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Digital content (e.g., Books, music, movies)",
+        "type": "CODE",
+        "value": "ICCV3_0001XX"
+      },
+      {
+        "name": "Financial data and research",
+        "type": "CODE",
+        "value": "ICCV3_0002XX"
+      },
+      {
+        "name": "Crypto and blockchain related products and services",
+        "type": "CODE",
+        "value": "ICCV3_0000XX"
+      },
+      {
+        "name": "Games",
+        "question": "Does your product contain Transferable Virtual Assets (TVA) such as tools, skins, themes etc.? (It is not necessary that the assets can be redeemed in cash.)",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_000301"
+          },
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_000300"
+          }
+        ]
+      },
+      {
+        "name": "Social media",
+        "question": "Do you offer live streaming as a feature on your platform?\n",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_000500"
+          },
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_000501"
+          }
+        ]
+      },
+      {
+        "name": "Matchmaking and dating",
+        "type": "CODE",
+        "value": "ICCV3_0004XX"
+      },
+      {
+        "name": "Software development",
+        "type": "CODE",
+        "value": "ICCV3_0006XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0007XX"
+      }
+    ]
+  },
+  {
+    "name": "Travel and lodging",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Motor homes, caravans, campers & recreational vehicle hire",
+        "type": "CODE",
+        "value": "ICCV3_1109XX"
+      },
+      {
+        "name": "Travel agency",
+        "type": "CODE",
+        "value": "ICCV3_1105XX"
+      },
+      {
+        "name": "Car rental",
+        "type": "CODE",
+        "value": "ICCV3_1101XX"
+      },
+      {
+        "name": "Hotels, inns, and motels",
+        "type": "CODE",
+        "value": "ICCV3_1102XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_1107XX"
+      },
+      {
+        "name": "Water transportation",
+        "type": "CODE",
+        "value": "ICCV3_1106XX"
+      },
+      {
+        "name": "Taxis and limos",
+        "type": "CODE",
+        "value": "ICCV3_1104XX"
+      },
+      {
+        "name": "Air transportation",
+        "type": "CODE",
+        "value": "ICCV3_1100XX"
+      },
+      {
+        "name": "Boat hire and yacht charter",
+        "type": "CODE",
+        "value": "ICCV3_1108XX"
+      },
+      {
+        "name": "Ridesharing",
+        "type": "CODE",
+        "value": "ICCV3_1103XX"
+      }
+    ]
+  },
+  {
+    "name": "Education",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0105XX"
+      },
+      {
+        "name": "Child care",
+        "type": "CODE",
+        "value": "ICCV3_0100XX"
+      },
+      {
+        "name": "Elementary and secondary schools",
+        "type": "CODE",
+        "value": "ICCV3_0102XX"
+      },
+      {
+        "name": "Vocational schools and trade schools",
+        "type": "CODE",
+        "value": "ICCV3_0104XX"
+      },
+      {
+        "name": "Online education platforms",
+        "type": "CODE",
+        "value": "ICCV3_0103XX"
+      },
+      {
+        "name": "Colleges and universities",
+        "type": "CODE",
+        "value": "ICCV3_0101XX"
+      }
+    ]
+  },
+  {
+    "name": "Entertainment, recreation and social",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Lotteries",
+        "type": "CODE",
+        "value": "ICCV3_0204XX"
+      },
+      {
+        "name": "Political organizations",
+        "type": "CODE",
+        "value": "ICCV3_0207XX"
+      },
+      {
+        "name": "Religious organizations",
+        "type": "CODE",
+        "value": "ICCV3_0210XX"
+      },
+      {
+        "name": "NGOs, charities and social organizations",
+        "type": "CODE",
+        "value": "ICCV3_0206XX"
+      },
+      {
+        "name": "Bands, orchestras, actors, and other entertainers",
+        "type": "CODE",
+        "value": "ICCV3_0200XX"
+      },
+      {
+        "name": "Event ticketing",
+        "type": "CODE",
+        "value": "ICCV3_0202XX"
+      },
+      {
+        "name": "Country, sports and membership clubs",
+        "type": "CODE",
+        "value": "ICCV3_0201XX"
+      },
+      {
+        "name": "Gambling",
+        "type": "CODE",
+        "value": "ICCV3_0203XX"
+      },
+      {
+        "name": "Movie theaters",
+        "type": "CODE",
+        "value": "ICCV3_0205XX"
+      },
+      {
+        "name": "Professional sport teams and leagues",
+        "type": "CODE",
+        "value": "ICCV3_0208XX"
+      },
+      {
+        "name": "Tourist attractions",
+        "type": "CODE",
+        "value": "ICCV3_0211XX"
+      },
+      {
+        "name": "Recreational camps",
+        "type": "CODE",
+        "value": "ICCV3_0209XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0212XX"
+      }
+    ]
+  },
+  {
+    "name": "Manufacturing",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Furniture",
+        "type": "CODE",
+        "value": "ICCV3_0405XX"
+      },
+      {
+        "name": "Alcohol production",
+        "type": "CODE",
+        "value": "ICCV3_0400XX"
+      },
+      {
+        "name": "Paper products",
+        "type": "CODE",
+        "value": "ICCV3_0410XX"
+      },
+      {
+        "name": "Rubber and plastics products",
+        "type": "CODE",
+        "value": "ICCV3_0412XX"
+      },
+      {
+        "name": "Clothing and accessories",
+        "type": "CODE",
+        "value": "ICCV3_0401XX"
+      },
+      {
+        "name": "Industrial machinery and equipment",
+        "type": "CODE",
+        "value": "ICCV3_0407XX"
+      },
+      {
+        "name": "Home appliances",
+        "type": "CODE",
+        "value": "ICCV3_0406XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0414XX"
+      },
+      {
+        "name": "Tobacco and marijuana related products",
+        "type": "CODE",
+        "value": "ICCV3_0413XX"
+      },
+      {
+        "name": "Computer and electronics",
+        "type": "CODE",
+        "value": "ICCV3_0402XX"
+      },
+      {
+        "name": "Food and beverage (non-alcoholic)",
+        "type": "CODE",
+        "value": "ICCV3_0404XX"
+      },
+      {
+        "name": "Pharmaceuticals",
+        "type": "CODE",
+        "value": "ICCV3_0411XX"
+      },
+      {
+        "name": "Medical devices",
+        "type": "CODE",
+        "value": "ICCV3_0409XX"
+      },
+      {
+        "name": "Supplements and nutraceuticals\tnutrition, vitamins, health",
+        "question": "Do your products contain any substances which are controlled substances (e.g., controlled cannabinoids) under local laws?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_041501"
+          },
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_041502"
+          }
+        ]
+      },
+      {
+        "name": "Chemical products",
+        "type": "CODE",
+        "value": "ICCV3_0416XX"
+      },
+      {
+        "name": "Lumber and wood products (except furniture)",
+        "type": "CODE",
+        "value": "ICCV3_0408XX"
+      },
+      {
+        "name": "Equipment rental and leasing",
+        "type": "CODE",
+        "value": "ICCV3_0403XX"
+      }
+    ]
+  },
+  {
+    "name": "Personal services",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Laundry and cleaning services",
+        "type": "CODE",
+        "value": "ICCV3_0704XX"
+      },
+      {
+        "name": "Automotive repair and maintanence",
+        "type": "CODE",
+        "value": "ICCV3_0700XX"
+      },
+      {
+        "name": "Beauty salons and barbers",
+        "type": "CODE",
+        "value": "ICCV3_0701XX"
+      },
+      {
+        "name": "Physical fitness facilities",
+        "type": "CODE",
+        "value": "ICCV3_0705XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0706XX"
+      },
+      {
+        "name": "Health and wellness counselling",
+        "type": "CODE",
+        "value": "ICCV3_0703XX"
+      },
+      {
+        "name": "Devices and electronics repair",
+        "type": "CODE",
+        "value": "ICCV3_0702XX"
+      }
+    ]
+  },
+  {
+    "name": "Financial services",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Security brokers and dealers",
+        "type": "CODE",
+        "value": "ICCV3_0306XX"
+      },
+      {
+        "name": "Loans or lending",
+        "type": "CODE",
+        "value": "ICCV3_0303XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0307XX"
+      },
+      {
+        "name": "Digital wallet",
+        "type": "CODE",
+        "value": "ICCV3_0300XX"
+      },
+      {
+        "name": "Money services or transmission",
+        "type": "CODE",
+        "value": "ICCV3_0304XX"
+      },
+      {
+        "name": "Mortgage",
+        "type": "CODE",
+        "value": "ICCV3_0305XX"
+      },
+      {
+        "name": "Insurance",
+        "type": "CODE",
+        "value": "ICCV3_0301XX"
+      },
+      {
+        "name": "Investment",
+        "question": "Does the core activity of this business entity involve investing money (including its own capital) into any class of assets?",
+        "type": "QUESTION",
+        "values": [
+          {
+            "answer": "Yes",
+            "type": "CODE",
+            "value": "ICCV3_0302XX"
+          },
+          {
+            "answer": "No",
+            "type": "CODE",
+            "value": "ICCV3_030201"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Medical services",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Mental health services",
+        "type": "CODE",
+        "value": "ICCV3_0502XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0505XX"
+      },
+      {
+        "name": "Clinics",
+        "type": "CODE",
+        "value": "ICCV3_0500XX"
+      },
+      {
+        "name": "Veterinary services",
+        "type": "CODE",
+        "value": "ICCV3_0504XX"
+      },
+      {
+        "name": "Nursing home and personal care facilities",
+        "type": "CODE",
+        "value": "ICCV3_0503XX"
+      },
+      {
+        "name": "Hospitals",
+        "type": "CODE",
+        "value": "ICCV3_0501XX"
+      }
+    ]
+  },
+  {
+    "name": "Others",
+    "type": "LIST",
+    "values": [
+      {
+        "name": "Adult content and services",
+        "type": "CODE",
+        "value": "ICCV3_0600XX"
+      },
+      {
+        "name": "Others",
+        "type": "CODE",
+        "value": "ICCV3_0601XX"
+      },
+      {
+        "name": "Weapons and munitions",
+        "type": "CODE",
+        "value": "ICCV3_0603XX"
+      }
+    ]
+  }
+]
