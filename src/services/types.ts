@@ -6,6 +6,16 @@ export type TransferStatus = 'NEW' | 'PENDING' | 'SETTLED' | 'SUSPENDED' | 'FAIL
 export type ChargeStatus = 'NEW' | 'PENDING' | 'SETTLED' | 'SUSPENDED' | 'FAILED';
 export type CardTransactionStatus = 'CLEARING' | 'SETTLED' | 'DECLINED';
 
+/**
+ * Why a card authorisation was declined.
+ * INSUFFICIENT_FUNDS is the one Bridge Capital responds to.
+ */
+export type CardDeclineReason =
+  | 'INSUFFICIENT_FUNDS'
+  | 'LIMIT_EXCEEDED'
+  | 'MERCHANT_CATEGORY_NOT_ALLOWED'
+  | 'CARD_INACTIVE';
+
 export interface TransferResponse {
   id: string;
   request_id: string;
@@ -44,6 +54,8 @@ export interface CardSimulationResponse {
   amount: number;
   currency: string;
   failure_reason?: string;
+  /** Typed reason, set when status is DECLINED. */
+  decline_reason?: CardDeclineReason;
   merchant_category_code?: string;
 }
 

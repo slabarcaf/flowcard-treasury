@@ -25,9 +25,14 @@ worktrees/
 *.sln
 *.sw?
 .vercel
+
 xcrun_db
 
 # Local environment files
 .env
 .env.*
 !.env.example
+
+# Design reference screenshots (Mobbin export) — large, not ours to redistribute
+Revolut Business web Dec 2025/
+Revolut Business web Dec 2025.zip

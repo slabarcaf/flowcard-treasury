@@ -46,6 +46,20 @@ Pushing to GitHub does **not** redeploy it. After merging changes:
 vercel deploy --prod
 ```
 
+## Onboarding entry
+
+The app opens on the existing FlowCard landing page. **Get started** runs the six-step
+onboarding flow (get started, account, company name, compliance, company information,
+welcome); **Go to Dashboard** opens the latest Bridge Capital back office. **Log in** also opens that dashboard
+through the existing demo login screen. The back-office sidebar opens **Customer portal**;
+**Exit** in the portal returns to the back office. Direct demo links are `#bridge-capital`
+and `#portal`; the older Kit 5 demo remains available at `#kit5`. These forms remain a frontend demo, without real
+authentication or account creation. Form values stay in memory and reset on refresh.
+
+The onboarding UI lives in `src/components/onboarding/`, its state in
+`src/hooks/useOnboarding.ts`, and the screen transitions in `src/App.tsx`.
+
+## The demo (Kit 5)
 ## Two versions: Kit 5 and GD original
 
 A toggle at the top right switches between two versions. The choice
