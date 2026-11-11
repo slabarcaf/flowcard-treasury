@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/apidocs"
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/config"
 	internalHttp "github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/http"
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/postgres"
@@ -76,6 +77,8 @@ func main() {
 		whHandler := webhooks.NewHandler(repo, nil)
 		server.WithWebhookHandler(whHandler, whAuth)
 	}
+
+	server.WithDocsHandler(apidocs.Handler())
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
 	if err != nil {

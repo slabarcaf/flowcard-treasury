@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/apidocs"
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/config"
 	internalHttp "github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/http"
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/postgres"
@@ -118,6 +119,9 @@ func buildHandlerWithAuth(ctx context.Context, cfg *config.Config, opAuth intern
 		whHandler := webhooks.NewHandler(repo, nil)
 		server.WithWebhookHandler(whHandler, whAuth)
 	}
+
+	// 5. Documentation handler: public offline Swagger UI documentation
+	server.WithDocsHandler(apidocs.Handler())
 
 	return server.Routes(), closeFn, nil
 }

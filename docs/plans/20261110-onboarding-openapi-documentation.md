@@ -113,22 +113,22 @@ plan separate from the onboarding implementation plan and its open gates.
 - Generate: `docs/api/openapi.json` and `docs/api/webhooks.json`
 - Generate: `services/company-onboarding/internal/apidocs/specs/*.json`
 
-- [ ] Implement stable operation IDs, reusable schemas, descriptions, tags,
+- [x] Implement stable operation IDs, reusable schemas, descriptions, tags,
       examples, parameters, content types and response metadata in Go.
-- [ ] Include all implemented operator routes: Companies, applications, verify,
+- [x] Include all implemented operator routes: Companies, applications, verify,
       blocked submit, document operations, submissions and Platform Account
       reads.
       Include health endpoints as operational documentation if in the inventory.
-- [ ] Document internal webhook aliases in the separate specification. Document
+- [x] Document internal webhook aliases in the separate specification. Document
       server-side JWT authentication and durable receipt, not platform signature
       verification that occurs at Node ingress.
-- [ ] Model multipart upload, binary download, cursors, revision parameters,
+- [x] Model multipart upload, binary download, cursors, revision parameters,
       validation error arrays and distinct domain error codes accurately.
-- [ ] Explicitly describe blocked submission, unverified platform rules and
+- [x] Explicitly describe blocked submission, unverified platform rules and
       unavailable runtime dependencies. Use fictional examples without secrets.
-- [ ] Generate all copies deterministically; implement a non-mutating check mode
+- [x] Generate all copies deterministically; implement a non-mutating check mode
       for stale/missing generated output and validate references/spec structure.
-- [ ] Test deterministic generation, valid references, separate security schemes
+- [x] Test deterministic generation, valid references, separate security schemes
       and representative request/response conformance.
 
 ### Task 3: Serve bundled read-only Swagger UI from Go
@@ -140,16 +140,16 @@ plan separate from the onboarding implementation plan and its open gates.
 - Create: `services/company-onboarding/internal/apidocs/assets/`
 - Modify: `services/company-onboarding/internal/http/handlers.go`
 
-- [ ] Bundle a pinned Swagger UI distribution with license notices and both spec
+- [x] Bundle a pinned Swagger UI distribution with license notices and both spec
       selectors. Disable all request execution and authorization persistence.
-- [ ] Register exact documentation routes outside API auth and repository gates.
+- [x] Register exact documentation routes outside API auth and repository gates.
       Redirect `/docs/api` to `/docs/api/` for relative asset loading if needed.
-- [ ] Serve specs and assets with correct content types, bounded responses and
+- [x] Serve specs and assets with correct content types, bounded responses and
       suitable cache/security headers. Do not use a directory listing or broad
       filesystem handler for repository `docs/`.
-- [ ] Ensure docs work with no database, no auth keys and no platform clients;
+- [x] Ensure docs work with no database, no auth keys and no platform clients;
       keep business endpoints deny-by-default.
-- [ ] Test documentation access without login, JSON content/reference validity,
+- [x] Test documentation access without login, JSON content/reference validity,
       read-only UI configuration, asset traversal denial and unchanged API auth.
 
 ### Task 4: Expose the same documentation through Node
@@ -160,17 +160,17 @@ plan separate from the onboarding implementation plan and its open gates.
 - Modify: `server/src/http/routes/onboarding-proxy.ts`
 - Create: `tests/server/onboarding-api-docs.test.ts`
 
-- [ ] Add an explicit unauthenticated allowlist for `/docs/api` and its approved
+- [x] Add an explicit unauthenticated allowlist for `/docs/api` and its approved
       specification/UI asset paths. Forward only read methods to Go.
-- [ ] Preserve route suffixes, redirects and relative asset/spec URLs at both
+- [x] Preserve route suffixes, redirects and relative asset/spec URLs at both
       service and gateway origins. Do not expose plans or arbitrary docs files.
-- [ ] Keep operational proxy authentication and header stripping unchanged;
+- [x] Keep operational proxy authentication and header stripping unchanged;
       documentation access must not permit API or webhook invocation.
-- [ ] Use constructor-injected upstream configuration as before. If
+- [x] Use constructor-injected upstream configuration as before. If
       unconfigured,
       return a clear unavailable response without inventing environment
       variables.
-- [ ] Test gateway/direct URL parity, no cookies required, path encoding and
+- [x] Test gateway/direct URL parity, no cookies required, path encoding and
       traversal rejection, unavailable upstream, and protected-route separation.
 
 ### Task 5: Add drift prevention and offline acceptance checks
@@ -181,20 +181,20 @@ plan separate from the onboarding implementation plan and its open gates.
 - Create: `tests/server/onboarding-api-docs-e2e.test.ts`
 - Modify: existing CI configuration, only if one exists and is applicable
 
-- [ ] Compare registered route methods/paths with operation inventory. Prefer
+- [x] Compare registered route methods/paths with operation inventory. Prefer
       shared registration metadata or an independent route inventory check so
       adding a handler without documentation fails verification.
-- [ ] Validate actual example responses/errors against generated schemas using
+- [x] Validate actual example responses/errors against generated schemas using
       fixture handlers; cover multipart upload metadata and binary responses.
-- [ ] Check generated files are current using the documented check command.
+- [x] Check generated files are current using the documented check command.
       Ensure deliberate metadata edits require deterministic regeneration.
-- [ ] Run actual Node-to-Go documentation acceptance with business defaults
+- [x] Run actual Node-to-Go documentation acceptance with business defaults
       still
       denied; reuse the existing isolated test harness and database guards.
-- [ ] Verify UI rendering and selector behavior with network requests restricted
+- [x] Verify UI rendering and selector behavior with network requests restricted
       to the local service. Confirm no external assets or Try-it-out controls.
       Use a properly authorized Agterm/browser review workflow if required.
-- [ ] Run relevant Go tests/race/vet and affected Node tests/server build.
+- [x] Run relevant Go tests/race/vet and affected Node tests/server build.
       Record
       the existing 23 Node baseline failures separately from any new regression.
 
@@ -206,15 +206,15 @@ plan separate from the onboarding implementation plan and its open gates.
 - Create: `docs/api/README.md`
 - Modify: this plan's progress checkboxes during authorized implementation
 
-- [ ] Document how to start the service and review `/docs/api` directly or
+- [x] Document how to start the service and review `/docs/api` directly or
       through
       the configured Node gateway. State when gateway configuration is absent.
-- [ ] Document generation/check commands, generated artifact locations,
+- [x] Document generation/check commands, generated artifact locations,
       dependency
       versions, operation metadata ownership and adding a new route/schema.
-- [ ] Explain read-only documentation, the two audience-specific specs and the
+- [x] Explain read-only documentation, the two audience-specific specs and the
       unchanged runtime authentication/platform/storage limitations.
-- [ ] Verify links and Markdown source formatting; rerun spec freshness/coverage
+- [x] Verify links and Markdown source formatting; rerun spec freshness/coverage
       checks and summarize implementation limitations accurately.
 
 ## Acceptance criteria
