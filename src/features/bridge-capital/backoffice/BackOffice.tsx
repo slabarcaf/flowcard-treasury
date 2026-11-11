@@ -17,10 +17,15 @@ import { BridgeDetailScreen } from './screens/BridgeDetailScreen.js';
 import { CustomersScreen } from './screens/CustomersScreen.js';
 import { RulesScreen } from './screens/RulesScreen.js';
 import { AdminScreen } from './screens/AdminScreen.js';
+import { CustomerDetailScreen } from './screens/CustomerDetailScreen.js';
+import { CollectionsScreen } from './screens/CollectionsScreen.js';
+import { AlertsScreen } from './screens/AlertsScreen.js';
 
 const NAV: Array<{ label: string; view: View }> = [
   { label: 'Overview', view: { screen: 'overview' } },
   { label: 'Customers', view: { screen: 'customers' } },
+  { label: 'Collections', view: { screen: 'collections' } },
+  { label: 'Early warnings', view: { screen: 'alerts' } },
   { label: 'Rules', view: { screen: 'rules' } },
   { label: 'Admin', view: { screen: 'admin' } },
 ];
@@ -32,6 +37,22 @@ const SCREEN_TITLE: Record<View['screen'], string> = {
   admin: 'Admin — demo controls',
   request: 'Request',
   bridge: 'Bridge',
+  customer: 'Customer 360',
+  collections: 'Collections',
+  alerts: 'Early warnings',
+};
+
+/** Which sidebar item a view sits under. */
+const NAV_FOR: Record<View['screen'], View['screen']> = {
+  overview: 'overview',
+  customers: 'customers',
+  rules: 'rules',
+  admin: 'admin',
+  request: 'overview',
+  bridge: 'customers',
+  customer: 'customers',
+  collections: 'collections',
+  alerts: 'alerts',
 };
 
 export function BackOffice({
@@ -77,7 +98,7 @@ export function BackOffice({
 
         <nav style={{ padding: `0 ${space.md}`, display: 'grid', gap: '2px', alignContent: 'start', flex: 1 }}>
           {NAV.map((item) => {
-            const active = item.view.screen === view.screen;
+            const active = item.view.screen === NAV_FOR[view.screen];
             return (
               <button
                 key={item.label}
@@ -158,6 +179,11 @@ export function BackOffice({
             <RequestDetailScreen office={office} requestId={view.requestId} />
           )}
           {view.screen === 'bridge' && <BridgeDetailScreen office={office} bridgeId={view.bridgeId} />}
+          {view.screen === 'customer' && <CustomerDetailScreen office={office} customerId={view.customerId} />}
+          {view.screen === 'collections' && (
+            <CollectionsScreen key={view.customerId ?? 'all'} office={office} customerId={view.customerId} />
+          )}
+          {view.screen === 'alerts' && <AlertsScreen office={office} />}
         </main>
       </div>
     </GlowBackground>

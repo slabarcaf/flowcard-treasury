@@ -52,14 +52,11 @@ export function CustomersScreen({ office }: { office: BackOffice }) {
           {data.customers.map((customer) => {
             const tier = computeTier(customer);
             const bridges = bridgesFor(customer.id);
-            const open = bridges.find((b) => b.status !== 'REPAID');
             const stage = worstStage(bridges, today);
             return (
               <ClickableTr
                 key={customer.id}
-                onClick={
-                  open === undefined ? undefined : () => go({ screen: 'bridge', bridgeId: open.id })
-                }
+                onClick={() => go({ screen: 'customer', customerId: customer.id })}
               >
                 <Td>
                   <div style={{ display: 'grid' }}>

@@ -33,7 +33,8 @@ export function BridgeDetailScreen({ office, bridgeId }: { office: BackOffice; b
           items={[
             { label: 'Overview', onClick: () => go({ screen: 'overview' }) },
             { label: 'Customers', onClick: () => go({ screen: 'customers' }) },
-            { label: customer.name },
+            { label: customer.name, onClick: () => go({ screen: 'customer', customerId: customer.id }) },
+            { label: bridge.id },
           ]}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: space.lg, flexWrap: 'wrap' }}>

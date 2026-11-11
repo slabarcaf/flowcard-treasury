@@ -18,6 +18,10 @@ import {
   Th,
 } from '../components/primitives.js';
 import { CapitalGauge } from '../components/CapitalGauge.js';
+import { portfolio } from '../../policy/portfolio.js';
+import { HBars } from '../../ui/charts.js';
+import { Button } from '../components/primitives.js';
+import { customersWithWarnings } from '../warnings.js';
 
 /** Stage of every bridge on the books, open ones run through the ladder. */
 function stageCounts(bridges: Bridge[], today: string): Array<{ stage: string; count: number }> {
@@ -33,13 +37,16 @@ function stageCounts(bridges: Bridge[], today: string): Array<{ stage: string; c
 }
 
 export function OverviewScreen({ office }: { office: BackOffice }) {
-  const { data, today, go, outcomes } = office;
+  const { data, today, go, outcomes, liveCustomers } = office;
   if (data === null) return <Empty>Loading…</Empty>;
 
   const { capital, customers, requests, bridges } = data;
   const ranked = rankRequests(requests, customers, capital);
   const feesEarned = bridges.reduce((sum, b) => sum + (b.fee - b.fee_outstanding), 0);
   const stages = stageCounts(bridges, today);
+  const book = portfolio(liveCustomers, bridges, today);
+  const warned = customersWithWarnings(office);
+  const bucketColor = [color.positive, color.warning, color.critical, color.critical, color.critical];
 
   return (
     <div style={{ display: 'grid', gap: space.xl }}>
@@ -74,6 +81,53 @@ export function OverviewScreen({ office }: { office: BackOffice }) {
           </div>
         </Card>
       </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: space.xl }}>
+        <Card>
+          <CardHeader title="Outstanding by tier" />
+          <HBars items={book.outstanding_by_tier.map((t) => ({ label: t.tier === 'NONE' ? 'No tier' : `Tier ${t.tier}`, value: t.amount }))} />
+        </Card>
+        <Card>
+          <CardHeader title="Days past due" meta="open bridges" />
+          <HBars
+            items={book.dpd_buckets.map((b, i) => ({ label: b.label, meta: String(b.count), value: b.amount, color: bucketColor[i] }))}
+          />
+        </Card>
+        <Card>
+          <CardHeader title="Book quality" meta="all bridges on record" />
+          <div style={{ display: 'grid', gap: space.xl }}>
+            <Stat label="Loss rate" value={`${(book.loss_rate * 100).toFixed(1)}%`} sub={`${usd(book.defaulted)} defaulted of ${usd(book.originated)} lent`} />
+            <Stat label="Repaid on time" value={`${Math.round(book.on_time_rate * 100)}%`} sub="of closed bridges" />
+            <Stat label="Fees earned" value={usd(book.fees_earned)} sub="closed bridges plus collected on open ones" tone="positive" />
+          </div>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader title="Early warnings" meta={<Button onClick={() => go({ screen: 'alerts' })}>See all</Button>} />
+        {warned.length === 0 ? (
+          <span style={{ fontSize: font.size.md, color: color.textMuted }}>No signals today.</span>
+        ) : (
+          <div style={{ display: 'grid', gap: space.md }}>
+            {warned.map(({ customer, warnings }) => (
+              <button
+                key={customer.id}
+                type="button"
+                onClick={() => go({ screen: 'customer', customerId: customer.id })}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space.lg, background: color.surfaceSubtle, border: 'none', borderRadius: '12px', padding: `${space.lg} ${space.xl}`, color: color.text, fontFamily: font.sans, textAlign: 'left', cursor: 'pointer' }}
+              >
+                <span style={{ display: 'grid', gap: '2px' }}>
+                  <span style={{ fontWeight: font.weight.medium }}>{customer.name}</span>
+                  <span style={{ fontSize: font.size.sm, color: color.textSecondary }}>
+                    {warnings[0].text}{warnings.length > 1 ? ` · +${warnings.length - 1} more` : ''}
+                  </span>
+                </span>
+                <Badge tone={warnings.some((w) => w.severity === 'HIGH') ? 'critical' : 'warning'}>{warnings.length} signals</Badge>
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <Card padded={false}>
         <div style={{ padding: `${space['2xl']} ${space['2xl']} 0` }}>

@@ -19,6 +19,7 @@ import {
   TIERS,
   TIER_LIMIT_PCT,
   WHILE_BRIDGED,
+  V1_1_PLACEHOLDERS,
 } from '../../policy/policy.config.js';
 import { CRITICALITY_TONE, TIER_TONE, color, font, radius, space } from '../tokens.js';
 import { usd, pct, titleCase } from '../../ui/format.js';
@@ -203,6 +204,13 @@ export function RulesScreen({ office }: { office: BackOffice }) {
           Everything on this page is read straight out of the engine's configuration. Change a
           threshold there and this page changes with it — there is no second copy of the rules.
         </div>
+      </Card>
+
+      <Card>
+        <CardHeader title="v1.1 proposals" meta={<Source>§8 · placeholder, pending approval</Source>} />
+        {V1_1_PLACEHOLDERS.map((p) => (
+          <Row key={p.label} label={`${p.label} (${p.source})`} value={p.value} />
+        ))}
       </Card>
 
       <Card padded={false}>
