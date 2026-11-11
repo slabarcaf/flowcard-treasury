@@ -8,20 +8,28 @@ import { mockAirwallexClient } from '../../../services/mock/AirwallexClient.js';
 import type {
   Acceptance,
   Approval,
+  Bill,
   Bridge,
   BridgeOffer,
   BridgeRequest,
   CardTransaction,
   ChargeResponse,
+  CollectionAction,
   Customer,
   Decision,
   Deposit,
+  IssuedCard,
+  MonthlyCashFlow,
   PlatformCapital,
+  Receipt,
   TimelineEvent,
   TransferResponse,
 } from '../types.js';
 import type { DataAdapter } from './adapter.js';
 import { generateCustomers } from './generator.js';
+import { monthlyCashFlow } from './cashflow.js';
+import { DEMO_BILLS, DEMO_CARDS } from './extras.js';
+import { round2 } from '../policy/util.js';
 import {
   AS_OF,
   DEMO_BLUEPRINTS,
@@ -41,6 +49,8 @@ export interface MockAdapterSeed {
   requests?: BridgeRequest[];
   bridges?: Bridge[];
   timeline?: TimelineEvent[];
+  bills?: Bill[];
+  cards?: IssuedCard[];
 }
 
 /** The demo data set, built from the blueprints. */
@@ -53,6 +63,8 @@ export function demoSeed(): Required<MockAdapterSeed> {
     requests: DEMO_REQUESTS.map((r) => ({ ...r })),
     bridges: DEMO_BRIDGES.map((b) => ({ ...b })),
     timeline: DEMO_TIMELINE.map((e) => ({ ...e })),
+    bills: DEMO_BILLS.map((b) => ({ ...b })),
+    cards: DEMO_CARDS.map((c) => ({ ...c, blocked_categories: [...c.blocked_categories] })),
   };
 }
 
@@ -68,6 +80,12 @@ export class MockAdapter implements DataAdapter {
   private approvals = new Map<string, Approval>();
   private bridges = new Map<string, Bridge>();
   private timeline: TimelineEvent[] = [];
+  private bills: Bill[];
+  private cards: IssuedCard[];
+  private receipts: Receipt[] = [];
+  private collectionActions: CollectionAction[] = [];
+  /** Money moved in or out of each wallet since the last end-of-day balance. */
+  private walletMoves = new Map<string, number>();
 
   constructor(seed: MockAdapterSeed = {}) {
     const base = demoSeed();
@@ -78,6 +96,12 @@ export class MockAdapter implements DataAdapter {
     this.requests = seed.requests ?? base.requests;
     for (const b of seed.bridges ?? base.bridges) this.bridges.set(b.id, b);
     this.timeline = [...(seed.timeline ?? base.timeline)];
+    this.bills = seed.bills ?? base.bills;
+    this.cards = seed.cards ?? base.cards;
+  }
+
+  private moveWallet(customerId: string, amount: number): void {
+    this.walletMoves.set(customerId, round2((this.walletMoves.get(customerId) ?? 0) + amount));
   }
 
   async listCustomers(): Promise<Customer[]> {
@@ -184,6 +208,7 @@ export class MockAdapter implements DataAdapter {
       ...this.capital,
       outstanding: this.capital.outstanding + bridge.principal,
     };
+    this.moveWallet(bridge.customer_id, bridge.principal);
     return transfer;
   }
 
@@ -208,5 +233,79 @@ export class MockAdapter implements DataAdapter {
     return customerId === undefined
       ? this.timeline
       : this.timeline.filter((e) => e.customer_id === customerId);
+  }
+
+  async saveRequest(request: BridgeRequest): Promise<BridgeRequest> {
+    this.requests = [...this.requests.filter((r) => r.id !== request.id), request];
+    return request;
+  }
+
+  async getWalletBalance(customerId: string): Promise<number> {
+    const customer = this.customers.find((c) => c.id === customerId);
+    const lastClose = customer?.balance_history.at(-1)?.balance ?? 0;
+    return round2(lastClose + (this.walletMoves.get(customerId) ?? 0));
+  }
+
+  async chargeWallet(customerId: string, amount: number, reference: string): Promise<ChargeResponse> {
+    const charge = await mockAirwallexClient.createCharge({
+      source: customerId,
+      amount,
+      currency: 'USD',
+      reason: 'FlowCard wallet payment',
+      reference,
+      requestId: crypto.randomUUID(),
+    });
+    this.moveWallet(customerId, -amount);
+    return charge;
+  }
+
+  async getCashFlow(customerId: string, months = 12): Promise<MonthlyCashFlow[]> {
+    const customer = this.customers.find((c) => c.id === customerId);
+    const asOf = customer?.balance_history.at(-1)?.date ?? new Date().toISOString().slice(0, 10);
+    return monthlyCashFlow(customerId, this.deposits, this.transactions, asOf, months);
+  }
+
+  async listBills(customerId?: string): Promise<Bill[]> {
+    return customerId === undefined ? this.bills : this.bills.filter((b) => b.customer_id === customerId);
+  }
+
+  async saveBill(bill: Bill): Promise<Bill> {
+    this.bills = this.bills.map((b) => (b.id === bill.id ? bill : b));
+    return bill;
+  }
+
+  async listCards(customerId?: string): Promise<IssuedCard[]> {
+    return customerId === undefined ? this.cards : this.cards.filter((c) => c.customer_id === customerId);
+  }
+
+  async saveCard(card: IssuedCard): Promise<IssuedCard> {
+    const exists = this.cards.some((c) => c.id === card.id);
+    this.cards = exists ? this.cards.map((c) => (c.id === card.id ? card : c)) : [...this.cards, card];
+    return card;
+  }
+
+  async removeCard(cardId: string): Promise<void> {
+    this.cards = this.cards.filter((c) => c.id !== cardId);
+  }
+
+  async listReceipts(): Promise<Receipt[]> {
+    return this.receipts;
+  }
+
+  async attachReceipt(receipt: Receipt): Promise<Receipt> {
+    this.receipts = [...this.receipts.filter((r) => r.transaction_id !== receipt.transaction_id), receipt];
+    return receipt;
+  }
+
+  async listCollectionActions(customerId?: string): Promise<CollectionAction[]> {
+    return customerId === undefined
+      ? this.collectionActions
+      : this.collectionActions.filter((a) => a.customer_id === customerId);
+  }
+
+  async saveCollectionAction(action: Omit<CollectionAction, 'id'>): Promise<CollectionAction> {
+    const stored: CollectionAction = { ...action, id: `col_${this.collectionActions.length + 1}` };
+    this.collectionActions.push(stored);
+    return stored;
   }
 }

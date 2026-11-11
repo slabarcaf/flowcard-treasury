@@ -29,3 +29,14 @@ export type { DelinquencyAction, DelinquencyResult } from './delinquency.js';
 export { collect } from './collection.js';
 export type { CollectionResult } from './collection.js';
 export { isAcceptanceValid, isApprovalValid, bindingMismatches } from './binding.js';
+// Spec §8 proposals (PLACEHOLDER thresholds)
+export { forecastBalance, expectedArrival, averageDailySpend, backingReceivable } from './forecast.js';
+export type { Forecast, ForecastPoint, ExpectedArrival } from './forecast.js';
+export { preApproved } from './preApproved.js';
+export type { PreApproval, PreApprovalBlock } from './preApproved.js';
+export { earlyWarnings } from './earlyWarning.js';
+export type { EarlyWarning, WarningId } from './earlyWarning.js';
+export { cardAccess } from './cardAccess.js';
+export type { CardAccess, CardAccessState } from './cardAccess.js';
+export { portfolio } from './portfolio.js';
+export type { Portfolio, DpdBucket } from './portfolio.js';

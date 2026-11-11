@@ -68,3 +68,27 @@ Ranking when capital is scarce: tier, then spend criticality, then receivable qu
 
 ## 7. Approvals
 Human approvals are bound to customer, amount, fee and term. Any change invalidates the approval.
+
+## 8. v1.1 proposals (PLACEHOLDER, pending approval)
+Taken from the clickable prototype. Built behind the DataAdapter on demo data; every number lives in `policy.config.ts` and shows as a placeholder on the Rules screen.
+
+### 8.1 Cash forecast (customer portal)
+- Horizon 60 days. Start from today's wallet balance.
+- Each expected receivable lands on due_date + the payer's average days late.
+- Spend is the average daily settled card spend over the last 90 days.
+- Low line = 10% of avg_balance_90d (the §2 near-zero definition). The first day below it is shown, with an option to plan a bridge.
+
+### 8.2 Early warnings (back office only)
+- 30-day average balance more than 25% below the 180-day average.
+- More than 5 days near zero in the last 90 (the tier A cap).
+- A payer with an expected receivable pays on time less than 70% of the time.
+- The forecast crosses the low line within 30 days.
+- The largest payer is more than 60% of inflows.
+
+### 8.3 Planned bridges and Flex on bills
+- A customer can plan a bridge from the forecast, or pay a supplier bill with Flex over 30, 60 or 90 days.
+- Both are bridge requests with a stated purpose; the bill's (or chosen) merchant category sets criticality, and all §4 rules, §5 pricing and acceptance binding, §6 regimes and §7 approvals apply unchanged.
+- "You can bridge up to $X" = tier limit − outstanding, capped by capital above the floor; 0 with no history, a past-due bridge, or at the floor.
+
+### 8.4 Customer-facing late bridge
+- The portal shows only status, amount due, a Repay action and one sentence on the current card restriction. The ladder, collections log and internal actions stay in the back office.

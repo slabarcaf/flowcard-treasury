@@ -190,11 +190,23 @@ export type BridgeStatus =
   | 'WITHDRAWN'
   | 'DECLINED';
 
-/** A request for a bridge, raised by a declined card transaction. */
+/**
+ * What raised a bridge request. CARD_DECLINE is spec v1; PLANNED (from the
+ * cash forecast) and BILL (Flex on a supplier bill) are §8 proposals. All three
+ * run the same eligibility rules, so PLANNED and BILL carry a synthetic
+ * transaction whose merchant category sets criticality.
+ */
+export type BridgePurpose = 'CARD_DECLINE' | 'PLANNED' | 'BILL';
+
+/** A request for a bridge, raised by a declined card transaction (or a §8 trigger). */
 export interface BridgeRequest {
   id: string;
   customer_id: string;
   transaction: CardTransaction;
+  /** Absent on spec v1 requests, which are all card declines. */
+  purpose?: BridgePurpose;
+  /** Set when purpose is BILL. */
+  bill_id?: string;
   /** Shortfall being asked for. */
   principal: number;
   term_days: number;
@@ -311,4 +323,72 @@ export interface TimelineEvent {
   bridge_id?: string;
   type: TimelineEventType;
   text: string;
+}
+
+// ---------------------------------------------------------------------------
+// Customer-portal features (spec §8 proposals; demo data behind the adapter)
+// ---------------------------------------------------------------------------
+
+/** One month of money in and out of the wallet. */
+export interface MonthlyCashFlow {
+  /** YYYY-MM. */
+  month: string;
+  inflow: number;
+  outflow: number;
+  net: number;
+}
+
+export type BillStatus = 'OPEN' | 'PAID' | 'FLEXED';
+
+/** A supplier bill the customer can pay now or Flex (spec §8.3). */
+export interface Bill {
+  id: string;
+  customer_id: string;
+  vendor: string;
+  /** Merchant category, mapped to criticality like a card payment. */
+  merchant_category: string;
+  amount: number;
+  due_date: string;
+  status: BillStatus;
+  paid_at: string | null;
+  /** The Flex bridge that paid it. */
+  bridge_id: string | null;
+}
+
+export type CardKind = 'PHYSICAL' | 'VIRTUAL';
+
+/** An issued card and the controls the customer set on it. */
+export interface IssuedCard {
+  id: string;
+  customer_id: string;
+  kind: CardKind;
+  /** Person for a team card, vendor for a virtual card. */
+  holder: string;
+  role: string;
+  last4: string;
+  monthly_cap: number;
+  spent_this_month: number;
+  /** Merchant categories this card refuses. */
+  blocked_categories: string[];
+  frozen: boolean;
+}
+
+export interface Receipt {
+  transaction_id: string;
+  file_name: string;
+  attached_at: string;
+}
+
+export type CollectionActionType = 'REMIND' | 'RESTRICT_CARDS' | 'FREEZE_CARDS' | 'ESCALATE' | 'PROMISE_TO_PAY';
+
+/** Something ops did about a past-due bridge. */
+export interface CollectionAction {
+  id: string;
+  customer_id: string;
+  bridge_id: string;
+  type: CollectionActionType;
+  at: string;
+  by: string;
+  /** Set for PROMISE_TO_PAY. */
+  promised_date?: string;
 }

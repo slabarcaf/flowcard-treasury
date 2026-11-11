@@ -285,3 +285,54 @@ const RULE_LABELS: Record<string, string> = Object.fromEntries(
 export function ruleLabel(ruleId: string): string {
   return RULE_LABELS[ruleId] ?? ruleId;
 }
+
+// ---------------------------------------------------------------------------
+// v1.1 PROPOSALS — PLACEHOLDER (docs/bridge-capital-spec.md §8)
+//
+// Not in spec v1. These numbers came from the clickable prototype and are
+// shown as placeholders on the Rules screen until they are approved.
+// ---------------------------------------------------------------------------
+
+/** §8.1 Cash forecast. The low line reuses §2's near-zero definition. */
+export const FORECAST = {
+  horizonDays: 60,
+  lowLinePctOfAvgBalance90d: 0.10,
+  /** Days of settled card spend averaged into the daily burn. */
+  spendLookbackDays: 90,
+} as const;
+
+/** §8.2 Early-warning triggers, read by ops only. */
+export const EARLY_WARNING = {
+  /** 30-day average balance this far below the 180-day average. */
+  trendDropPct: 0.25,
+  /** More days near zero than tier A allows. */
+  maxDaysNearZero90d: TIERS.A.maxDaysNearZero90d,
+  /** A payer with an expected receivable pays on time less often than this. */
+  slowPayerOnTimeBelow: 0.70,
+  /** The forecast crosses the low line within this many days. */
+  forecastWithinDays: 30,
+  /** Largest payer's share of inflows above this. */
+  topPayerShareAbove: 0.60,
+} as const;
+
+/**
+ * §8.3 Flex on bills: a bridge whose trigger is a supplier bill. Same fee
+ * formula, same eligibility rules, same limit as a card bridge.
+ */
+export const FLEX = {
+  termDays: [30, 60, 90],
+} as const;
+
+/** Every v1.1 placeholder, for the Rules screen. */
+export const V1_1_PLACEHOLDERS: Array<{ label: string; value: string; source: string }> = [
+  { label: 'Forecast horizon', value: `${FORECAST.horizonDays} days`, source: '§8.1' },
+  { label: 'Forecast low line', value: `${FORECAST.lowLinePctOfAvgBalance90d * 100}% of avg_balance_90d`, source: '§8.1' },
+  { label: 'Daily spend averaged over', value: `${FORECAST.spendLookbackDays} days`, source: '§8.1' },
+  { label: 'Early warning: balance trend', value: `30d avg ${EARLY_WARNING.trendDropPct * 100}% below 180d avg`, source: '§8.2' },
+  { label: 'Early warning: days near zero', value: `more than ${EARLY_WARNING.maxDaysNearZero90d} in 90`, source: '§8.2' },
+  { label: 'Early warning: slow payer', value: `on-time rate below ${EARLY_WARNING.slowPayerOnTimeBelow * 100}%`, source: '§8.2' },
+  { label: 'Early warning: forecast', value: `below low line within ${EARLY_WARNING.forecastWithinDays} days`, source: '§8.2' },
+  { label: 'Early warning: concentration', value: `top payer above ${EARLY_WARNING.topPayerShareAbove * 100}% of inflows`, source: '§8.2' },
+  { label: 'Flex terms', value: FLEX.termDays.map((d) => `${d}d`).join(', '), source: '§8.3' },
+  { label: 'Flex pricing and limit', value: 'Same as a bridge (§5 fee, §3 limit)', source: '§8.3' },
+];
