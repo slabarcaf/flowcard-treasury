@@ -13,7 +13,7 @@ customer sees **Pending review** → treasury staff can read the saved applicati
 This works against a locally running copy of your unchanged Node gateway, Go
 onboarding service and PostgreSQL. It has **not** been validated against a deployed
 backend or through a successful Airwallex submission. No backend source or schema
-was changed. Delivery branch: `feature/onboarding-api-fields` in `yidi-li-ydl/flowcard-treasury`.
+was changed. Delivery branch: `feature/onboarding-api-fields` in `slabarcaf/flowcard-treasury`.
 This delivery does not merge into team `develop` or `main`.
 
 The target flow agreed with Yidi is:
