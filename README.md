@@ -603,6 +603,55 @@ When live Airwallex API credentials or S3 bucket configurations are absent, the 
 - **Manual Hold**: Ambiguous submissions are placed on manual operator hold. The worker will never blindly re-dispatch an ambiguous create or update call.
 - **Document Cleanup**: Quarantined and unreferenced temporary uploads are periodically pruned via storage lifecycle cleanup scripts.
 
+### OpenAPI 3.1 Documentation & Swagger UI
+
+The onboarding subsystem provides built-in, offline OpenAPI 3.1.0 specifications and a bundled read-only Swagger UI under `/docs/api`.
+
+#### Documentation Endpoints & Access URLs
+
+- **Direct Go Service** (`PORT=8080`):
+  - Interactive Swagger UI: `http://localhost:8080/docs/api` (redirects 301 to `http://localhost:8080/docs/api/`)
+  - Operator API Specification: `http://localhost:8080/docs/api/openapi.json`
+  - Internal Webhook API Specification: `http://localhost:8080/docs/api/webhooks.json`
+- **Node.js Gateway Proxy** (`PORT=3000`):
+  - Interactive Swagger UI: `http://localhost:3000/docs/api` (redirects 301 to `http://localhost:3000/docs/api/`)
+  - Operator API Specification: `http://localhost:3000/docs/api/openapi.json`
+  - Internal Webhook API Specification: `http://localhost:3000/docs/api/webhooks.json`
+
+> [!NOTE]
+> **Gateway Upstream Availability**: When accessed through the Node.js gateway, the documentation proxy requires `onboardingServiceUrl` in the server configuration. If unconfigured, the gateway responds `503 Service Unavailable` with `{"error": "onboarding_service_unconfigured"}`. No new environment variables are invented; configuration is injected via the existing server constructor.
+
+#### Security & Offline Properties
+
+- **Public & Zero-Database**: Documentation endpoints require no database connection, no operator login cookies, and no API credentials.
+- **Business Endpoints Deny-by-Default**: Business endpoints (`/api/companies`, etc.) remain strictly authenticated. Unauthenticated calls return `401 Unauthorized` (`operator_auth_required`).
+- **Credential Stripping**: The Node gateway strips incoming client `Cookie` and `Authorization` headers before proxying doc requests upstream; no service JWT assertion is emitted.
+- **Offline & Read-Only**: Bundled Swagger UI (`swagger-ui-dist@5.34.1`) uses embedded assets with zero external CDN scripts, fonts, or telemetry. Try-it-out is completely disabled (`supportedSubmitMethods: []`), auth persistence is disabled (`persistAuthorization: false`), and query-injected remote configs are ignored. Mutating methods return `405 Method Not Allowed`.
+
+#### Safe Local Review Without Credentials or Database
+
+```bash
+# Start the Go service directly (public docs active, business endpoints deny-by-default)
+cd services/company-onboarding
+PORT=8080 go run ./cmd/api -port 8080
+```
+
+Open `http://localhost:8080/docs/api/` in your browser to inspect both Operator and Webhook API specifications.
+
+#### Specification Generation & Drift Check Commands
+
+Specifications are generated from Go DTOs and operations metadata, mirrored identically to `docs/api/` and `services/company-onboarding/internal/apidocs/specs/`:
+
+```bash
+# Check specification freshness without modifying disk (CI verification):
+go -C services/company-onboarding run ./cmd/openapi -check
+
+# Regenerate specifications deterministically:
+go -C services/company-onboarding run ./cmd/openapi
+```
+
+See [`docs/api/README.md`](/docs/api/README.md) for full architecture details, contract nuances, and schema customization rules.
+
 ### Platform Live Acceptance Conditions
 
 Before enabling live Airwallex connected-account onboarding:

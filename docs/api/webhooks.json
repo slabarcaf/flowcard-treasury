@@ -1,0 +1,354 @@
+{
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "param": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "InboundWebhookPayload": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "data": {},
+          "environment": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "UnauthenticatedResponse": {
+        "description": "Internal webhook service JWT assertion failure response (HTTP 401)",
+        "properties": {
+          "code": {
+            "example": "UNAUTHENTICATED",
+            "type": "string"
+          },
+          "error": {
+            "example": "unauthorized",
+            "type": "string"
+          },
+          "message": {
+            "example": "invalid or missing authentication token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "WebhookAcknowledgeResponse": {
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "received": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "received"
+        ],
+        "type": "object"
+      },
+      "WebhookErrorResponse": {
+        "properties": {
+          "error": {
+            "example": "invalid json payload",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "WebhookServiceJWT": {
+        "bearerFormat": "JWT",
+        "description": "Internal service-to-service JWT assertion for webhook forwarding (Issuer: flowcard-node-proxy, Audience: flowcard-onboarding-webhooks, Subject: node-webhook-forwarder).",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Internal receiver endpoint for platform webhook events forwarded by the Node gateway proxy. Requires service-to-service JWT assertion with audience flowcard-onboarding-webhooks. Events are durably persisted to inbox before acknowledgement.",
+    "title": "FlowCard Onboarding Webhook Receiver API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/webhooks/airwallex": {
+      "post": {
+        "description": "Path alias for /api/webhooks/airwallex with identical authentication, durability, and error semantics.",
+        "operationId": "ingestAirwallexWebhookV1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboundWebhookPayload"
+              }
+            }
+          },
+          "description": "Inbound webhook event delivery payload",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAcknowledgeResponse"
+                }
+              }
+            },
+            "description": "Durable acknowledgement receipt"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Missing event ID, name, or invalid JSON"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid webhook forwarder JWT assertion"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Method not allowed (only POST accepted)",
+            "headers": {
+              "Allow": {
+                "description": "POST",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Webhook payload exceeds 1 MiB limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Failed to durably commit webhook to inbox"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "WebhookServiceJWT": []
+          }
+        ],
+        "summary": "Ingest Airwallex webhook (v1 alias)",
+        "tags": [
+          "Webhooks"
+        ]
+      }
+    },
+    "/api/webhooks/airwallex": {
+      "post": {
+        "description": "Internal receiver endpoint for Airwallex webhook events forwarded by the Node gateway proxy. Requires service-to-service JWT assertion with audience flowcard-onboarding-webhooks. Events are durably persisted to PostgreSQL before acknowledging with HTTP 200. Max body size 1 MiB. Errors return map[string]string{\"error\": \"...\"}.",
+        "operationId": "ingestAirwallexWebhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboundWebhookPayload"
+              }
+            }
+          },
+          "description": "Inbound webhook event delivery payload",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAcknowledgeResponse"
+                }
+              }
+            },
+            "description": "Durable acknowledgement receipt"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Missing event ID, name, or invalid JSON"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid webhook forwarder JWT assertion"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Method not allowed (only POST accepted)",
+            "headers": {
+              "Allow": {
+                "description": "POST",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Webhook payload exceeds 1 MiB limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Failed to durably commit webhook to inbox"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "WebhookServiceJWT": []
+          }
+        ],
+        "summary": "Ingest Airwallex platform webhook",
+        "tags": [
+          "Webhooks"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Current environment (relative gateway or direct service)",
+      "url": "/"
+    }
+  ]
+}

@@ -24,8 +24,15 @@ type Server struct {
 	authenticator  Authenticator
 	webhookAuth    Authenticator
 	webhookHandler http.Handler
+	docsHandler    http.Handler
 	platformGate   validation.PlatformContractValidator
 	storage        storage.ObjectStore
+}
+
+// WithDocsHandler configures an explicit documentation handler for /docs/api.
+func (s *Server) WithDocsHandler(handler http.Handler) *Server {
+	s.docsHandler = handler
+	return s
 }
 
 // WithWebhookHandler configures a dedicated webhook handler and distinct webhook authenticator.
@@ -65,6 +72,12 @@ func (s *Server) Routes() http.Handler {
 	// 1. Public operational health endpoints
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /livez", s.handleHealth)
+
+	// Public read-only Swagger UI documentation (outside auth and repository persistence gates)
+	if s.docsHandler != nil {
+		mux.Handle("/docs/api", s.docsHandler)
+		mux.Handle("/docs/api/", s.docsHandler)
+	}
 
 	// 2. Private/auth-gated internal API endpoints
 	apiMux := http.NewServeMux()

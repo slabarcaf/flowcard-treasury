@@ -17,7 +17,11 @@ import {
   type RemoteAuthorizationNonceClaimer,
   type RemoteAuthorizationResolver,
 } from "./routes/remote-authorization.js";
-import { handleOnboardingProxy } from "./routes/onboarding-proxy.js";
+import {
+  handleOnboardingProxy,
+  handleOnboardingDocsProxy,
+  isOnboardingDocsRoute,
+} from "./routes/onboarding-proxy.js";
 import type { OnboardingWebhookForwarder } from "../webhooks/onboarding-forwarder.js";
 
 type BridgeDecisionResolver = (requestId: string) => Promise<TrustedBridgeDecisionResult>;
@@ -60,6 +64,12 @@ export function createRequestHandler(
       operatorId: config.kit5OperatorId,
       allowedOrigins: config.kit5AllowedOrigins,
     };
+    if (isOnboardingDocsRoute(request.url)) {
+      handleOnboardingDocsProxy(request, response, {
+        upstreamUrl: config.onboardingServiceUrl,
+      });
+      return;
+    }
     if (isOnboardingRoute(request.url)) {
       handleOnboardingProxy(request, response, {
         upstreamUrl: config.onboardingServiceUrl,

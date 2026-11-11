@@ -1,0 +1,16 @@
+{
+  "name": "swagger-ui-dist",
+  "version": "5.34.1",
+  "license": "Apache-2.0",
+  "upstream": "https://github.com/swagger-api/swagger-ui",
+  "provenance": "npm pack swagger-ui-dist@5.34.1",
+  "files": [
+    "swagger-ui.css",
+    "swagger-ui-bundle.js",
+    "swagger-ui-standalone-preset.js",
+    "favicon-32x32.png",
+    "favicon-16x16.png",
+    "LICENSE",
+    "NOTICE"
+  ]
+}
