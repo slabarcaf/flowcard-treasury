@@ -1,0 +1,5001 @@
+{
+  "components": {
+    "schemas": {
+      "ActionResponse": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "ApplicationListResponse": {
+        "properties": {
+          "applications": {
+            "items": {
+              "properties": {
+                "closed_at": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "company": {
+                  "properties": {
+                    "business_profile": {
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "industry": {
+                          "type": "string"
+                        },
+                        "operating_address": {
+                          "properties": {
+                            "city": {
+                              "type": "string"
+                            },
+                            "country": {
+                              "type": "string"
+                            },
+                            "line_1": {
+                              "type": "string"
+                            },
+                            "line_2": {
+                              "type": "string"
+                            },
+                            "postal_code": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "type": "string"
+                            }
+                          },
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "operating_countries": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "phone": {
+                          "type": "string"
+                        },
+                        "products": {
+                          "type": "string"
+                        },
+                        "registered_address": {
+                          "properties": {
+                            "city": {
+                              "type": "string"
+                            },
+                            "country": {
+                              "type": "string"
+                            },
+                            "line_1": {
+                              "type": "string"
+                            },
+                            "line_2": {
+                              "type": "string"
+                            },
+                            "postal_code": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "website": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "entity_type": {
+                      "type": "string"
+                    },
+                    "has_submitted_history": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "legal_name": {
+                      "type": "string"
+                    },
+                    "people": {
+                      "items": {
+                        "properties": {
+                          "date_of_birth": {
+                            "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                            "format": "date",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "first_name": {
+                            "type": "string"
+                          },
+                          "identifications": {
+                            "items": {
+                              "properties": {
+                                "expires_on": {
+                                  "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                                  "format": "date",
+                                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                                  "type": "string"
+                                },
+                                "identification_id": {
+                                  "type": "string"
+                                },
+                                "issued_on": {
+                                  "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                                  "format": "date",
+                                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                                  "type": "string"
+                                },
+                                "issuing_country": {
+                                  "type": "string"
+                                },
+                                "number": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "last_name": {
+                            "type": "string"
+                          },
+                          "middle_name": {
+                            "type": "string"
+                          },
+                          "nationality": {
+                            "type": "string"
+                          },
+                          "person_id": {
+                            "type": "string"
+                          },
+                          "phone": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "registration_country": {
+                      "type": "string"
+                    },
+                    "registration_identifiers": {
+                      "items": {
+                        "properties": {
+                          "issuing_country": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "registration_state": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "trading_name": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "company_id": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "creator": {
+                  "type": "string"
+                },
+                "documents": {
+                  "items": {
+                    "properties": {
+                      "content_type": {
+                        "type": "string"
+                      },
+                      "document_id": {
+                        "type": "string"
+                      },
+                      "file_name": {
+                        "type": "string"
+                      },
+                      "identification_id": {
+                        "type": "string"
+                      },
+                      "person_id": {
+                        "type": "string"
+                      },
+                      "size_bytes": {
+                        "format": "int64",
+                        "type": "integer"
+                      },
+                      "storage_key": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "uploaded_at": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "uploaded_by": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "information_requests": {
+                  "items": {
+                    "properties": {
+                      "information_request_id": {
+                        "type": "string"
+                      },
+                      "platform_reference": {
+                        "type": "string"
+                      },
+                      "questions": {
+                        "items": {
+                          "properties": {
+                            "person_id": {
+                              "type": "string"
+                            },
+                            "platform_question_id": {
+                              "type": "string"
+                            },
+                            "question_id": {
+                              "type": "string"
+                            },
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "received_at": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "resolved_at": {
+                        "format": "date-time",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "status": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "operator_review_flagged": {
+                  "type": "boolean"
+                },
+                "platform": {
+                  "properties": {
+                    "decision": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "environment": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "onboarding_details": {
+                      "properties": {
+                        "customer_agreements": {
+                          "properties": {
+                            "agreed_to_data_usage": {
+                              "type": "boolean"
+                            },
+                            "agreed_to_terms_and_conditions": {
+                              "type": "boolean"
+                            },
+                            "terms_and_conditions": {
+                              "properties": {
+                                "agreed_at": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "device_data": {
+                                  "properties": {
+                                    "ip_address": {
+                                      "type": "string"
+                                    },
+                                    "user_agent": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "service_agreement_type": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "estimated_monthly_revenue": {
+                          "properties": {
+                            "amount": {
+                              "type": "string"
+                            },
+                            "currency": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "industry_category_code": {
+                          "type": "string"
+                        },
+                        "intended_products": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "people": {
+                          "items": {
+                            "properties": {
+                              "person_id": {
+                                "type": "string"
+                              },
+                              "platform_roles": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "residential_address": {
+                                "properties": {
+                                  "city": {
+                                    "type": "string"
+                                  },
+                                  "country": {
+                                    "type": "string"
+                                  },
+                                  "line_1": {
+                                    "type": "string"
+                                  },
+                                  "line_2": {
+                                    "type": "string"
+                                  },
+                                  "postal_code": {
+                                    "type": "string"
+                                  },
+                                  "state": {
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "primary_contact_person_id": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "platform_account_id": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "revision": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "applications"
+        ],
+        "type": "object"
+      },
+      "ApplicationResponse": {
+        "properties": {
+          "closed_at": {
+            "description": "Timestamp when application reached terminal status (null/omitted while active)",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "company": {
+            "properties": {
+              "business_profile": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "industry": {
+                    "type": "string"
+                  },
+                  "operating_address": {
+                    "properties": {
+                      "city": {
+                        "type": "string"
+                      },
+                      "country": {
+                        "type": "string"
+                      },
+                      "line_1": {
+                        "type": "string"
+                      },
+                      "line_2": {
+                        "type": "string"
+                      },
+                      "postal_code": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "operating_countries": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "products": {
+                    "type": "string"
+                  },
+                  "registered_address": {
+                    "properties": {
+                      "city": {
+                        "type": "string"
+                      },
+                      "country": {
+                        "type": "string"
+                      },
+                      "line_1": {
+                        "type": "string"
+                      },
+                      "line_2": {
+                        "type": "string"
+                      },
+                      "postal_code": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "website": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "registered_address"
+                ],
+                "type": "object"
+              },
+              "created_at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "entity_type": {
+                "type": "string"
+              },
+              "has_submitted_history": {
+                "type": "boolean"
+              },
+              "id": {
+                "type": "string"
+              },
+              "legal_name": {
+                "type": "string"
+              },
+              "people": {
+                "items": {
+                  "properties": {
+                    "date_of_birth": {
+                      "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                      "format": "date",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "first_name": {
+                      "type": "string"
+                    },
+                    "identifications": {
+                      "items": {
+                        "properties": {
+                          "expires_on": {
+                            "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                            "format": "date",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "type": "string"
+                          },
+                          "identification_id": {
+                            "type": "string"
+                          },
+                          "issued_on": {
+                            "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                            "format": "date",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "type": "string"
+                          },
+                          "issuing_country": {
+                            "type": "string"
+                          },
+                          "number": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "last_name": {
+                      "type": "string"
+                    },
+                    "middle_name": {
+                      "type": "string"
+                    },
+                    "nationality": {
+                      "type": "string"
+                    },
+                    "person_id": {
+                      "type": "string"
+                    },
+                    "phone": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "registration_country": {
+                "type": "string"
+              },
+              "registration_identifiers": {
+                "items": {
+                  "properties": {
+                    "issuing_country": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "registration_state": {
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "status": {
+                "type": "string"
+              },
+              "trading_name": {
+                "type": "string"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "type": "string"
+              }
+            },
+            "required": [
+              "business_profile",
+              "created_at",
+              "has_submitted_history",
+              "id",
+              "legal_name",
+              "people",
+              "registration_identifiers",
+              "revision",
+              "status",
+              "updated_at"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "company_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "documents": {
+            "items": {
+              "properties": {
+                "content_type": {
+                  "type": "string"
+                },
+                "document_id": {
+                  "type": "string"
+                },
+                "file_name": {
+                  "type": "string"
+                },
+                "identification_id": {
+                  "type": "string"
+                },
+                "person_id": {
+                  "type": "string"
+                },
+                "size_bytes": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "storage_key": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "uploaded_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "uploaded_by": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "information_requests": {
+            "items": {
+              "properties": {
+                "information_request_id": {
+                  "type": "string"
+                },
+                "platform_reference": {
+                  "type": "string"
+                },
+                "questions": {
+                  "items": {
+                    "properties": {
+                      "person_id": {
+                        "type": "string"
+                      },
+                      "platform_question_id": {
+                        "type": "string"
+                      },
+                      "question_id": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "received_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "resolved_at": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "operator_review_flagged": {
+            "type": "boolean"
+          },
+          "platform": {
+            "properties": {
+              "decision": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "environment": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "onboarding_details": {
+                "properties": {
+                  "customer_agreements": {
+                    "properties": {
+                      "agreed_to_data_usage": {
+                        "type": "boolean"
+                      },
+                      "agreed_to_terms_and_conditions": {
+                        "type": "boolean"
+                      },
+                      "terms_and_conditions": {
+                        "properties": {
+                          "agreed_at": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "device_data": {
+                            "properties": {
+                              "ip_address": {
+                                "type": "string"
+                              },
+                              "user_agent": {
+                                "type": "string"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "service_agreement_type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "agreed_at",
+                          "service_agreement_type"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "agreed_to_data_usage",
+                      "agreed_to_terms_and_conditions"
+                    ],
+                    "type": "object"
+                  },
+                  "estimated_monthly_revenue": {
+                    "properties": {
+                      "amount": {
+                        "type": "string"
+                      },
+                      "currency": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "industry_category_code": {
+                    "type": "string"
+                  },
+                  "intended_products": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "people": {
+                    "items": {
+                      "properties": {
+                        "person_id": {
+                          "type": "string"
+                        },
+                        "platform_roles": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "residential_address": {
+                          "properties": {
+                            "city": {
+                              "type": "string"
+                            },
+                            "country": {
+                              "type": "string"
+                            },
+                            "line_1": {
+                              "type": "string"
+                            },
+                            "line_2": {
+                              "type": "string"
+                            },
+                            "postal_code": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "primary_contact_person_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "customer_agreements",
+                  "estimated_monthly_revenue"
+                ],
+                "type": "object"
+              },
+              "platform_account_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "onboarding_details"
+            ],
+            "type": "object"
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "description": "Application underwriting lifecycle status",
+            "enum": [
+              "DRAFT",
+              "SUBMISSION_PENDING",
+              "UNDER_REVIEW",
+              "INFORMATION_REQUIRED",
+              "COMPLETED",
+              "REJECTED",
+              "CANCELLED"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "company",
+          "company_id",
+          "created_at",
+          "creator",
+          "documents",
+          "id",
+          "information_requests",
+          "operator_review_flagged",
+          "platform",
+          "revision",
+          "status",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "ArchiveCompanyRequest": {
+        "properties": {
+          "expected_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "type": "object"
+      },
+      "CancelApplicationRequest": {
+        "properties": {
+          "expected_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "type": "object"
+      },
+      "CompanyListResponse": {
+        "properties": {
+          "companies": {
+            "items": {
+              "properties": {
+                "business_profile": {
+                  "properties": {
+                    "description": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "industry": {
+                      "type": "string"
+                    },
+                    "operating_address": {
+                      "properties": {
+                        "city": {
+                          "type": "string"
+                        },
+                        "country": {
+                          "type": "string"
+                        },
+                        "line_1": {
+                          "type": "string"
+                        },
+                        "line_2": {
+                          "type": "string"
+                        },
+                        "postal_code": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "operating_countries": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "phone": {
+                      "type": "string"
+                    },
+                    "products": {
+                      "type": "string"
+                    },
+                    "registered_address": {
+                      "properties": {
+                        "city": {
+                          "type": "string"
+                        },
+                        "country": {
+                          "type": "string"
+                        },
+                        "line_1": {
+                          "type": "string"
+                        },
+                        "line_2": {
+                          "type": "string"
+                        },
+                        "postal_code": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "website": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "has_submitted_history": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "legal_name": {
+                  "type": "string"
+                },
+                "people": {
+                  "items": {
+                    "properties": {
+                      "date_of_birth": {
+                        "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                        "format": "date",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "first_name": {
+                        "type": "string"
+                      },
+                      "identifications": {
+                        "items": {
+                          "properties": {
+                            "expires_on": {
+                              "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                              "format": "date",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                              "type": "string"
+                            },
+                            "identification_id": {
+                              "type": "string"
+                            },
+                            "issued_on": {
+                              "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                              "format": "date",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                              "type": "string"
+                            },
+                            "issuing_country": {
+                              "type": "string"
+                            },
+                            "number": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "last_name": {
+                        "type": "string"
+                      },
+                      "middle_name": {
+                        "type": "string"
+                      },
+                      "nationality": {
+                        "type": "string"
+                      },
+                      "person_id": {
+                        "type": "string"
+                      },
+                      "phone": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "registration_country": {
+                  "type": "string"
+                },
+                "registration_identifiers": {
+                  "items": {
+                    "properties": {
+                      "issuing_country": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "registration_state": {
+                  "type": "string"
+                },
+                "revision": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "trading_name": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "companies"
+        ],
+        "type": "object"
+      },
+      "CompanyResponse": {
+        "properties": {
+          "business_profile": {
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "industry": {
+                "type": "string"
+              },
+              "operating_address": {
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  },
+                  "country": {
+                    "type": "string"
+                  },
+                  "line_1": {
+                    "type": "string"
+                  },
+                  "line_2": {
+                    "type": "string"
+                  },
+                  "postal_code": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "operating_countries": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "phone": {
+                "type": "string"
+              },
+              "products": {
+                "type": "string"
+              },
+              "registered_address": {
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  },
+                  "country": {
+                    "type": "string"
+                  },
+                  "line_1": {
+                    "type": "string"
+                  },
+                  "line_2": {
+                    "type": "string"
+                  },
+                  "postal_code": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "website": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "registered_address"
+            ],
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "entity_type": {
+            "type": "string"
+          },
+          "has_submitted_history": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "legal_name": {
+            "type": "string"
+          },
+          "people": {
+            "items": {
+              "properties": {
+                "date_of_birth": {
+                  "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                  "format": "date",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "first_name": {
+                  "type": "string"
+                },
+                "identifications": {
+                  "items": {
+                    "properties": {
+                      "expires_on": {
+                        "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                        "format": "date",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "type": "string"
+                      },
+                      "identification_id": {
+                        "type": "string"
+                      },
+                      "issued_on": {
+                        "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                        "format": "date",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "type": "string"
+                      },
+                      "issuing_country": {
+                        "type": "string"
+                      },
+                      "number": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "last_name": {
+                  "type": "string"
+                },
+                "middle_name": {
+                  "type": "string"
+                },
+                "nationality": {
+                  "type": "string"
+                },
+                "person_id": {
+                  "type": "string"
+                },
+                "phone": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "registration_country": {
+            "type": "string"
+          },
+          "registration_identifiers": {
+            "items": {
+              "properties": {
+                "issuing_country": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "registration_state": {
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "description": "Company lifecycle status: ACTIVE or ARCHIVED",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ],
+            "type": "string"
+          },
+          "trading_name": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "business_profile",
+          "created_at",
+          "has_submitted_history",
+          "id",
+          "legal_name",
+          "people",
+          "registration_identifiers",
+          "revision",
+          "status",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "CreateApplicationRequest": {
+        "properties": {
+          "company_id": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "onboarding_details": {
+            "properties": {
+              "customer_agreements": {
+                "properties": {
+                  "agreed_to_data_usage": {
+                    "type": "boolean"
+                  },
+                  "agreed_to_terms_and_conditions": {
+                    "type": "boolean"
+                  },
+                  "terms_and_conditions": {
+                    "properties": {
+                      "agreed_at": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "device_data": {
+                        "properties": {
+                          "ip_address": {
+                            "type": "string"
+                          },
+                          "user_agent": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "service_agreement_type": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  }
+                },
+                "type": "object"
+              },
+              "estimated_monthly_revenue": {
+                "properties": {
+                  "amount": {
+                    "type": "string"
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "industry_category_code": {
+                "type": "string"
+              },
+              "intended_products": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "people": {
+                "items": {
+                  "properties": {
+                    "person_id": {
+                      "type": "string"
+                    },
+                    "platform_roles": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "residential_address": {
+                      "properties": {
+                        "city": {
+                          "maxLength": 100,
+                          "type": "string"
+                        },
+                        "country": {
+                          "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                          "maxLength": 2,
+                          "minLength": 2,
+                          "pattern": "^[A-Z]{2}$",
+                          "type": "string"
+                        },
+                        "line_1": {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "line_2": {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "postal_code": {
+                          "maxLength": 20,
+                          "type": "string"
+                        },
+                        "state": {
+                          "maxLength": 100,
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "primary_contact_person_id": {
+                "type": "string"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "platform_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "company_id",
+          "platform_name"
+        ],
+        "type": "object"
+      },
+      "CreateCompanyRequest": {
+        "properties": {
+          "business_profile": {
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "registered_address": {
+                "properties": {
+                  "city": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "country": {
+                    "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                    "maxLength": 2,
+                    "minLength": 2,
+                    "pattern": "^[A-Z]{2}$",
+                    "type": "string"
+                  },
+                  "line_1": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "line_2": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "postal_code": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city",
+                  "country",
+                  "line_1",
+                  "postal_code"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "website": {
+                "format": "uri",
+                "maxLength": 500,
+                "type": "string"
+              }
+            },
+            "required": [
+              "description",
+              "website"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "entity_type": {
+            "maxLength": 50,
+            "type": "string"
+          },
+          "legal_name": {
+            "maxLength": 200,
+            "minLength": 2,
+            "type": "string"
+          },
+          "people": {
+            "items": {
+              "properties": {
+                "date_of_birth": {
+                  "description": "Calendar date in YYYY-MM-DD format. Subject to dynamic runtime validation ensuring date is strictly in the past relative to execution time.",
+                  "format": "date",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                "first_name": {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "id": {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                "identifications": {
+                  "items": {
+                    "properties": {
+                      "expires_on": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "maxLength": 64,
+                        "type": "string"
+                      },
+                      "issued_on": {
+                        "type": "string"
+                      },
+                      "issuing_country": {
+                        "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                        "maxLength": 2,
+                        "minLength": 2,
+                        "pattern": "^[A-Z]{2}$",
+                        "type": "string"
+                      },
+                      "number": {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      "type": {
+                        "maxLength": 50,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "last_name": {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "role": {
+                  "maxLength": 100,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "registration_country": {
+            "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+            "maxLength": 2,
+            "minLength": 2,
+            "pattern": "^[A-Z]{2}$",
+            "type": "string"
+          },
+          "registration_identifiers": {
+            "items": {
+              "properties": {
+                "issuing_country": {
+                  "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                  "maxLength": 2,
+                  "minLength": 2,
+                  "pattern": "^[A-Z]{2}$",
+                  "type": "string"
+                },
+                "type": {
+                  "maxLength": 50,
+                  "type": "string"
+                },
+                "value": {
+                  "maxLength": 100,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "registration_state": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "trading_name": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "legal_name"
+        ],
+        "type": "object"
+      },
+      "DocumentResponse": {
+        "properties": {
+          "content_type": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "identification_id": {
+            "type": "string"
+          },
+          "person_id": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": {
+            "type": "string"
+          },
+          "uploaded_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "uploaded_by": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_type",
+          "document_id",
+          "file_name",
+          "size_bytes",
+          "type",
+          "uploaded_at",
+          "uploaded_by"
+        ],
+        "type": "object"
+      },
+      "EditApplicationRequest": {
+        "properties": {
+          "expected_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "onboarding_details": {
+            "properties": {
+              "customer_agreements": {
+                "properties": {
+                  "agreed_to_data_usage": {
+                    "type": "boolean"
+                  },
+                  "agreed_to_terms_and_conditions": {
+                    "type": "boolean"
+                  },
+                  "terms_and_conditions": {
+                    "properties": {
+                      "agreed_at": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "device_data": {
+                        "properties": {
+                          "ip_address": {
+                            "type": "string"
+                          },
+                          "user_agent": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "service_agreement_type": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  }
+                },
+                "type": "object"
+              },
+              "estimated_monthly_revenue": {
+                "properties": {
+                  "amount": {
+                    "type": "string"
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "industry_category_code": {
+                "type": "string"
+              },
+              "intended_products": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "people": {
+                "items": {
+                  "properties": {
+                    "person_id": {
+                      "type": "string"
+                    },
+                    "platform_roles": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "residential_address": {
+                      "properties": {
+                        "city": {
+                          "maxLength": 100,
+                          "type": "string"
+                        },
+                        "country": {
+                          "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                          "maxLength": 2,
+                          "minLength": 2,
+                          "pattern": "^[A-Z]{2}$",
+                          "type": "string"
+                        },
+                        "line_1": {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "line_2": {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "postal_code": {
+                          "maxLength": 20,
+                          "type": "string"
+                        },
+                        "state": {
+                          "maxLength": 100,
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "primary_contact_person_id": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "onboarding_details"
+        ],
+        "type": "object"
+      },
+      "EditCompanyRequest": {
+        "properties": {
+          "business_profile": {
+            "properties": {
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "registered_address": {
+                "properties": {
+                  "city": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "country": {
+                    "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                    "maxLength": 2,
+                    "minLength": 2,
+                    "pattern": "^[A-Z]{2}$",
+                    "type": "string"
+                  },
+                  "line_1": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "line_2": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "postal_code": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city",
+                  "country",
+                  "line_1",
+                  "postal_code"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "website": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "entity_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "legal_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "people": {
+            "items": {
+              "properties": {
+                "date_of_birth": {
+                  "description": "Calendar date in YYYY-MM-DD format. Subject to dynamic runtime validation ensuring date is strictly in the past relative to execution time.",
+                  "format": "date",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                "first_name": {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "id": {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                "identifications": {
+                  "items": {
+                    "properties": {
+                      "expires_on": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "maxLength": 64,
+                        "type": "string"
+                      },
+                      "issued_on": {
+                        "type": "string"
+                      },
+                      "issuing_country": {
+                        "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                        "maxLength": 2,
+                        "minLength": 2,
+                        "pattern": "^[A-Z]{2}$",
+                        "type": "string"
+                      },
+                      "number": {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      "type": {
+                        "maxLength": 50,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "last_name": {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "role": {
+                  "maxLength": 100,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "registration_country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registration_identifiers": {
+            "items": {
+              "properties": {
+                "issuing_country": {
+                  "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                  "maxLength": 2,
+                  "minLength": 2,
+                  "pattern": "^[A-Z]{2}$",
+                  "type": "string"
+                },
+                "type": {
+                  "maxLength": 50,
+                  "type": "string"
+                },
+                "value": {
+                  "maxLength": 100,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "registration_state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trading_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "param": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "FieldError": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "param": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "field",
+          "message"
+        ],
+        "type": "object"
+      },
+      "GatewayAuthError": {
+        "description": "Node gateway session authentication failure response (HTTP 401)",
+        "properties": {
+          "error": {
+            "example": "operator_auth_required",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "PlatformAccountResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "external_account_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_sync_time": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "platform_name": {
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "description": "Observed platform account status (e.g. UNOBSERVED, CREATED, SUBMITTED, PENDING, ACTIVE, ACTION_REQUIRED, SUSPENDED, CLOSED). Unknown/unmapped statuses are accepted.",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "company_id",
+          "created_at",
+          "environment",
+          "id",
+          "platform_name",
+          "revision",
+          "status",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "ServiceAuthError": {
+        "description": "Direct Go service JWT assertion authentication failure response (HTTP 401)",
+        "properties": {
+          "code": {
+            "example": "UNAUTHENTICATED",
+            "type": "string"
+          },
+          "error": {
+            "example": "unauthorized",
+            "type": "string"
+          },
+          "message": {
+            "example": "invalid or missing authentication token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "SubmissionResponse": {
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "answers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "company": {
+            "properties": {
+              "business_profile": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "industry": {
+                    "type": "string"
+                  },
+                  "operating_address": {
+                    "properties": {
+                      "city": {
+                        "type": "string"
+                      },
+                      "country": {
+                        "type": "string"
+                      },
+                      "line_1": {
+                        "type": "string"
+                      },
+                      "line_2": {
+                        "type": "string"
+                      },
+                      "postal_code": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "operating_countries": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "products": {
+                    "type": "string"
+                  },
+                  "registered_address": {
+                    "properties": {
+                      "city": {
+                        "type": "string"
+                      },
+                      "country": {
+                        "type": "string"
+                      },
+                      "line_1": {
+                        "type": "string"
+                      },
+                      "line_2": {
+                        "type": "string"
+                      },
+                      "postal_code": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "website": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "registered_address"
+                ],
+                "type": "object"
+              },
+              "created_at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "entity_type": {
+                "type": "string"
+              },
+              "has_submitted_history": {
+                "type": "boolean"
+              },
+              "id": {
+                "type": "string"
+              },
+              "legal_name": {
+                "type": "string"
+              },
+              "people": {
+                "items": {
+                  "properties": {
+                    "date_of_birth": {
+                      "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                      "format": "date",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "first_name": {
+                      "type": "string"
+                    },
+                    "identifications": {
+                      "items": {
+                        "properties": {
+                          "expires_on": {
+                            "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                            "format": "date",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "type": "string"
+                          },
+                          "identification_id": {
+                            "type": "string"
+                          },
+                          "issued_on": {
+                            "description": "Calendar date in ISO 8601 YYYY-MM-DD format",
+                            "format": "date",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "type": "string"
+                          },
+                          "issuing_country": {
+                            "type": "string"
+                          },
+                          "number": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "last_name": {
+                      "type": "string"
+                    },
+                    "middle_name": {
+                      "type": "string"
+                    },
+                    "nationality": {
+                      "type": "string"
+                    },
+                    "person_id": {
+                      "type": "string"
+                    },
+                    "phone": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "registration_country": {
+                "type": "string"
+              },
+              "registration_identifiers": {
+                "items": {
+                  "properties": {
+                    "issuing_country": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "registration_state": {
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "status": {
+                "type": "string"
+              },
+              "trading_name": {
+                "type": "string"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "type": "string"
+              }
+            },
+            "required": [
+              "business_profile",
+              "created_at",
+              "has_submitted_history",
+              "id",
+              "legal_name",
+              "people",
+              "registration_identifiers",
+              "revision",
+              "status",
+              "updated_at"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "definitive_invalid_data": {
+            "type": "boolean"
+          },
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "information_request_id": {
+            "type": "string"
+          },
+          "onboarding_details": {
+            "properties": {
+              "customer_agreements": {
+                "properties": {
+                  "agreed_to_data_usage": {
+                    "type": "boolean"
+                  },
+                  "agreed_to_terms_and_conditions": {
+                    "type": "boolean"
+                  },
+                  "terms_and_conditions": {
+                    "properties": {
+                      "agreed_at": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "device_data": {
+                        "properties": {
+                          "ip_address": {
+                            "type": "string"
+                          },
+                          "user_agent": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "service_agreement_type": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "agreed_at",
+                      "service_agreement_type"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "agreed_to_data_usage",
+                  "agreed_to_terms_and_conditions"
+                ],
+                "type": "object"
+              },
+              "estimated_monthly_revenue": {
+                "properties": {
+                  "amount": {
+                    "type": "string"
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "industry_category_code": {
+                "type": "string"
+              },
+              "intended_products": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "people": {
+                "items": {
+                  "properties": {
+                    "person_id": {
+                      "type": "string"
+                    },
+                    "platform_roles": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "residential_address": {
+                      "properties": {
+                        "city": {
+                          "type": "string"
+                        },
+                        "country": {
+                          "type": "string"
+                        },
+                        "line_1": {
+                          "type": "string"
+                        },
+                        "line_2": {
+                          "type": "string"
+                        },
+                        "postal_code": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "primary_contact_person_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "customer_agreements",
+              "estimated_monthly_revenue"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "description": "Asynchronous platform submission delivery status",
+            "enum": [
+              "PENDING",
+              "ACCEPTED",
+              "FAILED",
+              "UNRESOLVED"
+            ],
+            "type": "string"
+          },
+          "submission_id": {
+            "type": "string"
+          },
+          "submitting_actor": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "company",
+          "created_at",
+          "onboarding_details",
+          "status",
+          "submission_id",
+          "submitting_actor",
+          "type"
+        ],
+        "type": "object"
+      },
+      "SubmitApplicationRequest": {
+        "properties": {
+          "expected_revision": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "type": "object"
+      },
+      "UnauthenticatedResponse": {
+        "description": "Unauthenticated error response (HTTP 401). Returned as GatewayAuthError from Node gateway (kit5_operator_session missing/invalid), or ServiceAuthError from direct Go service JWT assertion failure.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/GatewayAuthError"
+          },
+          {
+            "$ref": "#/components/schemas/ServiceAuthError"
+          }
+        ]
+      },
+      "ValidationResult": {
+        "properties": {
+          "application_revision": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "company_revision": {
+            "type": "integer"
+          },
+          "errors": {
+            "items": {
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "param": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "GatewaySessionCookie": {
+        "description": "Kit 5 operator session cookie (kit5_operator_session). Established via POST /api/kit5/session with operator token, origin authorization, and 8-hour TTL (Set-Cookie: kit5_operator_session=...; Path=/api; HttpOnly; Secure; SameSite=None; Max-Age=28800). Authenticated at Node gateway proxy before forwarding to Go service with actor context.",
+        "in": "cookie",
+        "name": "kit5_operator_session",
+        "type": "apiKey"
+      },
+      "ServiceJWT": {
+        "bearerFormat": "JWT",
+        "description": "Internal service-to-service JWT assertion for direct Go service access (Issuer: flowcard-node-proxy, Audience: flowcard-onboarding-service).",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Authoritative underwriting platform company onboarding and document management API. Business endpoints are auth-gated via kit5_operator_session cookie at the Node gateway proxy (or internal ServiceJWT assertion) and require database persistence. Application submission (/submit) is fail-closed blocked.",
+    "title": "FlowCard Company Onboarding Operator API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/companies": {
+      "get": {
+        "description": "Retrieves a paginated list of companies wrapped in a pagination envelope with next_cursor. Supports status, limit, and cursor filters.",
+        "operationId": "listCompanies",
+        "parameters": [
+          {
+            "description": "Maximum records to return (default 20, positive integer)",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter companies by lifecycle status (ACTIVE, ARCHIVED)",
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "ACTIVE",
+                "ARCHIVED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Opaque pagination cursor from previous response",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyListResponse"
+                }
+              }
+            },
+            "description": "Paginated company list envelope"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid pagination cursor"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "List companies",
+        "tags": [
+          "Companies"
+        ]
+      },
+      "post": {
+        "description": "Registers a new business entity with initial status ACTIVE and revision 1. Legal name is required (min 2, max 200 characters). Accepts optional business profile, registration identifiers, and people.",
+        "operationId": "createCompany",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCompanyRequest"
+              }
+            }
+          },
+          "description": "Company registration payload",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyResponse"
+                }
+              }
+            },
+            "description": "Company registered successfully"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed JSON input"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid operator session / JWT"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Field validation failed"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured or unreachable"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Create company",
+        "tags": [
+          "Companies"
+        ]
+      }
+    },
+    "/api/companies/{id}": {
+      "delete": {
+        "description": "Permanently deletes a draft company with zero platform activity or historical submissions. Returns ActionResponse with code COMPANY_DELETED (not 204 No Content).",
+        "operationId": "deleteCompany",
+        "parameters": [
+          {
+            "description": "Company ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            },
+            "description": "Company permanently deleted"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Company not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Company has historical submissions and cannot be deleted"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Delete draft company",
+        "tags": [
+          "Companies"
+        ]
+      },
+      "get": {
+        "description": "Retrieves a single business entity by its opaque prefixed ID (e.g. comp_...).",
+        "operationId": "getCompany",
+        "parameters": [
+          {
+            "description": "Company opaque identifier (e.g. comp_...)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyResponse"
+                }
+              }
+            },
+            "description": "Company details"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Company not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Get company by ID",
+        "tags": [
+          "Companies"
+        ]
+      },
+      "patch": {
+        "description": "Applies partial updates to company fields. Requires expected_revision matching current revision for optimistic concurrency control (CAS). Correcting registration identifiers on companies with submitted application history requires explicit actor and reason.",
+        "operationId": "editCompany",
+        "parameters": [
+          {
+            "description": "Company ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditCompanyRequest"
+              }
+            }
+          },
+          "description": "Partial company update fields and CAS expected_revision",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyResponse"
+                }
+              }
+            },
+            "description": "Updated company details"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed JSON or domain invariant failure"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Company not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Optimistic concurrency conflict (revision mismatch)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation failure"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Update company details (PATCH)",
+        "tags": [
+          "Companies"
+        ]
+      },
+      "put": {
+        "description": "PUT alias for PATCH /api/companies/{id}; preserves identical partial update and CAS revision semantics.",
+        "operationId": "editCompanyPut",
+        "parameters": [
+          {
+            "description": "Company ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditCompanyRequest"
+              }
+            }
+          },
+          "description": "Partial company update fields and CAS expected_revision",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyResponse"
+                }
+              }
+            },
+            "description": "Updated company details"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed JSON or domain invariant failure"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Company not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Optimistic concurrency conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation failure"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Update company details (PUT alias)",
+        "tags": [
+          "Companies"
+        ]
+      }
+    },
+    "/api/companies/{id}/archive": {
+      "post": {
+        "description": "Transitions company status to ARCHIVED. Requires expected_revision matching current revision. Rejected with 409 Conflict if open onboarding applications exist.",
+        "operationId": "archiveCompany",
+        "parameters": [
+          {
+            "description": "Company ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveCompanyRequest"
+              }
+            }
+          },
+          "description": "CAS expected_revision and optional archive reason",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            },
+            "description": "Company successfully archived"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed JSON"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Company not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Revision conflict or company has open applications"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Archive company",
+        "tags": [
+          "Companies"
+        ]
+      }
+    },
+    "/api/companies/{id}/platform-accounts": {
+      "get": {
+        "description": "Retrieves all platform accounts connected to the company. NOTE: Returns a raw JSON array of PlatformAccountResponse items (not wrapped in a pagination envelope).",
+        "operationId": "listCompanyPlatformAccounts",
+        "parameters": [
+          {
+            "description": "Company ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformAccountResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Raw JSON array of platform accounts"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Company not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "List company platform accounts",
+        "tags": [
+          "Companies",
+          "Platform Accounts"
+        ]
+      }
+    },
+    "/api/onboarding-applications": {
+      "get": {
+        "description": "Retrieves a paginated list of onboarding applications. Supports filtering by company_id, platform, status, limit, and cursor.",
+        "operationId": "listApplications",
+        "parameters": [
+          {
+            "description": "Filter applications by company opaque identifier",
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by platform name (e.g. airwallex)",
+            "in": "query",
+            "name": "platform",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by application status (DRAFT, SUBMISSION_PENDING, UNDER_REVIEW, INFORMATION_REQUIRED, COMPLETED, REJECTED, CANCELLED)",
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "SUBMISSION_PENDING",
+                "UNDER_REVIEW",
+                "INFORMATION_REQUIRED",
+                "COMPLETED",
+                "REJECTED",
+                "CANCELLED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum records to return (default 20)",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pagination cursor token",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationListResponse"
+                }
+              }
+            },
+            "description": "Paginated applications list envelope"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid cursor"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "List onboarding applications",
+        "tags": [
+          "Onboarding Applications"
+        ]
+      },
+      "post": {
+        "description": "Creates an onboarding application for a company and target platform. Fails with 409 Conflict if an active, non-terminal application already exists for the company and platform.",
+        "operationId": "createApplication",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApplicationRequest"
+              }
+            }
+          },
+          "description": "Application creation parameters",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            },
+            "description": "Application created successfully"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request payload"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Referenced company not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An active application already exists for this company and platform"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Create onboarding application",
+        "tags": [
+          "Onboarding Applications"
+        ]
+      }
+    },
+    "/api/onboarding-applications/{id}": {
+      "get": {
+        "description": "Retrieves an onboarding application aggregate including embedded company snapshot, documents, and information requests.",
+        "operationId": "getApplication",
+        "parameters": [
+          {
+            "description": "Application opaque identifier (e.g. app_...)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            },
+            "description": "Application details"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Application not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Get onboarding application by ID",
+        "tags": [
+          "Onboarding Applications"
+        ]
+      },
+      "patch": {
+        "description": "Updates platform-specific onboarding details (e.g. industry category, revenue estimates, person residential addresses). Requires expected_revision CAS.",
+        "operationId": "editApplication",
+        "parameters": [
+          {
+            "description": "Application ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditApplicationRequest"
+              }
+            }
+          },
+          "description": "Updated platform details and CAS expected_revision",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            },
+            "description": "Updated application details"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request payload"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Application not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Revision conflict or application is not editable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation failure"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Update onboarding details",
+        "tags": [
+          "Onboarding Applications"
+        ]
+      }
+    },
+    "/api/onboarding-applications/{id}/cancel": {
+      "post": {
+        "description": "Transitions an application to CANCELLED status prior to platform submission. Requires expected_revision matching current revision.",
+        "operationId": "cancelApplication",
+        "parameters": [
+          {
+            "description": "Application ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelApplicationRequest"
+              }
+            }
+          },
+          "description": "CAS expected_revision and cancellation reason",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            },
+            "description": "Application cancelled"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request payload"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Application not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Revision conflict or application already submitted/terminal"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Cancel onboarding application",
+        "tags": [
+          "Onboarding Applications"
+        ]
+      }
+    },
+    "/api/onboarding-applications/{id}/documents": {
+      "get": {
+        "description": "Retrieves document metadata attached to an onboarding application. NOTE: Returns a raw JSON array of DocumentResponse items (not wrapped in an envelope).",
+        "operationId": "listDocuments",
+        "parameters": [
+          {
+            "description": "Application ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Raw JSON array of document metadata"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Application not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "List application documents",
+        "tags": [
+          "Documents"
+        ]
+      },
+      "post": {
+        "description": "Uploads a document via multipart/form-data. Maximum size is 10 MiB. Content is sniffed for verified PDF, JPEG, or PNG magic bytes; client-declared MIME spoofing is rejected. Requires expected_revision matching current application revision.",
+        "operationId": "uploadDocument",
+        "parameters": [
+          {
+            "description": "Application ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "expected_revision": {
+                    "description": "CAS expected application revision (positive integer)",
+                    "type": "integer"
+                  },
+                  "file": {
+                    "description": "Document binary stream (PDF, JPEG, or PNG, max 10 MiB)",
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "identification_id": {
+                    "description": "Optional identification ID reference",
+                    "type": "string"
+                  },
+                  "person_id": {
+                    "description": "Optional person ID reference for identity documents",
+                    "type": "string"
+                  },
+                  "type": {
+                    "description": "Document category type",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expected_revision",
+                  "file",
+                  "type"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "description": "Multipart file and metadata form fields",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            },
+            "description": "Document uploaded and persisted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed multipart data or missing file"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Application or referenced entity not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Revision conflict or application is terminal"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "File exceeds 10 MiB, unsupported MIME, or spoofed content-type"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Storage or persistence failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Upload application document",
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/onboarding-applications/{id}/documents/{doc_id}": {
+      "get": {
+        "description": "Streams private decrypted document bytes directly to the client. Responses include Content-Disposition: attachment, sniffed Content-Type (application/pdf, image/jpeg, or image/png), and X-Content-Type-Options: nosniff.",
+        "operationId": "downloadDocument",
+        "parameters": [
+          {
+            "description": "Application ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Document ID",
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Document binary stream",
+            "headers": {
+              "Content-Disposition": {
+                "description": "attachment; filename=\"...\"",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "description": "nosniff",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Document or application not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal storage failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Object storage unconfigured or unreachable"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Download document binary",
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/onboarding-applications/{id}/submissions": {
+      "get": {
+        "description": "Retrieves immutable historical submission records attached to this application. NOTE: Returns a raw JSON array of SubmissionResponse items (not wrapped in a pagination envelope).",
+        "operationId": "listSubmissions",
+        "parameters": [
+          {
+            "description": "Application ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SubmissionResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Raw JSON array of submissions"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Application not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "List application submissions",
+        "tags": [
+          "Onboarding Applications",
+          "Submissions"
+        ]
+      }
+    },
+    "/api/onboarding-applications/{id}/submit": {
+      "post": {
+        "description": "CRITICAL CONTRACT STATUS: This action is explicitly blocked fail-closed, returning HTTP 422 with code SUBMISSION_CONTRACT_BLOCKED pending resolution of deferred reviewed revisions policy. Platform submission contracts remain unexecuted.",
+        "operationId": "submitApplication",
+        "parameters": [
+          {
+            "description": "Application ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitApplicationRequest"
+              }
+            }
+          },
+          "description": "CAS expected_revision",
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Application not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Contract blocked: SUBMISSION_CONTRACT_BLOCKED"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Submit application (BLOCKED)",
+        "tags": [
+          "Onboarding Applications"
+        ]
+      }
+    },
+    "/api/onboarding-applications/{id}/verify": {
+      "post": {
+        "description": "Validates saved application data for completeness and platform contract readiness. Returns HTTP 200 with code VALIDATION_PASSED when all gates pass. Returns HTTP 422 with the identical ValidationResult schema containing field errors when requirements are missing or unverified.",
+        "operationId": "verifyApplication",
+        "parameters": [
+          {
+            "description": "Application ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationResult"
+                }
+              }
+            },
+            "description": "Application verified ready for submission"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Application not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationResult"
+                }
+              }
+            },
+            "description": "Verification failed with missing or invalid fields"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Verify application readiness",
+        "tags": [
+          "Onboarding Applications"
+        ]
+      }
+    },
+    "/api/platform-accounts/{id}": {
+      "get": {
+        "description": "Reads a connected platform account aggregate by ID (e.g. pa_...).",
+        "operationId": "getPlatformAccount",
+        "parameters": [
+          {
+            "description": "Platform account opaque identifier (e.g. pa_...)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAccountResponse"
+                }
+              }
+            },
+            "description": "Platform account record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Platform account not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Get platform account by ID",
+        "tags": [
+          "Platform Accounts"
+        ]
+      }
+    },
+    "/api/submissions/{id}": {
+      "get": {
+        "description": "Reads an immutable frozen submission aggregate by ID (e.g. sub_...).",
+        "operationId": "getSubmission",
+        "parameters": [
+          {
+            "description": "Submission opaque identifier (e.g. sub_...)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionResponse"
+                }
+              }
+            },
+            "description": "Submission record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Submission not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Persistence error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Database unconfigured"
+          }
+        },
+        "security": [
+          {
+            "GatewaySessionCookie": []
+          },
+          {
+            "ServiceJWT": []
+          }
+        ],
+        "summary": "Get submission by ID",
+        "tags": [
+          "Submissions"
+        ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Public operational health check. Returns service name and status without requiring authentication.",
+        "operationId": "getHealthz",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Service is alive and healthy"
+          }
+        },
+        "security": [],
+        "summary": "Liveness probe",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/livez": {
+      "get": {
+        "description": "Public operational health check alias. Identical behavior to /healthz.",
+        "operationId": "getLivez",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Service is alive and healthy"
+          }
+        },
+        "security": [],
+        "summary": "Health probe alias",
+        "tags": [
+          "Health"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Current environment (relative gateway proxy or direct service host)",
+      "url": "/"
+    }
+  ]
+}

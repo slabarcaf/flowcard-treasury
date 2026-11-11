@@ -1,4 +1,4 @@
-import type { CustomerProfile, Door, FacilityConfig, SignalRating, Signals, Tier } from '../policy/types.js';
+import type { CustomerProfile, DemoPolicyReadiness, FacilityConfig, Signals } from '../policy/types.js';
 import type { DashboardState } from '../state/types.js';
 
 // ---------------------------------------------------------------------------
@@ -9,6 +9,8 @@ import type { DashboardState } from '../state/types.js';
 export interface ScenarioCustomer extends CustomerProfile {
   /** Short key that events use to refer to this customer. */
   key: string;
+  /** Stable roster ID used only to read the customer's Salesforce snapshot. */
+  salesforceSnapshotCustomerId?: string;
   /** One-line AI rationale shown when the bridge is funded or sent for approval. */
   rationale?: string;
   /**
@@ -16,6 +18,8 @@ export interface ScenarioCustomer extends CustomerProfile {
    * triggers the CRM re-evaluation step when the customer's decline arrives.
    */
   crmSignalsAfter?: Signals;
+  /** Optional deterministic override used by regression scenarios. */
+  policyReadiness?: DemoPolicyReadiness;
 }
 
 /** A card payment declined with INSUFFICIENT_FUNDS. */
@@ -62,39 +66,27 @@ export interface Scenario {
   name: string;
   summary: string;
   inputs: ScenarioInputs;
+  /** Optional provider interaction that pauses the fixture sequence before one event. */
+  providerCheckpoint?: ScenarioProviderCheckpoint;
+}
+
+export interface ScenarioProviderCheckpoint {
+  provider: 'airwallex';
+  /** Request ID of the fixture event that must wait for the provider result. */
+  eventRequestId: string;
+  customerKey: string;
 }
 
 // ---------------------------------------------------------------------------
 // Engine state — extends the GD dashboard state so the same components render it
 // ---------------------------------------------------------------------------
 
-/** What the Salesforce note changed for one customer, shown after re-evaluation. */
-export interface CrmChange {
-  customerName: string;
-  signals: { label: string; from: SignalRating; to: SignalRating }[];
-  tierFrom: Tier;
-  tierTo: Tier;
-  lineFrom: number;
-  lineTo: number;
-  doorFrom: Door;
-  doorTo: Door;
-  /** Capital level the doors were read at. */
-  bandLabel: string;
-  /** What the same request would have got without the note. */
-  outcomeBefore: 'approved automatically' | 'sent to a credit officer' | 'declined';
-  status: string;
-  reasons: string[];
-}
-
 /**
  * What the sequence is waiting on before the next request can be decided:
  * the Salesforce re-evaluation, a credit officer, or the presenter
- * acknowledging an auto-approval or the result of a CRM re-evaluation.
+ * acknowledging an auto-approval.
  */
-export type Pause =
-  | { kind: 'crm' | 'human' | 'ack'; requestId: string }
-  | { kind: 'crm-result'; requestId: string; change: CrmChange }
-  | null;
+export type Pause = { kind: 'crm' | 'human' | 'ack'; requestId: string } | null;
 
 export interface OpenBridge {
   customerName: string;

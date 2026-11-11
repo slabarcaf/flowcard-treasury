@@ -1,12 +1,16 @@
 import type { PolicyCheck } from '../state/types.js';
+import type { PolicyReasonCode } from '../policy/types.js';
+import { policyReasonText } from '../policy/index.js';
 
 interface Props {
   visible: boolean;
   checks: PolicyCheck[];
+  reasonCodes?: PolicyReasonCode[];
+  reasonTexts?: string[];
 }
 
-export function PolicyChecks({ visible, checks }: Props) {
-  if (!visible || checks.length === 0) return null;
+export function PolicyChecks({ visible, checks, reasonCodes = [], reasonTexts = [] }: Props) {
+  if (!visible || (checks.length === 0 && reasonCodes.length === 0)) return null;
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 animate-panel-in">
@@ -30,6 +34,12 @@ export function PolicyChecks({ visible, checks }: Props) {
             <span className={c.passed ? 'text-gray-700' : 'text-red-600'}>
               {c.label}
             </span>
+          </li>
+        ))}
+        {reasonCodes.map((code, i) => (
+          <li key={`reason-${code}-${i}`} className="text-sm text-red-700">
+            <span className="font-mono text-xs font-semibold">{code}</span>
+            <span className="ml-2">{reasonTexts[i] ?? policyReasonText(code)}</span>
           </li>
         ))}
       </ul>

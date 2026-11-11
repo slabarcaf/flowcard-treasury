@@ -1,4 +1,4 @@
-import type { FacilityConfig, Signals } from '../policy/types.js';
+import type { DemoPolicyReadiness, FacilityConfig, Signals } from '../policy/types.js';
 import { CUSTOMERS, BLOOM_SIGNALS_AFTER_CRM, AGENT_RATIONALES } from '../seed.js';
 import type { Scenario, ScenarioCustomer, ScenarioInputs } from './types.js';
 
@@ -29,17 +29,21 @@ const ALL_GREEN: Signals = {
   cashBuffer: 'green',
   trackRecord: 'green',
 };
+const SYNTHETIC_READY: DemoPolicyReadiness = {
+  snapshot: 'fresh', evidence: 'no_signal', creditReview: 'approved', priorDefault: 'no',
+};
 
 // GD's four customers, unchanged. Bloom keeps the Salesforce re-rating.
 const BLOOM: ScenarioCustomer = {
   ...CUSTOMERS.bloom,
   key: 'bloom',
+  salesforceSnapshotCustomerId: CUSTOMERS.bloom.id,
   rationale: AGENT_RATIONALES.bloom_initial,
   crmSignalsAfter: BLOOM_SIGNALS_AFTER_CRM,
 };
-const ATLAS: ScenarioCustomer = { ...CUSTOMERS.atlas, key: 'atlas', rationale: AGENT_RATIONALES.atlas };
-const NOVA: ScenarioCustomer = { ...CUSTOMERS.nova, key: 'nova', rationale: AGENT_RATIONALES.nova_revised };
-const PIXEL: ScenarioCustomer = { ...CUSTOMERS.pixel, key: 'pixel' };
+const ATLAS: ScenarioCustomer = { ...CUSTOMERS.atlas, key: 'atlas', salesforceSnapshotCustomerId: CUSTOMERS.atlas.id, rationale: AGENT_RATIONALES.atlas };
+const NOVA: ScenarioCustomer = { ...CUSTOMERS.nova, key: 'nova', salesforceSnapshotCustomerId: CUSTOMERS.nova.id, rationale: AGENT_RATIONALES.nova_revised };
+const PIXEL: ScenarioCustomer = { ...CUSTOMERS.pixel, key: 'pixel', salesforceSnapshotCustomerId: CUSTOMERS.pixel.id };
 
 const original: ScenarioInputs = {
   facility: KIT5_FACILITY,
@@ -47,7 +51,7 @@ const original: ScenarioInputs = {
   startDate: START_DATE,
   customers: [BLOOM, ATLAS, NOVA, PIXEL],
   events: [
-    { type: 'decline', requestId: 'txn_bloom_payroll_001', customerKey: 'bloom', day: 0, time: '9:02', paymentDescription: '$12,000 payroll', paymentAmount: 12_000, walletBalance: 2_000 },
+    { type: 'decline', requestId: 'txn_bloom_payroll_001', customerKey: 'bloom', day: 0, time: '9:02', paymentDescription: '$9,000 supplier', paymentAmount: 9_000, walletBalance: 2_000 },
     { type: 'decline', requestId: 'txn_atlas_supplier_001', customerKey: 'atlas', day: 0, time: '9:05', paymentDescription: '$6,500 supplier', paymentAmount: 6_500, walletBalance: 1_500 },
     { type: 'decline', requestId: 'txn_nova_contractor_001', customerKey: 'nova', day: 0, time: '9:11', paymentDescription: '$7,000 contractor', paymentAmount: 7_000, walletBalance: 1_000 },
     { type: 'decline', requestId: 'txn_pixel_ads_001', customerKey: 'pixel', day: 0, time: '9:14', paymentDescription: '$2,500 ad spend', paymentAmount: 2_500, walletBalance: 500 },
@@ -63,16 +67,19 @@ const kit5Target: ScenarioInputs = {
     {
       id: 'acct_juniper001',
       key: 'juniper',
+      salesforceSnapshotCustomerId: 'acct_juniper001',
       name: 'Juniper Labs',
       monthlyInflow: 30_000,
       signals: { ...CUSTOMERS.nova.signals },
       historyDays: 240,
+      fullyRepaidOnTimeBridges: 3,
       noGo: NO_GO,
       rationale: 'Same profile shape as Nova: two yellows on concentration and cash buffer',
+      policyReadiness: SYNTHETIC_READY,
     },
   ],
   events: [
-    { type: 'decline', requestId: 'txn_bloom_supplier_001', customerKey: 'bloom', day: 0, time: '9:02', paymentDescription: '$12,000 supplier', paymentAmount: 12_000, walletBalance: 2_000 },
+    { type: 'decline', requestId: 'txn_bloom_supplier_001', customerKey: 'bloom', day: 0, time: '9:02', paymentDescription: '$9,000 supplier', paymentAmount: 9_000, walletBalance: 2_000 },
     { type: 'decline', requestId: 'txn_atlas_supplier_001', customerKey: 'atlas', day: 0, time: '9:05', paymentDescription: '$6,500 supplier', paymentAmount: 6_500, walletBalance: 1_500 },
     { type: 'decline', requestId: 'txn_nova_contractor_001', customerKey: 'nova', day: 0, time: '9:11', paymentDescription: '$7,000 contractor', paymentAmount: 7_000, walletBalance: 1_000 },
     { type: 'decline', requestId: 'txn_pixel_ads_001', customerKey: 'pixel', day: 0, time: '9:13', paymentDescription: '$2,500 ad spend', paymentAmount: 2_500, walletBalance: 500 },
@@ -86,12 +93,15 @@ function twin(key: string, id: string, name: string, monthlyInflow: number): Sce
   return {
     id,
     key,
+    salesforceSnapshotCustomerId: id,
     name,
     monthlyInflow,
     signals: { ...ALL_GREEN },
     historyDays: 400,
+    fullyRepaidOnTimeBridges: 3,
     noGo: NO_GO,
     rationale: 'All four signals green, repaid every past bridge on time',
+    policyReadiness: SYNTHETIC_READY,
   };
 }
 
@@ -137,6 +147,11 @@ export const SCENARIOS: Scenario[] = [
     name: 'Kit 5 target',
     summary: 'Five declines, $27K of shortfalls against $15K deployable. Juniper sends the same request as Nova, arrives later and is refused at the floor.',
     inputs: kit5Target,
+    providerCheckpoint: {
+      provider: 'airwallex',
+      eventRequestId: 'txn_bloom_supplier_001',
+      customerKey: 'bloom',
+    },
   },
   {
     id: 'first-come',

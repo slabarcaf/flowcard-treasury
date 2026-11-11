@@ -1,0 +1,24 @@
+{
+  "accountId": "acct_sandbox_test001",
+  "data": {
+    "accountDetails": {
+      "businessDetails": {
+        "businessName": "Acme Innovations LLC"
+      }
+    },
+    "requirements": {
+      "action_required_type": "additional_information_required",
+      "rfi_details": {
+        "questions": [
+          {
+            "id": "q_001",
+            "text": "Please provide additional clarification regarding expected monthly cross-border transactions volume."
+          }
+        ]
+      }
+    },
+    "status": "ACTION_REQUIRED"
+  },
+  "id": "evt_sandbox_actreq001",
+  "name": "account.action_required"
+}
