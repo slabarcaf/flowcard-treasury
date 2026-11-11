@@ -1,140 +1,132 @@
-/** Every bridge this customer has had, running first. */
+/** Bridges: what is running, planning a new one, and every past bridge. */
+import { useState } from 'react';
 import { applyDelinquency } from '../../policy/delinquency.js';
-import { color, font, space, stageToneFor } from '../tokens.js';
-import { usd, shortDate, titleCase } from '../../ui/format.js';
-import type { Bridge, PastBridge } from '../../types.js';
-import type { Portal } from '../usePortal.js';
-import { Card, ListRow, Pill, SectionTitle } from '../components/ui.js';
-
-const OUTCOME_LABEL: Record<PastBridge['outcome'], string> = {
-  ON_TIME: 'Repaid on time',
-  LATE: 'Repaid late',
-  DEFAULTED: 'Went to collections',
-  OPEN: 'Running',
-};
-
-const OUTCOME_TONE: Record<PastBridge['outcome'], 'positive' | 'warning' | 'critical' | 'neutral'> = {
-  ON_TIME: 'positive',
-  LATE: 'warning',
-  DEFAULTED: 'critical',
-  OPEN: 'neutral',
-};
-
-function outstandingOf(bridge: Bridge, today: string): number {
-  const stage = applyDelinquency(bridge, today);
-  return bridge.principal_outstanding + bridge.fee_outstanding + stage.accrued_fee;
-}
+import { backingReceivable, forecastBalance } from '../../policy/forecast.js';
+import { preApproved } from '../../policy/preApproved.js';
+import { priceOffer } from '../../policy/pricing.js';
+import { amountDue } from '../../policy/repayment.js';
+import { addDays } from '../../policy/util.js';
+import { color, font, space } from '../tokens.js';
+import { usd, shortDate } from '../../ui/format.js';
+import { openBridges, type Portal } from '../usePortal.js';
+import { OUTCOME_COPY, PURPOSES, restrictionSentence } from '../copy.js';
+import { ListRow, Pill, Row } from '../components/ui.js';
+import { TermPicker } from '../components/TermPicker.js';
+import { Banner, Chips, PageHeader, Panel, SmallButton } from '../components/layout.js';
+import { inputStyle } from '../components/styles.js';
 
 export function BridgesScreen({ portal }: { portal: Portal }) {
-  const { data, customer, today, go } = portal;
-  if (data === null || customer === null) return null;
+  const { data, customer, today, go, wallet, myBridges, access, raiseRequest } = portal;
+  const pa = data === null || customer === null ? null : preApproved(customer, data.capital, today);
+  const suggested = (() => {
+    if (data === null || customer === null || pa === null || pa.amount === 0) return 1_000;
+    const f = forecastBalance(customer, wallet, data.transactions, today);
+    const need = f.crossing === null ? 1_000 : Math.ceil((f.low_line - f.lowest.balance) / 100) * 100;
+    return Math.max(100, Math.min(Math.floor(pa.amount / 100) * 100, need));
+  })();
+  const [amount, setAmount] = useState(suggested);
+  const [term, setTerm] = useState(30);
+  const [category, setCategory] = useState('suppliers');
+  if (data === null || customer === null || pa === null) return null;
 
-  // Running bridges come from the live records; the closed ones come from the
-  // customer's own history, which reaches further back than this demo's ledger.
-  const running = data.bridges
-    .filter((b) => b.customer_id === customer.id && b.status !== 'REPAID')
-    .sort((a, b) => (b.disbursed_at ?? '').localeCompare(a.disbursed_at ?? ''));
-
-  const closed = customer.bridge_history
-    .filter((b) => b.closed_at !== null)
-    .sort((a, b) => (b.closed_at ?? '').localeCompare(a.closed_at ?? ''));
-
-  const count = running.length + closed.length;
-  const covered = running.reduce((s, b) => s + b.principal, 0)
-    + closed.reduce((s, b) => s + b.amount, 0);
-
-  if (count === 0) {
-    return (
-      <Card>
-        <div style={{ display: 'grid', gap: space.sm }}>
-          <span style={{ fontSize: font.size.lg, fontWeight: font.weight.medium }}>
-            No bridges yet
-          </span>
-          <span style={{ fontSize: font.size.md, color: color.textSecondary, lineHeight: 1.6 }}>
-            If a card payment is ever short, we can cover it here and collect it back from your
-            next deposits.
-          </span>
-        </div>
-      </Card>
-    );
-  }
+  const open = openBridges(myBridges);
+  const past = customer.bridge_history.filter((h) => h.outcome !== 'OPEN').sort((a, b) => (b.closed_at ?? '').localeCompare(a.closed_at ?? ''));
+  const valid = amount >= 100 && amount <= pa.amount;
+  const price = priceOffer(Math.max(0, amount), term);
+  const backing = backingReceivable(customer, term, today);
+  const restriction = restrictionSentence(access);
 
   return (
-    <div style={{ display: 'grid', gap: space['2xl'] }}>
-      {running.map((bridge) => {
-        const stage = applyDelinquency(bridge, today);
-        const pastDue = stage.days_past_due > 0;
+    <>
+      <PageHeader title="Bridges" sub="Short-term funding when a card payment or a bill would otherwise fail." />
+
+      {open.map((b) => {
+        const late = applyDelinquency(b, today).days_past_due;
         return (
-          <button
-            key={bridge.id}
-            type="button"
-            onClick={() => go({ screen: 'bridge', bridgeId: bridge.id })}
-            style={{
-              textAlign: 'left',
-              width: '100%',
-              background: pastDue ? color.criticalSubtle : color.surface,
-              border: 'none',
-              borderRadius: '16px',
-              padding: space['2xl'],
-              display: 'grid',
-              gap: space.md,
-              cursor: 'pointer',
-              fontFamily: font.sans,
-            }}
+          <Panel
+            key={b.id}
+            title={`Bridge ${usd(b.principal)}`}
+            meta={late > 0 ? <Pill tone="critical">Overdue by {late} days</Pill> : <Pill tone="accent">Repaying · due {shortDate(b.due_date)}</Pill>}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space.lg }}>
-              <span style={{ fontSize: font.size.md, color: color.textSecondary }}>
-                {usd(bridge.principal)} over {bridge.term_days} days
-              </span>
-              <Pill tone={stageToneFor(stage.status)}>{titleCase(stage.status)}</Pill>
+            <Row label="Amount due" value={usd(amountDue(b, today), { cents: true })} strong />
+            <Row label="Fee" value={usd(b.fee, { cents: true })} />
+            {late === 0 && <Row label="Due" value={shortDate(b.due_date)} />}
+            {late > 0 && restriction !== null && (
+              <p style={{ margin: `${space.lg} 0 0`, fontSize: font.size.md, color: color.textSecondary }}>{restriction}</p>
+            )}
+            <div style={{ display: 'flex', gap: space.md, marginTop: space.xl, flexWrap: 'wrap' }}>
+              <SmallButton variant="primary" onClick={() => go({ screen: 'bridge', bridgeId: b.id })}>{late > 0 ? 'Repay now' : 'Repay early'}</SmallButton>
             </div>
-            <span
-              style={{
-                fontSize: font.size['2xl'],
-                fontWeight: font.weight.semibold,
-                color: color.text,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              {usd(outstandingOf(bridge, today), { cents: true })}
-            </span>
-            <span style={{ fontSize: font.size.md, color: color.textSecondary }}>
-              {pastDue
-                ? `${stage.days_past_due} days past due`
-                : `Still to collect · due ${shortDate(bridge.due_date)}`}
-            </span>
-          </button>
+          </Panel>
         );
       })}
 
-      {closed.length > 0 && (
-        <Card>
-          <div style={{ display: 'grid', gap: space.md }}>
-            <SectionTitle>Past bridges</SectionTitle>
-            <div style={{ display: 'grid' }}>
-              {closed.map((bridge, i) => (
-                <ListRow
-                  key={bridge.id}
-                  first={i === 0}
-                  title={`${usd(bridge.amount)} over ${bridge.term_days} days`}
-                  subtitle={`${OUTCOME_LABEL[bridge.outcome]} · ${shortDate(bridge.closed_at ?? bridge.opened_at)}`}
-                  amount={`${bridge.days_outstanding} days`}
-                  tone={OUTCOME_TONE[bridge.outcome]}
-                />
-              ))}
+      {pa.amount > 0 ? (
+        <Panel title="Plan a bridge" meta={`Up to ${usd(pa.amount)}`}>
+          <div className="bcp-g2">
+            <label style={{ display: 'grid', gap: space.sm }}>
+              <span style={{ fontSize: font.size.md, color: color.textSecondary }}>Amount (USD)</span>
+              <input
+                type="number"
+                min={100}
+                step={100}
+                value={amount}
+                onChange={(e) => setAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
+                style={inputStyle}
+              />
+            </label>
+            <div style={{ display: 'grid', gap: space.sm }}>
+              <span style={{ fontSize: font.size.md, color: color.textSecondary }}>What it is for</span>
+              <Chips
+                options={PURPOSES.map((p) => p.category)}
+                value={category}
+                onChange={setCategory}
+                label={(c) => PURPOSES.find((p) => p.category === c)?.label ?? c}
+              />
             </div>
           </div>
-        </Card>
+          <div style={{ display: 'grid', gap: space.sm, marginTop: space.xl }}>
+            <span style={{ fontSize: font.size.md, color: color.textSecondary }}>How long you need</span>
+            <TermPicker value={term} onChange={setTerm} />
+          </div>
+          <div style={{ marginTop: space.xl }}>
+            <Row label="Fee ($50 + 2% a month)" value={usd(price.fee, { cents: true })} />
+            <Row label="You repay" value={usd(price.total, { cents: true })} strong />
+            <Row label="Repay by" value={shortDate(addDays(today, term))} />
+          </div>
+          <p style={{ margin: `${space.lg} 0 0`, fontSize: font.size.sm, color: backing === null ? color.warning : color.textMuted }}>
+            {backing === null
+              ? 'No expected deposit arrives within this term. Choose a longer term.'
+              : `Expected to be repaid from ${backing.payer_name} (${usd(backing.amount)}, usually arrives ${shortDate(backing.expected_date)}).`}
+          </p>
+          <div style={{ display: 'flex', gap: space.md, alignItems: 'center', marginTop: space.xl, flexWrap: 'wrap' }}>
+            <SmallButton variant="primary" disabled={!valid} onClick={() => void raiseRequest('PLANNED', { amount, termDays: term, category })}>
+              See my offer
+            </SmallButton>
+            {!valid && <span style={{ fontSize: font.size.sm, color: color.textMuted }}>Enter between $100 and {usd(pa.amount)}.</span>}
+          </div>
+        </Panel>
+      ) : (
+        <Banner title="New bridges aren’t available right now">{pa.reason}</Banner>
       )}
 
-      <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: space.lg, fontSize: font.size.md }}>
-          <span style={{ color: color.textSecondary }}>
-            {count} {count === 1 ? 'bridge' : 'bridges'} all time
-          </span>
-          <span style={{ color: color.text }}>{usd(covered)} covered</span>
-        </div>
-      </Card>
-    </div>
+      <Panel title="Past bridges" meta={past.length}>
+        {past.length === 0 ? (
+          <span style={{ fontSize: font.size.md, color: color.textMuted }}>No past bridges yet.</span>
+        ) : (
+          past.map((h, i) => (
+            <ListRow
+              key={h.id}
+              first={i === 0}
+              title={`${usd(h.amount)} · ${h.term_days} days`}
+              subtitle={`${shortDate(h.opened_at)} – ${h.closed_at === null ? 'open' : shortDate(h.closed_at)}`}
+              amount={OUTCOME_COPY[h.outcome].label}
+              tone={OUTCOME_COPY[h.outcome].tone}
+              onClick={() => go({ screen: 'pastBridge', pastBridgeId: h.id })}
+            />
+          ))
+        )}
+      </Panel>
+    </>
   );
 }

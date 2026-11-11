@@ -10,11 +10,14 @@ import {
   AS_OF,
   MockAdapter,
   addDays,
+  amountDue,
+  applyRepayment,
   cardAccess,
   computeTier,
   earlyWarnings,
   expectedArrival,
   forecastBalance,
+  lateFeeOwed,
   portfolio,
   preApproved,
   priceOffer,
@@ -224,5 +227,27 @@ describe('live bridges', () => {
 describe('Flex on bills (§8.3)', () => {
   it('prices like a bridge: $10,000 for 60 days is $450', () => {
     expect(priceOffer(10_000, 60).fee).toBe(450);
+  });
+});
+
+describe('repaying a late bridge', () => {
+  const late: Bridge = {
+    id: 'b', customer_id: 'c', transaction_id: 't', principal: 9_000, fee: 230, term_days: 30,
+    status: 'DELINQUENT', disbursed_at: addDays(AS_OF, -40), due_date: addDays(AS_OF, -10),
+    principal_outstanding: 9_000, fee_outstanding: 230, accrued_fee: 0,
+  };
+
+  it('owes principal, fee and the late fee accrued at 2% a month', () => {
+    // 9,000 x 0.02 x 10/30 = 60
+    expect(lateFeeOwed(late, AS_OF)).toBe(60);
+    expect(amountDue(late, AS_OF)).toBe(9_290);
+  });
+
+  it('never charges the late fee twice across part-payments', () => {
+    const first = applyRepayment(late, 1_000, AS_OF);
+    expect(first.applied).toBe(1_000);
+    expect(amountDue(first.bridge, AS_OF)).toBeCloseTo(8_290, 2);
+    const second = applyRepayment(first.bridge, amountDue(first.bridge, AS_OF), AS_OF);
+    expect(second.fully_repaid).toBe(true);
   });
 });

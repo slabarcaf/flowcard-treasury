@@ -290,6 +290,8 @@ export interface Bridge {
   fee_outstanding: number;
   /** Fee accrued past the due date at the monthly rate (spec §5). */
   accrued_fee: number;
+  /** Late fee already paid. Accrual is recomputed from days past due, so this keeps it from being charged twice. */
+  accrued_paid?: number;
 }
 
 /** A deposit landing in the customer's wallet, used to collect (spec §5). */

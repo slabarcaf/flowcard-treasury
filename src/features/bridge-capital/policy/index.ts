@@ -40,3 +40,4 @@ export { cardAccess } from './cardAccess.js';
 export type { CardAccess, CardAccessState } from './cardAccess.js';
 export { portfolio } from './portfolio.js';
 export type { Portfolio, DpdBucket } from './portfolio.js';
+export { amountDue, lateFeeOwed, applyRepayment } from './repayment.js';
