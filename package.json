@@ -14,7 +14,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "bridge:stats": "vitest run tests/features/bridge-capital/customerStats.report.test.ts --reporter=verbose"
+    "bridge:stats": "vitest run tests/features/bridge-capital/customerStats.report.test.ts --reporter=verbose",
     "test:acceptance": "node scripts/run-policy-acceptance.mjs"
   },
   "dependencies": {
