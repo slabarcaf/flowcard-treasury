@@ -2,23 +2,27 @@
 
 ## Overview
 
-This review document certifies offline static analysis of the Terraform
-foundation infrastructure plan for the FlowCard demonstration environment.
+This document preserves the historical offline static review of the Terraform
+foundation for the FlowCard demonstration environment. It does not certify
+current AWS state, authorize a change, or establish deployment acceptance.
 
 ## Governance and Boundaries
 
-1. **Static Analysis Only**: No live AWS `terraform plan` or API calls were
-   executed. This review certifies configuration syntax, resource topology,
-   and least-privilege security properties entirely offline.
-2. **Explicit Hold**: Cloud provisioning remains held pending explicit
-   authorized operator execution.
-3. **Unapplied Proposals**: Proposed onboarding integration variables remain
-   strictly unapplied (`enable_proposed_onboarding_integration = false`).
+1. **Historical static analysis**: No live AWS `terraform plan` or API calls
+   were executed for this review. Its findings cover configuration syntax,
+   resource topology, and least-privilege properties only.
+2. **No live authorization**: This review is not an approval to provision,
+   deploy, or modify cloud resources.
+3. **Historical proposal state**: This review recorded
+   `enable_proposed_onboarding_integration = false`. Later approval and the
+   November 12 operator checkpoint report the integration enabled and values
+   provisioned. This document does not independently verify that live state.
 
 ## Certified Configuration Outputs
 
-The foundation topology produces the following trusted release outputs
-documented in `foundation-outputs.example.json`:
+The historical review used the following representative values from
+`foundation-outputs.example.json`. They are examples, not live resource IDs or
+deployment inputs:
 - ECS Cluster:
   `arn:aws:ecs:us-west-2:123456789012:cluster/flowcard-demo-cluster`
 - Private Subnets: `subnet-0123456789abcdef0`, `subnet-0123456789abcdef1`
@@ -27,20 +31,17 @@ documented in `foundation-outputs.example.json`:
 - S3 Bucket: `flowcard-demo-frontend-assets`
 - CloudFront Distribution: `E1234567890ABC`
 
-## Release Artifact Evidence
+## Current Tracked Configuration
 
-The workflow accepts foundation outputs only from the tracked path
-`infra/environments/demo/foundation-outputs.json`, with a required SHA-256
-matching the submitted file. The artifact identifies an ancestor commit
-containing the reviewed foundation plan and carries the canonical SHA-256 of its
-foundation outputs, excluding the approval evidence object. The workflow
-verifies the ancestor relationship, plan digest, full artifact digest, and a
-usable pull request reference. This avoids embedding the deployment commit SHA
-in the commit that contains the artifact. Runtime configuration approval
-remains false unless the artifact contains a named approver, approval reference,
-and approval time.
+The workflow reads the real, non-secret resource references from the tracked
+`infra/environments/demo/foundation-outputs.json` file in the pinned commit.
+It validates the account, region, and resource fields against the existing
+repository variables before OIDC. Dispatch requires no uploaded output,
+manually supplied checksum, ancestor commit, pull request, or reviewer-evidence
+object. Artifact checksums still protect build files transferred between
+workflow jobs.
 
-The repository has no GitHub environment protection gate. The workflow accepts
-privileged execution only from a manual dispatch on the exact `develop` ref,
-with explicit dispatch confirmation. The AWS trust policy independently
-requires the repository's immutable OIDC subject for that branch.
+The repository has no GitHub environment protection gate. A no-input manual
+dispatch from `develop` starts the workflow; repository and branch checks and
+the immutable OIDC subject remain enforced. The first live run of the
+simplified workflow is still pending.

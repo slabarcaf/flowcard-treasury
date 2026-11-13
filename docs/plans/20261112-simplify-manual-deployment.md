@@ -41,6 +41,11 @@ the normal workflow. It preserves the develop and repository restrictions,
 artifact checksums, migrations, service health checks, and fixed frontend
 publication paths. Task 3 now records commit/run/attempt identity, derives
 safe run-specific artifact and image tags, and deploys by exact image digests.
+The provenance check requires build and deploy artifacts from the same attempt;
+failed-jobs-only retries must use **Re-run all jobs**. Task 4 was independently
+accepted offline. Its latest strict full-suite run remains blocked by the
+unavailable local PostgreSQL test database and one resulting onboarding E2E
+failure; this does not count as a green full-suite result.
 
 `infra/scripts/deploy-demo.sh` consumes infrastructure references, registers
 task definitions, runs migrations, and updates services. The frontend script
@@ -175,19 +180,19 @@ digests and artifact-integrity checks.
 
 - Review `.github/workflows/aws-demo.yml`, affected scripts, and existing tests.
 
-- [ ] Verify there are no manual inputs, obsolete `inputs.*` references,
+- [x] Verify there are no manual inputs, obsolete `inputs.*` references,
       foundation-evidence prerequisites, or normal-flow rollback prerequisites.
-- [ ] Verify `develop` remains the permitted run ref and the immutable OIDC
+- [x] Verify `develop` remains the permitted run ref and the immutable OIDC
       subject stays unchanged. No AWS permissions expansion is expected.
-- [ ] Run frontend/server builds, affected workflow/deployment/frontend tests,
+- [x] Run frontend/server builds, affected workflow/deployment/frontend tests,
       offline safety checks, infrastructure validation, and staged diff checks.
-- [ ] Use the existing strict Node baseline comparator if the full suite is
+- [x] Use the existing strict Node baseline comparator if the full suite is
       run; report unexpected failures separately from its documented baseline.
       Keep fixture tests independent of live AWS and Airwallex.
-- [ ] Report the known vendored Swagger lint findings separately. If they
+- [x] Report the known vendored Swagger lint findings separately. If they
       block the first CI run, address them with a narrowly scoped generated-file
       exclusion; do not suppress application-source lint failures.
-- [ ] Independently review the final diff and confirm at most three new test
+- [x] Independently review the final diff and confirm at most three new test
       cases were added. Add no further coverage without Ramil's agreement.
 
 ### Task 5: Update deployment instructions and acceptance status
@@ -197,37 +202,44 @@ digests and artifact-integrity checks.
 - Modify `docs/infra/ci-cd-runbook.md`, `docs/infra/demo-operations.md`,
   `docs/infra/demo-acceptance.md`, and `docs/infra/github-oidc.md`.
 - Modify `docs/infra/services-and-migrations.md`,
+  `docs/infra/account-access.md`,
   `infra/environments/demo/foundation-plan-review.md`, and this plan where
   needed to remove active instructions for superseded gates.
 
-- [ ] Document the no-input release: select `develop`, run, monitor checks,
+- [x] Document the no-input release: select `develop`, run, monitor checks,
       and inspect the automatically generated release record.
-- [ ] Explain tracked deployment configuration, existing repository variables,
+- [x] Explain tracked deployment configuration, existing repository variables,
       AWS-managed secrets, and when infrastructure references need updating.
-- [ ] Remove active manual-field and automatic rollback instructions. Preserve
+- [x] Remove active manual-field and automatic rollback instructions. Preserve
       historical evidence and describe partial-failure recovery accurately.
-- [ ] Document retained old frontend assets and the distinction between a
+- [x] Document retained old frontend assets and the distinction between a
       healthy deployment and unresolved platform onboarding acceptance.
-- [ ] Check updated Markdown and local links. Leave this plan open until the
-      one-time configuration capture and first live workflow are verified;
+- [x] Check updated Markdown and local links. Leave this plan open until the
+      outstanding local database baseline check and first live workflow are
+      verified;
       move it to `docs/plans/completed/` only after that evidence exists.
 
 ## Post-completion and first live run
 
-One-time configuration capture uses authorized read-only Terraform outputs or
-AWS resource descriptions in account `968198283143`, region `us-west-2`.
-Select only the needed references; do not export raw state or secret payloads.
-If credentials have expired, complete the required login approval first.
-Review the resulting real JSON and commit it before attempting deployment.
+Task 1 completed the one-time read-only configuration capture from Terraform
+outputs and AWS resource descriptions in account `968198283143`, region
+`us-west-2`. The resulting non-secret references are tracked in
+`infra/environments/demo/foundation-outputs.json`; no raw state or secret
+payloads were exported. Update that file only when reviewed infrastructure
+changes replace a referenced resource.
 
 Publish the reviewed workflow changes to `develop` and the workflow entry on
 default branch `main`. Keep the implementation on the intended run ref and do
 not change the repository's default branch or OIDC trust as part of this plan.
 
-The first manual workflow run uses `develop` and no input fields. Observe tests
-and builds, OIDC authentication, migrations, service rollout, frontend upload,
-and invalidation. An execution failure should retain diagnostic metadata and
-report the failed phase. It must not automatically roll back the database or
+The first manual workflow run uses `develop` and no input fields. It remains
+outstanding. Before treating the full Node baseline as clear, rerun the strict
+comparator with the required local PostgreSQL test database available; report
+the 23 documented failures separately and do not claim a green suite while any
+unexpected failure remains. On the first workflow run, observe tests and builds,
+OIDC authentication, migrations, service rollout, frontend upload, and
+invalidation. A failure must retain diagnostic metadata and identify the last
+completed phase. The workflow does not automatically roll back the database or
 claim recovery. Recording a commit SHA alone does not restore database state.
 
 After a successful run, verify the shared HTTPS frontend, operator login,
@@ -235,6 +247,7 @@ company CRUD, Swagger, and service health. Record actual run URL, commit,
 release identity, digests, and results. Submission/RFI/provider acceptance stays
 subject to its existing separate application gates.
 
-Publishing changes, capturing live configuration, and running this first
-deployment are subsequent execution steps. This planning turn performs none
-of them.
+The tracked configuration capture is complete. Publishing the reviewed workflow
+changes and running its first live workflow are subsequent execution steps.
+This documentation task performs neither and does not establish deployment
+acceptance.
