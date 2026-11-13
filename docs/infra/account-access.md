@@ -175,10 +175,15 @@ rather than using shared credentials:
      exchange without stored long-lived access keys.
    - Trust policy constraints:
      - `token.actions.githubusercontent.com:aud`: `sts.amazonaws.com`
-     - `token.actions.githubusercontent.com:sub`:
-       `repo:slabarcaf@207892885/flowcard-treasury@1427370701:ref:refs/heads/develop`
-   - The workflow also requires manual dispatch, explicit confirmation, and
-     the exact repository and `develop` ref.
+     - The `token.actions.githubusercontent.com:sub` claim matches this exact
+       subject:
+
+       ```text
+       repo:slabarcaf@207892885/flowcard-treasury@1427370701:ref:refs/heads/develop
+       ```
+   - The workflow uses no-input manual dispatch from the exact repository and
+     `develop` ref. Dispatching starts the release; the workflow validates the
+     tracked target configuration and artifact provenance before OIDC.
    - Permissions: Scoped to ECS task definition registration, service updates,
      ECR image push, S3 frontend sync, and CloudFront cache invalidation.
 3. **ECS Task Execution Role** (`FlowCardTaskExecutionRole`):
@@ -207,14 +212,14 @@ rather than using shared credentials:
 
 ## GitHub Actions deployment authorization
 
-The deployment workflow uses manual `workflow_dispatch` from the exact
-`develop` ref, requires the explicit `confirm_approval` boolean, and enables
-`id-token: write` only on the privileged deploy job. AWS independently restricts
-the OIDC role to the repository's immutable owner/repository IDs and the exact
-`develop` branch subject. Foundation review, runtime approval, and release
-provenance checks remain in the workflow. GitHub environment protection and
-environment secrets are not used; application credentials remain in AWS
-Secrets Manager.
+The deployment workflow uses a no-input manual `workflow_dispatch` from the
+exact `develop` ref; dispatch starts the release. It enables `id-token: write`
+only on the privileged deploy job. AWS independently restricts the OIDC role
+to the repository's immutable owner/repository IDs and the exact `develop`
+branch subject. The workflow validates the tracked foundation targets against
+repository variables and verifies release provenance before OIDC. GitHub
+environment protection and environment secrets are not used; application
+credentials remain in AWS Secrets Manager.
 
 ## Account access setup checklist
 

@@ -56,7 +56,11 @@ within private subnets across two Availability Zones in `us-west-2`:
    - Outbound Connectivity: Outbound HTTPS 443 via managed NAT Gateway for
      Airwallex sandbox API communication.
 
-## Initial infrastructure creation sequencing and pre-registration plan
+## Original infrastructure creation and pre-registration plan
+
+This sequence records the original first-deploy plan. The November 12 operator
+checkpoint reports all three services started; verify current state before
+planning or applying further infrastructure changes.
 
 To prevent broken container deployments before container images exist in ECR or
 secrets are populated, the deployment follows a deterministic 4-stage lifecycle:
@@ -87,10 +91,12 @@ secrets are populated, the deployment follows a deterministic 4-stage lifecycle:
    - Provisions the ECS services with `desired_count = 0` attached to the ALB
      target group and Cloud Map DNS without triggering early container launch.
 
-4. **Stage 4 (Executable Deployment Automation via `deploy-demo.sh`)**:
-   - The approved GitHub release workflow invokes `deploy-demo.sh` with OIDC;
-     an authorized local operator may use `--profile`. Both require explicit
-     confirmation, the account and region, and immutable image digests.
+4. **Stage 4 (Release workflow via `deploy-demo.sh`)**:
+   - The no-input GitHub workflow runs from `develop` and invokes the scripts
+     with OIDC after repository, target, provenance, and checksum validation.
+     Dispatching the workflow authorizes that release; there is no confirmation
+     form field. Direct local script use remains separate and requires the
+     operator's profile and explicit confirmation flag.
    - Verifies STS caller account and validates outputs (ECR URLs, subnets,
      cluster ARN).
    - Registers new task definition revisions using the exact digests.
@@ -111,8 +117,12 @@ The four approved environment names (`ONBOARDING_SERVICE_URL`,
 by the standard loaders. Demo rollout inputs set
 `enable_proposed_onboarding_integration = true`. The November 12 operator
 checkpoint reports values provisioned and services deployed; this document
-does not independently verify AWS state. Runtime secrets stay outside Git and
-Terraform state.
+does not independently verify AWS state. Store non-secret deployment references
+in `infra/environments/demo/foundation-outputs.json` and keep them aligned with
+the existing repository variables. When Terraform replaces a referenced
+resource, update that tracked file and review the resulting target checks.
+Runtime secret values stay in AWS Secrets Manager, outside Git and Terraform
+state.
 
 ## Database migrations and role separation
 
@@ -227,7 +237,7 @@ and executed via `infra/scripts/seed-synthetic-demo.ts`:
   conflicting row. PostgreSQL regression fixtures run in a transaction and
   roll back all temporary facility rows.
 
-## Deployment automation and rollback runbooks
+## Deployment automation and separate recovery
 
 Scripts in `infra/scripts/` are executable and can mutate AWS resources when
 run with live credentials and explicit confirmation. The following describes
@@ -235,8 +245,15 @@ their contract; it does not authorize or record a live run. See
 [`demo-operations.md`](demo-operations.md) for the current rollout and metadata
 finalization sequence.
 
-1. **Deployment Execution (`infra/scripts/deploy-demo.sh`)**:
-   - Requires explicit human confirmation flag (`--confirm-approval`).
+1. **Normal release (`workflow_dispatch` on `develop`)**:
+   - Has no manual input fields. Dispatching starts validation, build, and
+     deployment; no checkbox or user-supplied rollback data is required.
+   - Reads the fixed tracked `infra/environments/demo/foundation-outputs.json`
+     path and validates it against existing repository variables before OIDC.
+   - Passes a fixed internal `--confirm-approval` argument to
+     `deploy-demo.sh`; this is the script's execution guard, not a workflow
+     approval field. Direct local script use still requires explicit
+     confirmation.
    - Verifies caller AWS Account ID against authorized demo accounts.
    - Validates that image inputs are non-empty, 64-hex SHA-256 digests
      (`^sha256:[a-f0-9]{64}$`), strictly rejecting `:latest` or mutable tags.
@@ -249,42 +266,42 @@ finalization sequence.
    - Awaits ECS service stability (`aws ecs wait services-stable`) and records
      `backend_verified_frontend_pending`; it does not mark the whole release
      successful.
-   - `deploy-frontend.sh` uploads the verified build and waits for the exact
-     CloudFront invalidation to complete. The workflow then runs
-     `finalize-release.sh` to record whole-release success.
+   - `deploy-frontend.sh` publishes existing S3 keys in assets-first,
+     `index.html`-last order, retains older objects, and waits for CloudFront
+     invalidation. The workflow then runs `finalize-release.sh` to record whole-
+     release success.
 
-2. **Rollback Execution (`infra/scripts/rollback-demo.sh`)**:
+2. **Separate manual recovery (`infra/scripts/rollback-release.sh`)**:
    - Reverts ECS service task definitions to designated previous stable
      revisions.
    - Preserves all persisted database records in RDS and all document objects
      in S3.
    - Requires explicit human confirmation flag (`--confirm-approval`).
-   - Note: Application rollbacks restore container revisions; irreversible
-     schema DDL changes require separate manual DBA remediation.
+   - It is not called by the normal workflow. Application recovery does not
+     reverse database migrations; schema remediation requires a separate DBA.
 
-The coupled coordinator uses finalized release metadata and a verified local
-frontend build. The workflow currently does not download artifacts from a prior
-run; see `demo-operations.md` for the retrieval limitation and required
-checksum checks.
+The coordinator requires finalized release metadata and the exact verified
+frontend build. The workflow does not download artifacts from prior runs; see
+`demo-operations.md` for manual recovery prerequisites.
 
-## Pending approval gates and open decisions
+## Runtime status and open platform decisions
 
-In accordance with deployment governance:
+The four names `ONBOARDING_SERVICE_URL`, `ONBOARDING_SERVICE_SECRET`,
+`S3_BUCKET_DOCUMENTS`, and `S3_KMS_KEY_ID` are approved and consumed by the
+standard loaders. The November 12 operator checkpoint reports their values
+provisioned and services deployed; this document does not independently verify
+AWS state. Never store secret payloads in the tracked foundation file.
 
-1. **4 Pending Proposed Environment Variables**:
-   `ONBOARDING_SERVICE_URL`, `ONBOARDING_SERVICE_SECRET`,
-   `S3_BUCKET_DOCUMENTS`, and `S3_KMS_KEY_ID` remain unapplied in standard
-   loaders and ECS task definition environments until human approval is
-   granted by Ramil.
-2. **Deferred Application Policy Gates**:
-   - `POST /api/onboarding-applications/{id}/submit` remains fail-closed with
-     422 `SUBMISSION_CONTRACT_BLOCKED` (revisions policy deferred).
-   - `UnverifiedPlatformContractGate` remains active.
-   - Text-only RFI handling strictly enforced.
-3. **Open Account & Budget Decisions**:
-   - Monthly budget alert amount ($150.00).
-   - RDS PostgreSQL 17.4 minor engine version availability check in `us-west-2`.
-   - Initial container sizing (0.25 vCPU, 0.5 GB RAM) confirmed for demo.
+Platform submission gates remain active:
+
+- `POST /api/onboarding-applications/{id}/submit` remains fail-closed with
+  `422 SUBMISSION_CONTRACT_BLOCKED` until the revision policy is approved.
+- `UnverifiedPlatformContractGate` remains active.
+- Text-only RFI behavior is unresolved and requires confirmation.
+
+The `$150/month` budget amount and notification address remain unapproved. The
+November 12 operator checkpoint reports PostgreSQL `17.11`; verify current
+engine and service sizing before any future infrastructure plan.
 
 ## See also
 

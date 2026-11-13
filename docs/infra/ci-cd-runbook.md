@@ -2,8 +2,8 @@
 
 ## Overview
 
-Run commands from the repository root. This runbook defines the end-to-end
-procedure for executing, monitoring, and rolling back FlowCard AWS demo releases.
+Run commands from the repository root. This runbook explains how to start and
+monitor a FlowCard AWS demo release and how to handle a partial failure.
 
 For current readiness and acceptance status, use
 [`demo-operations.md`](demo-operations.md) and
@@ -12,32 +12,31 @@ release sequencing. `deploy-demo.sh` verifies backend services only;
 `deployed_and_verified` is written after frontend publication and invalidation
 completion.
 
-## Release Governance Boundaries
+## Release Contract
 
-1. **Trigger Mechanism:** Explicit manual activation via `workflow_dispatch`
-   only. Automatic push deployments are strictly disabled.
-2. **Approved Branch & Pinned Commit:** `develop` branch only. All jobs checkout
-   and pin the exact trigger commit (`${{ github.sha }}`) to prevent moving
-   branch race conditions. Releases from other branches fail closed immediately.
-3. **Manual Authorization:** The privileged job requires `confirm_approval`
-   to be true and runs only for a manual dispatch on `refs/heads/develop` in
-   `slabarcaf/flowcard-treasury`.
-4. **OIDC Trust:** AWS requires the repository's immutable owner and repository
-   IDs plus the exact `develop` branch subject. Job-scoped `id-token: write`
-   remains limited to the privileged deployment job.
-5. **Concurrency Serialization:** All releases are serialized using
-   `concurrency: { group: "aws-demo-release", cancel-in-progress: false }`.
-   Releases queue rather than cancel in progress.
-6. **No Secrets in Logs or Manifests:** All secrets remain in AWS Secrets
-   Manager; zero secret plaintext appears in GitHub artifacts, logs, or
-   command-line arguments.
-7. **Runtime Approval:** Ramil approved the four environment names
-   (`ONBOARDING_SERVICE_URL`, `ONBOARDING_SERVICE_SECRET`,
-   `S3_BUCKET_DOCUMENTS`, `S3_KMS_KEY_ID`); standard loaders consume them and
-   demo rollout inputs enable the integration. The November 12 operator
-   checkpoint reports values provisioned and services deployed. Verify current
-   runtime state through approved release evidence; this offline change made
-   no AWS calls.
+- **Manual trigger, no form fields:** `workflow_dispatch` is the only trigger.
+  A dispatch authorizes the release; the workflow has no approval checkbox or
+  other manual inputs. Push and pull-request triggers are disabled.
+- **Repository and branch:** Jobs run only for
+  `slabarcaf/flowcard-treasury` on `develop` and checkout the exact trigger
+  commit (`${{ github.sha }}`).
+- **Target configuration:** The pinned commit supplies
+  `infra/environments/demo/foundation-outputs.json`. Before OIDC, the workflow
+  validates its account, region, and resource references against the existing
+  repository Actions variables.
+- **OIDC trust:** AWS requires the immutable repository IDs and exact
+  `develop` branch subject. `id-token: write` is scoped to the deployment job.
+- **Serialized releases:** `aws-demo-release` concurrency queues releases and
+  does not cancel one already running.
+- **Secrets:** Runtime values stay in AWS Secrets Manager and are resolved by
+  ECS tasks. They do not appear in Git, workflow artifacts, logs, or command
+  arguments.
+- **Runtime configuration:** The four names
+  (`ONBOARDING_SERVICE_URL`, `ONBOARDING_SERVICE_SECRET`,
+  `S3_BUCKET_DOCUMENTS`, `S3_KMS_KEY_ID`) are approved and consumed by the
+  standard loaders. The November 12 operator checkpoint reports provisioning;
+  it is historical operator evidence, not acceptance of this workflow. This
+  documentation update makes no AWS calls.
 
 ---
 
@@ -70,207 +69,93 @@ enforces:
 
 ```mermaid
 flowchart TD
-    Start([Operator triggers workflow_dispatch on develop]) --> InputCheck{confirm_approval == true?}
-    InputCheck -- No --> Abort1[Fail closed: input required]
-    InputCheck -- Yes --> BranchCheck{Branch == develop?}
-    BranchCheck -- No --> Abort2[Fail closed: develop branch only]
-    BranchCheck -- Yes --> Job1[Job 1: Validate, Lint & Test]
-
-    subgraph Job1_Details [Job 1: Unprivileged Quality Gate]
-        L1[npm run lint]
-        B1[npm run build & server:build]
-        O1[OpenAPI freshness: go run ./cmd/openapi -check]
-        G1[go test -v -race against Postgres:54329]
-        T1[Strict baseline test gate: check-test-baseline.js]
-        TF1[terraform fmt -check -recursive & validate]
-        S1[python3 infra/scripts/verify-offline-safety.py]
-    end
-
-    Job1 --> Job1_Details
-    Job1_Details --> Job2[Job 2: Build Artifacts & Manifest]
-
-    subgraph Job2_Details [Job 2: Immutable Artifact Preparation]
-        D1[Verify Docker builds: Node . and Go company-onboarding]
-        F1[npm run build: frontend assets & compute sha256]
-        M1[Generate immutable release-manifest.json]
-        SUM1[Write Step Summary for operator review]
-        UP1[Upload artifacts: frontend-dist, release-manifest]
-    end
-
-    Job2 --> Job2_Details
-    Job2_Details --> Gate{Manual dispatch confirmation and release gates pass?}
-
-    Gate -- No --> Stop[Workflow halted: no deployment executed]
-    Gate -- Yes --> Job3[Job 3: Deploy Demo with OIDC]
-
-    subgraph Job3_Details [Job 3: Privileged Execution]
-        CHK1[Verify commit SHA and frontend checksum against manifest]
-        OIDC1[Assume AWS Deployer Role via OIDC]
-        ECR1[ECR login with aws ecr get-login-password stdin]
-        BLD1[Build & push containers from pinned source]
-        DEP1[Execute deploy-demo.sh --oidc: Migrations -> Seed -> ECS Services]
-        DEP2[Execute deploy-frontend.sh --oidc: S3 sync -> CloudFront invalidation]
-    end
-
-    Job3 --> Job3_Details
-    Job3_Details --> FrontendGate[Wait for CloudFront invalidation]
-    FrontendGate --> Finalize[Finalize Successful Frontend and Backend Release]
-    Finalize --> Success([Release metadata marked deployed_and_verified])
+    Start([Dispatch workflow from develop]) --> Quality[Validate, lint, build, and test]
+    Quality --> Build[Build run-scoped artifacts and release manifest]
+    Build --> Provenance[Verify commit, run attempt, and checksums]
+    Provenance --> Config[Validate tracked targets against repository variables]
+    Config --> OIDC[Assume deploy role through OIDC]
+    OIDC --> Backend[Migrations, seed, ECS rollout, and health checks]
+    Backend --> Assets[Upload hashed assets and public files]
+    Assets --> Html[Publish index.html last]
+    Html --> Invalidate[Wait for CloudFront invalidation]
+    Invalidate --> Finalize[Finalize verified release metadata]
 ```
 
 ---
 
-## Step-by-Step Release Instructions
+## Release Procedure
 
-### Step 1: Triggering the Release
+### Start a release
 
-1. Navigate to the GitHub repository: `slabarcaf/flowcard-treasury`.
-2. Click the **Actions** tab.
-3. Select **AWS Demo Deployment** from the workflow list.
-4. Click **Run workflow**:
-   - **Use workflow from:** Select `develop`.
-   - **Explicit human authorization flag:** Check `confirm_approval` (set to
-     `true`).
-5. Click the green **Run workflow** button.
+1. Open **Actions** in `slabarcaf/flowcard-treasury` and select **AWS Demo
+   Deployment**.
+2. Click **Run workflow** and select `develop` under **Use workflow from**.
+3. Click **Run workflow**. There are no input fields; dispatching the workflow
+   starts the release.
+4. Follow the run page. Validation must pass before the build job publishes
+   run-scoped artifacts and a manifest. The deploy job verifies provenance,
+   checksums, and the tracked foundation configuration against repository
+   variables before requesting OIDC credentials.
 
-### Step 2: Unprivileged Validation & Build Phase
+The build summary and `release-manifest.json` record the commit, run ID, run
+attempt, logical release identity, artifact names, and frontend checksum. The
+deploy job records immutable image digests and task-definition revisions.
+Inspect `.dev/.release-metadata/deployed-release.json` after the workflow
+completes.
 
-The workflow automatically executes two unprivileged jobs:
-1. `validate-and-test`:
-   - Runs linting and TypeScript compilation.
-   - Verifies OpenAPI specification freshness.
-   - Runs Go unit and integration tests against isolated PostgreSQL 54329.
-   - Executes `check-test-baseline.js` against the Vitest suite (verifies zero
-     unexpected failures beyond the 23 documented baseline tests).
-   - Validates OpenTofu / Terraform configurations across all scopes.
-   - Executes `verify-offline-safety.py` to confirm all offline safety
-     invariants hold.
-2. `build-and-metadata`:
-   - Checks out the exact trigger commit (`${{ github.sha }}`).
-   - Verifies container builds for `linux/amd64` architecture (matching AWS
-     Fargate `X86_64`) using faithful build contexts (`.` for Node,
-     `services/company-onboarding` for Go).
-   - Builds the frontend bundle and computes its SHA-256 checksum.
-   - Generates an immutable `release-manifest.json`.
-   - Publishes a markdown Step Summary on the workflow run page.
+### Deployment sequence
 
-### Step 3: Operator Review and Approval Gates
+After the pre-deployment checks, the workflow assumes the scoped deployer role
+through OIDC, pushes the already-built container archives to ECR, and deploys
+by the returned image digests. `deploy-demo.sh` runs Node and Go migrations,
+the idempotent synthetic seed, and the ECS service rollout. It records
+`backend_verified_frontend_pending` only after backend health checks pass.
 
-1. The operator opens the workflow run page.
-2. Review the **FlowCard Demo Release Manifest** in the Step Summary:
-   - Verify the git commit SHA corresponds to the approved `develop` commit.
-   - Verify the frontend bundle checksum.
-   - Verify that `enable_proposed_onboarding_integration` is `false`.
-   - Confirm the foundation artifact checksum, ancestor commit, reviewed
-   content digest, review reference, and runtime configuration approval.
-   Pending values block deployment.
+`deploy-frontend.sh` verifies the target bucket and distribution, then publishes
+to the existing S3 paths in this order:
 
-### Step 4: Privileged Release Execution
+1. Hashed files under `/assets/` with immutable cache headers.
+2. Other public files at their existing root-relative paths.
+3. `index.html` at the fixed root key, last.
 
-Once the foundation, runtime, and provenance gates pass, the `deploy-demo` job
-executes:
-1. Checks out the exact same trigger commit (`${{ github.sha }}`).
-2. Downloads `frontend-dist` and verifies its SHA-256 checksum matches the
-   reviewed manifest checksum before any cloud mutation.
-3. Assumes the scoped deployer IAM role via GitHub OIDC federation.
-4. Logs into Amazon ECR using `aws ecr get-login-password` piping directly to
-   `docker login --username AWS --password-stdin` (zero leaked tokens).
-5. Builds and pushes container images to ECR and resolves immutable `sha256:`
-   digests.
-6. Executes `deploy-demo.sh --oidc`:
-   - Verifies STS caller account matches the authorized 12-digit AWS account ID.
-   - Registers new task definition revisions containing the immutable digests.
-   - Runs Node database migrations and verifies exit code 0.
-   - Runs Go database migrations and verifies exit code 0.
-   - Runs the idempotent synthetic fixture seed task.
-   - Updates the ECS services (`flowcard-demo-go-api`,
-     `flowcard-demo-go-worker`, `flowcard-demo-node-gateway`) and scales
-     `desired_count` to target.
-   - Awaits ECS service stability and verifies running task definitions and
-     container counts.
-7. Executes `deploy-frontend.sh --oidc`:
-   - Verifies S3 bucket ownership and CloudFront distribution ownership + OAC
-     origin.
-   - Uploads immutable assets (`/assets/*`) with `max-age=31536000, immutable`.
-   - Uploads non-hashed public assets with `max-age=86400`.
-   - Uploads `index.html` with `max-age=0, must-revalidate`.
-   - Submits a CloudFront cache invalidation targeting exact changed paths
-     (`/index.html`, `/`, `/vite.svg`, etc., never `/*`).
-   - Waits for the invalidation to complete. A missing invalidation ID or failed
-     waiter leaves release metadata pending.
-8. Finalizes `.dev/.release-metadata/deployed-release.json` only after both backend
-   health checks and frontend invalidation complete. The finalizer checks the
-   account, region, source commit, and frontend checksum before marking the
-   release successful.
+The script retains older S3 objects and invalidates only mutable paths. It waits
+for CloudFront invalidation completion. The finalizer records
+`deployed_and_verified` only after frontend publication, invalidation, backend
+health, target account and region, commit, and checksum verification succeed.
 
----
+### Release identity and retries
 
-## Coordinated Coupled Rollback Runbook
+The logical release identity is `<full-commit-sha>/<run-id>-<run-attempt>`.
+Artifacts and ECR tags use a safe hyphenated form that includes the attempt.
+The provenance check compares build metadata with the current deployment
+attempt. If a failed-jobs-only retry reuses an earlier build, it fails before
+OIDC. Select **Re-run all jobs** to rebuild artifacts and deploy from one
+matching attempt. Separate build and deployment attempt identities are not
+supported.
 
-If a release encounters failures during or after deployment, follow this coupled
-rollback procedure using `infra/scripts/rollback-release.sh`.
+## Partial Failure and Separate Recovery
 
-The workflow does not fetch frontend artifacts from prior runs. Before local
-rollback, download the recovery metadata and `frontend-dist` artifacts from the
-specific successful run, verify the run attempt and checksum, and use the local
-frontend directory. Do not proceed when either artifact is missing or expired.
+The workflow does not automatically roll back a release. Inspect the last
+completed phase and recovery metadata. A backend-verified release with a
+pending frontend is not a successful release. A failed phase may leave backend
+services and frontend content at different revisions; preserve the manifest,
+logs, database, and S3 data, then stop for operator assessment. Database
+migrations are never automatically reversed.
 
-### Automatic Rollback Boundary
-
-- Database migrations are **NEVER automatically reversed or downgraded**.
-  Reversing database migrations automatically risks data loss or schema
-  corruption.
-- Persistent storage in PostgreSQL (RDS) and document uploads in S3 are strictly
-  preserved.
-
-### Coordinated Rollback Execution
-
-The coordinator script `infra/scripts/rollback-release.sh` executes a coherent,
-two-phase coupled rollback:
-
-1. **Phase 1 (Backend ECS Services):** Reverts ECS services to exact
-   previous task definition revisions via `rollback-demo.sh`. Verifies all 3
-   services reach steady state at previous revisions.
-2. **Phase 2 (Frontend Static Assets):** Redeploys the previous verified
-   frontend build directory via `deploy-frontend.sh` and waits for CloudFront
-   invalidation completion.
-3. **Coupled Verification:** Both phases must succeed; if either fails, reports
-   a critical diagnostic without falsely claiming "all restored".
-
-The workflow currently uploads `frontend-dist` for 14 days and
-`release-recovery-metadata` for 90 days. The release metadata records the
-workflow run and attempt as the frontend artifact identity. The workflow does
-not download artifacts from an earlier run; its dispatch path inputs do not
-retrieve cross-run files. For local recovery, identify the successful run,
-download its `frontend-dist` and `release-recovery-metadata` artifacts, compare
-the build checksum to the successful manifest, then pass those local paths to
-`rollback-release.sh`. Keep this recovery manual until cross-run artifact
-retrieval is implemented and reviewed.
-
-```bash
-# From an authorized local operator session after downloading and verifying
-# the prior successful run's recovery metadata and frontend artifact:
-infra/scripts/rollback-release.sh \
-  --profile "<approved-profile>" \
-  --confirm-approval \
-  --account-id "<12-DIGIT-ACCOUNT-ID>" \
-  --region "us-west-2" \
-  --manifest "<RECOVERY_DIR>/deployed-release.json" \
-  --frontend-build-dir "<FRONTEND_DIR>"
-
-# Or specifying explicit revisions and frontend build:
-infra/scripts/rollback-release.sh \
-  --profile "<approved-profile>" \
-  --confirm-approval \
-  --account-id "<12-DIGIT-ACCOUNT-ID>" \
-  --region "us-west-2" \
-  --node-revision "<PREVIOUS_NODE_REVISION>" \
-  --api-revision "<PREVIOUS_API_REVISION>" \
-  --worker-revision "<PREVIOUS_WORKER_REVISION>" \
-  --frontend-build-dir "/path/to/previous/dist" \
-  --bucket "<FRONTEND_BUCKET_NAME>" \
-  --distribution-id "<CLOUDFRONT_DISTRIBUTION_ID>"
-```
+The workflow does not download artifacts from earlier runs. A separately
+authorized operator considering manual recovery must select a known successful
+run and attempt, download its recovery metadata and frontend artifact, and
+verify the commit, identity, and frontend checksum before using the standalone
+`infra/scripts/rollback-release.sh`. Its `--manifest` option reads the legacy
+`.previous_release.*` layout; a current workflow manifest has no
+`previous_release` object and cannot be passed directly. For current metadata,
+review the `.services` revisions and `.frontend` checksum, bucket, and
+distribution, then supply those explicit targets with the existing CLI flags
+and the matching downloaded build. See `demo-operations.md` for the mapping.
+The frontend artifact is retained for 14 days, the build manifest for 30 days,
+and recovery metadata for 90 days. Missing or mismatched files are a stop
+condition. Manual recovery is outside normal release dispatch; the workflow has
+no previous-release inputs.
 
 ### ECS desired_count Ownership & Terraform Drift
 

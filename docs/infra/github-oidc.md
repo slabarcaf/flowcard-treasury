@@ -20,11 +20,11 @@ sequenceDiagram
     participant IAM as AWS IAM (Role: GitHubDeployer)
     participant AWS as AWS Resources (ECR, ECS, S3, CloudFront)
 
-    Note over GHA: workflow_dispatch triggered on develop
-    GHA->>GHA: Run lint, build, Go tests against Postgres:54329, baseline gate
-    GHA->>GHA: Verify linux/amd64 Docker builds & frontend dist
-    GHA->>GHA: Generate immutable release-manifest.json & Step Summary
-    Operator->>GHA: Manually dispatch from develop with confirm_approval
+    Operator->>GHA: Dispatch workflow from develop (no input fields)
+    GHA->>GHA: Run validation and build run-scoped artifacts
+    GHA->>GHA: Build containers and frontend in unprivileged job
+    GHA->>GHA: Verify commit, run attempt, and artifact checksums
+    GHA->>GHA: Validate tracked foundation file against repository variables
     GHA->>OIDC: Request OIDC JWT (aud: sts.amazonaws.com)
     OIDC-->>GHA: Signed JWT with immutable repository and branch subject
     GHA->>STS: AssumeRoleWithWebIdentity(RoleArn, JWT)
@@ -32,7 +32,7 @@ sequenceDiagram
     IAM-->>STS: Trust verified for exact immutable develop subject
     STS-->>GHA: Temporary STS credentials (1-hour session)
     GHA->>AWS: ECR login via aws ecr get-login-password stdin
-    GHA->>AWS: Build & push containers from pinned commit SHA
+    GHA->>AWS: Load verified archives, push to ECR, record image digests
     GHA->>AWS: Execute deploy-demo.sh --oidc (Migrations -> Seed -> ECS update)
     GHA->>AWS: Execute deploy-frontend.sh --oidc (S3 sync -> CloudFront invalidation)
 ```
@@ -83,8 +83,9 @@ Key guarantees:
 ## Scoped Least-Privilege Deployer IAM Policy
 
 The deployer policy (`aws_iam_policy.github_deployer`) is tightly scoped to the
-exact operations performed by `deploy-demo.sh`, `deploy-frontend.sh`, and
-`rollback-release.sh`:
+operations used by the normal `deploy-demo.sh` and `deploy-frontend.sh` release
+path. The standalone recovery script is outside normal workflow dispatch and
+requires a separate operator authorization:
 
 ### 1. IAM PassRole Scope
 
@@ -152,9 +153,10 @@ exact operations performed by `deploy-demo.sh`, `deploy-frontend.sh`, and
 
 - In ambient OIDC CI execution, `deploy-demo.sh` does NOT require access to the
   remote Terraform state backend S3 bucket or KMS key.
-- Infrastructure outputs (`subnet_ids`, `migration_sg_id`,
-  `ecr_repository_urls`, `ecs_cluster_arn`) are passed via validated release
-  artifacts or workflow environment variables.
+- Non-secret deployment references are read from the tracked
+  `infra/environments/demo/foundation-outputs.json` file in the pinned commit
+  and checked against repository variables before OIDC. The workflow does not
+  read Terraform state.
 - This boundary ensures the CI deployer role is never granted read access to
   Terraform state files, preserving runtime database connection strings and
   state-stored secrets.
@@ -163,15 +165,23 @@ exact operations performed by `deploy-demo.sh`, `deploy-frontend.sh`, and
 
 ## Repository Variables and Immutable OIDC Subject
 
-The workflow uses repository-level Actions variables. Manual dispatch,
-`confirm_approval`, the exact `develop` ref condition, foundation review,
-runtime approval, provenance checks, and release serialization remain required.
-No GitHub environment or environment attestation is used.
+The workflow uses repository-level Actions variables and a no-input
+`workflow_dispatch`. Dispatching from `develop` in the exact repository starts
+the release; there is no approval checkbox, manually supplied foundation
+checksum, or previous-release input. The workflow validates the tracked
+foundation configuration and artifact provenance before the deployment job
+assumes its role. No GitHub environment or environment attestation is used.
 
 The AWS role trust policy matches this immutable subject exactly:
 `repo:slabarcaf@207892885/flowcard-treasury@1427370701:ref:refs/heads/develop`.
 The workflow's repository and branch checks provide a separate fail-closed
 eligibility check.
+
+Each release records `<full-commit-sha>/<run-id>-<run-attempt>` as its logical
+identity. Artifact names and ECR tags use a safe form containing the same
+attempt. The workflow requires the build and deploy attempts to match. A
+failed-jobs-only retry can reuse older build artifacts and will fail
+provenance; select **Re-run all jobs** to rebuild before deployment.
 
 ### GitHub Repository Variables
 
