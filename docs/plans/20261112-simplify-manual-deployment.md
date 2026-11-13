@@ -43,9 +43,11 @@ publication paths. Task 3 now records commit/run/attempt identity, derives
 safe run-specific artifact and image tags, and deploys by exact image digests.
 The provenance check requires build and deploy artifacts from the same attempt;
 failed-jobs-only retries must use **Re-run all jobs**. Task 4 was independently
-accepted offline. Its latest strict full-suite run remains blocked by the
-unavailable local PostgreSQL test database and one resulting onboarding E2E
-failure; this does not count as a green full-suite result.
+accepted offline. An initial local full-suite attempt lacked PostgreSQL and
+had one unexpected onboarding E2E failure. The isolated-database rerun passed
+the strict baseline: 940 tests, 911 passed, 23 documented failures, 6 skipped,
+and zero unexpected failures. Raw Vitest exits nonzero for the 23 documented
+failures; the strict comparator exits 0.
 
 `infra/scripts/deploy-demo.sh` consumes infrastructure references, registers
 task definitions, runs migrations, and updates services. The frontend script
@@ -215,8 +217,7 @@ digests and artifact-integrity checks.
 - [x] Document retained old frontend assets and the distinction between a
       healthy deployment and unresolved platform onboarding acceptance.
 - [x] Check updated Markdown and local links. Leave this plan open until the
-      outstanding local database baseline check and first live workflow are
-      verified;
+      first live workflow is verified;
       move it to `docs/plans/completed/` only after that evidence exists.
 
 ## Post-completion and first live run
@@ -232,22 +233,24 @@ Publish the reviewed workflow changes to `develop` and the workflow entry on
 default branch `main`. Keep the implementation on the intended run ref and do
 not change the repository's default branch or OIDC trust as part of this plan.
 
-The first manual workflow run uses `develop` and no input fields. It remains
-outstanding. Before treating the full Node baseline as clear, rerun the strict
-comparator with the required local PostgreSQL test database available; report
-the 23 documented failures separately and do not claim a green suite while any
-unexpected failure remains. On the first workflow run, observe tests and builds,
-OIDC authentication, migrations, service rollout, frontend upload, and
-invalidation. A failure must retain diagnostic metadata and identify the last
-completed phase. The workflow does not automatically roll back the database or
-claim recovery. Recording a commit SHA alone does not restore database state.
+The strict Node baseline rerun is complete against the healthy local test
+database: 940 tests, 911 passed, 23 documented failures, 6 skipped, zero
+unexpected failures, and comparator exit 0. The raw Vitest process exits 1 for
+the 23 documented failures; do not describe the raw suite as all-green. The
+first manual workflow run uses `develop` and no input fields and remains
+outstanding. On that run, observe tests and builds, OIDC authentication,
+migrations, service rollout, frontend upload, and invalidation. A failure must
+retain diagnostic metadata and identify the last completed phase. The workflow
+does not automatically roll back the database or claim recovery. Recording a
+commit SHA alone does not restore database state.
 
 After a successful run, verify the shared HTTPS frontend, operator login,
 company CRUD, Swagger, and service health. Record actual run URL, commit,
 release identity, digests, and results. Submission/RFI/provider acceptance stays
 subject to its existing separate application gates.
 
-The tracked configuration capture is complete. Publishing the reviewed workflow
-changes and running its first live workflow are subsequent execution steps.
+The tracked configuration capture and offline strict-baseline rerun are
+complete. Publishing the reviewed workflow changes and running its first live
+workflow are subsequent execution steps.
 This documentation task performs neither and does not establish deployment
 acceptance.

@@ -40,15 +40,17 @@ pending.
 ### Original offline and extended acceptance gates
 
 Focused frontend/workflow/deployment checks and builds pass. Earlier evidence
-recorded 939 strict-baseline tests with the 23 documented failures. The latest
-Task 4 comparator ran 940 tests and reported those 23 plus one onboarding E2E
-failure because PostgreSQL at `127.0.0.1:54329` was unavailable. The baseline
-needs a rerun with that local test database available. Offline results do not
-constitute live demo acceptance.
+recorded 939 strict-baseline tests with the 23 documented failures. An initial
+Task 4 run lacked local PostgreSQL and had one additional onboarding E2E
+failure. The later isolated-database rerun passed the strict comparator with
+940 tests, 911 passed, 23 documented failures, 6 skipped, and zero unexpected
+failures. Raw Vitest exits 1 for the 23 known failures; the comparator exits 0.
+Offline results do not constitute live demo acceptance.
 
 | Gate | Status | Required before acceptance |
 | --- | --- | --- |
 | Simplified manual workflow | `PENDING_LIVE` | Dispatch from `develop` with no form inputs; verify OIDC, release identity, deployment phases, and final manifest. |
+| Full Node baseline | `VERIFIED_OFFLINE` | Strict comparison: 940 tests, 911 passed, 23 documented failures, 6 skipped, zero unexpected failures; comparator exit 0. The raw Vitest exit remains 1 for the known baseline failures. |
 | Task 8 deployment and security implementation | `VERIFIED_OFFLINE` | Focused workflow, IAM, release-script, and offline-safety checks. |
 | AWS identity, account, MFA, and routine operator access | `BLOCKED_APPROVAL` | Owner establishes authorized access. Operator verifies STS account and region before any plan or resource action. |
 | Repository deployment configuration | `PENDING_LIVE` | Verify existing Actions variables against the tracked foundation file and confirm the immutable `develop` OIDC subject before the first workflow run. |
