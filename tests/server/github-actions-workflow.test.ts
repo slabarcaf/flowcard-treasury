@@ -287,6 +287,40 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(content).toContain("Select Re-run all jobs so build and deployment use the same attempt.");
       expect(retry.image_tag).not.toBe(firstRun.image_tag);
       expect(retry.frontend_artifact_name).not.toBe(firstRun.frontend_artifact_name);
+
+      const provenanceDir = mkdtempSync(join(tmpdir(), "release-provenance-retry-"));
+      try {
+        const metadataDir = join(provenanceDir, ".dev/.release-metadata");
+        mkdirSync(metadataDir, { recursive: true });
+        writeFileSync(join(metadataDir, "release-manifest.json"), JSON.stringify({
+          commit_sha: "a".repeat(40),
+          release_identity: firstRun.release_identity,
+          run_id: "123456",
+          run_attempt: "1",
+          image_tag: firstRun.image_tag,
+          artifacts: {
+            frontend: firstRun.frontend_artifact_name,
+            container_images: firstRun.container_artifact_name,
+            manifest: firstRun.manifest_artifact_name,
+            recovery: firstRun.recovery_artifact_name,
+          },
+        }));
+        const provenanceBlock = workflowStepRunBlock(content, "Verify Provenance & Artifact Integrity")
+          .replace("${{ github.sha }}", "a".repeat(40));
+        const result = spawnSync("bash", ["-c", provenanceBlock], {
+          cwd: provenanceDir,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            GITHUB_RUN_ID: "123456",
+            GITHUB_RUN_ATTEMPT: "2",
+          },
+        });
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain("Select Re-run all jobs so build and deployment use the same attempt.");
+      } finally {
+        rmSync(provenanceDir, { recursive: true, force: true });
+      }
     });
 
     it("validates the pinned foundation and repository targets before OIDC", () => {

@@ -13,7 +13,7 @@
     "db:seed": "npm run server:build && node .dev/server/server/src/db/seed.js",
     "roster:cli": "npm run server:build && node .dev/server/server/src/roster/cli.js",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
+    "lint": "oxlint --ignore-pattern 'services/company-onboarding/internal/apidocs/assets/swagger-ui-*.js'",
     "preview": "vite preview",
     "test": "vitest run",
     "bridge:stats": "vitest run tests/features/bridge-capital/customerStats.report.test.ts --reporter=verbose",
