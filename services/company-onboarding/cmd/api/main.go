@@ -77,6 +77,11 @@ func buildHandler(ctx context.Context, cfg *config.Config) (http.Handler, func()
 // If DATABASE_URL is configured, connectivity and schema readiness are verified on startup;
 // if the database is unreachable or schema migrations are missing, startup fails immediately.
 func buildHandlerWithAuth(ctx context.Context, cfg *config.Config, opAuth internalHttp.Authenticator, whAuth internalHttp.Authenticator) (http.Handler, func(), error) {
+	return buildHandlerWithDependencies(ctx, cfg, opAuth, whAuth, nil)
+}
+
+// buildHandlerWithDependencies constructs the HTTP handler allowing injection of auth and storage adapters.
+func buildHandlerWithDependencies(ctx context.Context, cfg *config.Config, opAuth internalHttp.Authenticator, whAuth internalHttp.Authenticator, store storage.ObjectStore) (http.Handler, func(), error) {
 	var repo *postgres.Repository
 	var closeFn func()
 
@@ -98,16 +103,60 @@ func buildHandlerWithAuth(ctx context.Context, cfg *config.Config, opAuth intern
 		log.Println("DATABASE_URL not configured; repository running unconfigured (endpoints return safe 503)")
 	}
 
-	// 1. Authenticator: default to DenyAll (fails closed, default deny) unless injected
+	// 1. Authenticator: configure from ServiceAuthSecret if set, or default to DenyAll (fails closed)
 	if opAuth == nil {
-		opAuth = internalHttp.DenyAllAuthenticator{}
+		if cfg.ServiceAuthSecret != "" {
+			var err error
+			opAuth, err = internalHttp.NewOperatorAuthenticator([]byte(cfg.ServiceAuthSecret))
+			if err != nil {
+				if closeFn != nil {
+					closeFn()
+				}
+				return nil, nil, fmt.Errorf("failed to initialize operator authenticator: %w", err)
+			}
+		} else {
+			opAuth = internalHttp.DenyAllAuthenticator{}
+		}
 	}
 	if whAuth == nil {
-		whAuth = internalHttp.DenyAllAuthenticator{}
+		if cfg.ServiceAuthSecret != "" {
+			var err error
+			whAuth, err = internalHttp.NewWebhookAuthenticator([]byte(cfg.ServiceAuthSecret))
+			if err != nil {
+				if closeFn != nil {
+					closeFn()
+				}
+				return nil, nil, fmt.Errorf("failed to initialize webhook authenticator: %w", err)
+			}
+		} else {
+			whAuth = internalHttp.DenyAllAuthenticator{}
+		}
 	}
 
-	// 2. Storage: fails closed with unavailable store default
-	store := storage.NewUnavailableStore("production object store unconfigured; live upload/download disabled")
+	// 2. Storage: configure from S3BucketDocuments if set, or default to unavailable store
+	if store == nil {
+		if cfg.S3BucketDocuments != "" && cfg.S3KMSKeyID != "" {
+			region := strings.TrimSpace(cfg.AWSRegion)
+			if region == "" {
+				region = "us-west-2"
+			}
+			s3Store, err := storage.NewS3Store(storage.S3Config{
+				Bucket:               cfg.S3BucketDocuments,
+				ServerSideEncryption: "aws:kms",
+				KMSKeyID:             cfg.S3KMSKeyID,
+				Region:               region,
+			})
+			if err != nil {
+				if closeFn != nil {
+					closeFn()
+				}
+				return nil, nil, fmt.Errorf("failed to initialize S3 document store: %w", err)
+			}
+			store = s3Store
+		} else {
+			store = storage.NewUnavailableStore("production object store unconfigured; live upload/download disabled")
+		}
+	}
 
 	// 3. Platform contract gate: external gates fail closed
 	gate := validation.UnverifiedPlatformContractGate{}

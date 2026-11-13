@@ -1,9 +1,10 @@
-import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import type { AirwallexGateway } from "../../../server/src/airwallex/client.js";
 import { dispatchOne } from "../../../server/src/outbox/dispatcher.js";
-import { createDatabasePool, type DatabasePool } from "../../../server/src/db/pool.js";
+import { createDatabasePool, type DatabaseClient, type DatabasePool } from "../../../server/src/db/pool.js";
+import { runNodeMigrations } from "../../../server/src/db/migrate.js";
+import { SEED_ADVISORY_LOCK_ID } from "../../../server/src/db/seed.js";
 import { persistExtraction } from "../../../server/src/ai-evidence/repository.js";
 import type { ExtractionResult } from "../../../server/src/ai-evidence/types.js";
 import { evaluateQualification } from "../../../server/src/ai-evidence/qualification.js";
@@ -23,16 +24,6 @@ const databaseUrl = process.env.POLICY_ACCEPTANCE_DATABASE_URL;
 if (!databaseUrl && process.env.POLICY_ACCEPTANCE_REQUIRED === "1") {
   throw new Error("POLICY_ACCEPTANCE_DATABASE_URL is required for PostgreSQL policy acceptance tests");
 }
-const migrationFiles = [
-  "001_bridge_ledger.sql", "002_customer_roster.sql", "003_salesforce_snapshots.sql",
-  "004_ai_evidence.sql", "005_underwriting_profiles.sql", "006_policy_evaluations.sql",
-  "007_policy_request_evaluations.sql", "008_remote_authorization.sql", "009_policy_request_ledger_sequence.sql",
-  "010_remote_authorization_nonce_fingerprint.sql",
-  "011_remote_authorization_nonce_claims.sql",
-  "012_remote_authorization_decision_identity.sql",
-  "013_remote_authorization_dispatch_gate.sql",
-  "014_ai_evidence_decision_gate.sql",
-];
 const now = new Date();
 const nowIso = now.toISOString();
 const originalSnapshotMode = process.env.SALESFORCE_SNAPSHOT_MODE;
@@ -47,6 +38,8 @@ const acceptance = databaseUrl ? describe : describe.skip;
 
 acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
   let pool: DatabasePool;
+  let leaseClient: DatabaseClient | undefined;
+  let leaseAcquired = false;
   let customerId: string;
   let snapshotId: string;
   let extractionId: string;
@@ -64,15 +57,10 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
       throw new Error("POLICY_ACCEPTANCE_DATABASE_URL must target localhost and use a database name containing 'test' or exactly matching POLICY_ACCEPTANCE_ALLOW_DATABASE");
     }
     pool = await createDatabasePool({ databaseUrl });
-    const schema = await pool.query<{ exists: string | null }>(
-      "SELECT to_regclass('public.customer_roster') AS exists",
-    );
-    if (!schema.rows[0]?.exists) {
-      for (const file of migrationFiles.slice(0, -1)) {
-        await pool.query(await readFile(new URL(`../../../server/src/db/migrations/${file}`, import.meta.url), "utf8"));
-      }
-    }
-    await pool.query(await readFile(new URL(`../../../server/src/db/migrations/${migrationFiles.at(-1)}`, import.meta.url), "utf8"));
+    leaseClient = await pool.connect();
+    await leaseClient.query("SELECT pg_advisory_lock($1)", [SEED_ADVISORY_LOCK_ID]);
+    leaseAcquired = true;
+    await runNodeMigrations(databaseUrl);
     await pool.query(`TRUNCATE TABLE customer_roster, remote_authorization_nonce_claims, bridge_cases, ledger_events, provider_operations,
       outbox_commands, webhook_inbox, provider_observations, facility_projections, facility_configs CASCADE`);
     await pool.query(`INSERT INTO facility_configs (id, version, currency, facility_amount_cents, reserve_floor_bps)
@@ -114,9 +102,21 @@ acceptance("policy end-to-end acceptance (isolated PostgreSQL)", () => {
   }, 30_000);
 
   afterAll(async () => {
-    if (pool) await pool.end();
-    if (originalSnapshotMode === undefined) delete process.env.SALESFORCE_SNAPSHOT_MODE;
-    else process.env.SALESFORCE_SNAPSHOT_MODE = originalSnapshotMode;
+    try {
+      if (leaseClient && leaseAcquired) {
+        const result = await leaseClient.query<{ unlocked: boolean }>(
+          "SELECT pg_advisory_unlock($1) AS unlocked",
+          [SEED_ADVISORY_LOCK_ID],
+        );
+        leaseAcquired = false;
+        expect(result.rows[0]?.unlocked).toBe(true);
+      }
+    } finally {
+      leaseClient?.release();
+      if (pool) await pool.end();
+      if (originalSnapshotMode === undefined) delete process.env.SALESFORCE_SNAPSHOT_MODE;
+      else process.env.SALESFORCE_SNAPSHOT_MODE = originalSnapshotMode;
+    }
   });
 
   it("evaluates a roster customer from versioned sources through request audit and atomic ledger reservation", async () => {

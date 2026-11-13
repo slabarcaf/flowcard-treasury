@@ -25,8 +25,10 @@ import { publishDemoUnderwritingProfiles } from "./underwriting/demo-fixtures.js
 import { runDailyUnderwritingProfileBuild } from "./underwriting/runner.js";
 import { recordFailedProfileAttempt } from "./underwriting/publisher.js";
 import { randomUUID } from "node:crypto";
+import { OnboardingWebhookForwarder } from "./webhooks/onboarding-forwarder.js";
 import { createKit5PolicyFundingBoundary, recoverPendingKit5Funding } from "./policy/kit5-funding.js";
 import { createKit5FixtureCheckpointResolver, createKit5RepaymentDepositTargetResolver, createKit5ScenarioResolver } from "./demo/kit5-scenario-resolver.js";
+import { createGracefulShutdown } from "./lifecycle.js";
 
 if (process.argv[2] === "policy-approval") {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -38,7 +40,7 @@ if (process.argv[2] === "policy-approval") {
   try {
     const approvalConfig = loadConfig();
     const approvalGateway = new HttpAirwallexGateway({
-      baseUrl: process.env.AIRWALLEX_BASE_URL?.trim() || "https://api.sandbox.airwallex.com",
+      baseUrl: approvalConfig.airwallexBaseUrl,
       clientId: approvalConfig.airwallexClientId,
       apiKey: approvalConfig.airwallexApiKey,
     });
@@ -77,7 +79,7 @@ if (process.argv[2] === "evidence-review") {
 const config = loadConfig();
 const pool = await createDatabasePool(config);
 const gateway = new HttpAirwallexGateway({
-  baseUrl: process.env.AIRWALLEX_BASE_URL?.trim() || "https://api.sandbox.airwallex.com",
+  baseUrl: config.airwallexBaseUrl,
   clientId: config.airwallexClientId,
   apiKey: config.airwallexApiKey,
 });
@@ -87,6 +89,7 @@ const outboxWorker = new OutboxWorker(pool, gateway);
 outboxWorker.start();
 const reconciliationWorker = new ReconciliationWorker(pool, gateway);
 reconciliationWorker.start();
+let activeSchedule: { stop: () => void } | undefined;
 if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo") {
   const evidenceRunner = new DailyEvidenceRunner({
     pool,
@@ -122,16 +125,14 @@ if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo") {
       return snapshotResult;
     },
   };
-  const snapshotSchedule = startDemoSnapshotSync(dailyPolicyWorker, {
+  activeSchedule = startDemoSnapshotSync(dailyPolicyWorker, {
     runAtUtc: snapshotDailyRunTime(),
     onError: (error) => console.error("Demo Salesforce snapshot sync failed", error),
   });
-  process.on("SIGTERM", () => snapshotSchedule.stop());
-  process.on("SIGINT", () => snapshotSchedule.stop());
 } else if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "production_mcp") {
   console.error("Production Salesforce snapshots are disabled: this server has no trusted host MCP runtime binding");
   const underwritingGateway = new HttpAirwallexUnderwritingGateway({
-    baseUrl: process.env.AIRWALLEX_BASE_URL?.trim() || "https://api.sandbox.airwallex.com",
+    baseUrl: config.airwallexBaseUrl,
     clientId: config.airwallexClientId,
     apiKey: config.airwallexApiKey,
   });
@@ -148,12 +149,10 @@ if (process.env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo") {
       }
     },
   };
-  const underwritingSchedule = startDemoSnapshotSync(dailyUnderwritingWorker, {
+  activeSchedule = startDemoSnapshotSync(dailyUnderwritingWorker, {
     runAtUtc: snapshotDailyRunTime(),
     onError: (error) => console.error("Production Airwallex underwriting sync failed", error),
   });
-  process.on("SIGTERM", () => underwritingSchedule.stop());
-  process.on("SIGINT", () => underwritingSchedule.stop());
 }
 const remoteAuthorizationResolver = createRemoteAuthorizationResolver({
   pool,
@@ -172,6 +171,17 @@ const kit5FundingRecovery = setInterval(() => {
   });
 }, 5_000);
 kit5FundingRecovery.unref();
+
+let onboardingForwarder: OnboardingWebhookForwarder | undefined;
+if (config.onboardingServiceUrl && config.onboardingServiceSecret) {
+  onboardingForwarder = new OnboardingWebhookForwarder({
+    pool,
+    onboardingServiceUrl: config.onboardingServiceUrl,
+    serviceSecret: config.onboardingServiceSecret,
+  });
+  onboardingForwarder.start();
+}
+
 const server = createHttpServer(
   config,
   pool,
@@ -200,9 +210,22 @@ const server = createHttpServer(
       currency: config.kit5NovaGlobalAccountCurrency,
     }),
   },
+  onboardingForwarder,
 );
 server.listen(config.port, "0.0.0.0", () => {
   console.log(`Bridge ledger server listening on port ${config.port}`);
 });
-process.on("SIGTERM", () => clearInterval(kit5FundingRecovery));
-process.on("SIGINT", () => clearInterval(kit5FundingRecovery));
+
+const shutdown = createGracefulShutdown({
+  server,
+  pool,
+  onboardingForwarder,
+  webhookWorker,
+  outboxWorker,
+  reconciliationWorker,
+  snapshotSchedule: activeSchedule,
+  fundingRecoveryTimer: kit5FundingRecovery,
+});
+
+process.on("SIGTERM", () => { void shutdown(); });
+process.on("SIGINT", () => { void shutdown(); });

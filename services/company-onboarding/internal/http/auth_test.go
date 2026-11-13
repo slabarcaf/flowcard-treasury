@@ -419,7 +419,7 @@ func TestJWTAuthenticator_CrossLanguageNodeMinted(t *testing.T) {
 		repoRoot = parent
 	}
 
-	distPath := filepath.Join(repoRoot, "dist", "server", "src", "http", "onboarding-proxy-auth.js")
+	distPath := filepath.Join(repoRoot, ".dev", "server", "server", "src", "http", "onboarding-proxy-auth.js")
 	if _, err := os.Stat(distPath); err != nil {
 		t.Fatalf("compiled module not found at %s (run npm run server:build): %v", distPath, err)
 	}

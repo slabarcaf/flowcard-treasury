@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/storage"
 )
 
@@ -195,6 +196,27 @@ func TestS3Store_ConfigurationValidation(t *testing.T) {
 	})
 	if err != nil || store == nil {
 		t.Fatalf("valid config failed: %v", err)
+	}
+
+	// Injected CredentialsProvider without static keys succeeds
+	mockProvider := credentials.NewStaticCredentialsProvider("AKIAMOCKPROVIDER1234", "mockSecretKeyForProviderInjection12345678", "")
+	storeWithProvider, err := storage.NewS3Store(storage.S3Config{
+		Bucket:               "my-bucket",
+		CredentialsProvider:  mockProvider,
+		ServerSideEncryption: "aws:kms",
+		KMSKeyID:             "arn:aws:kms:us-west-2:123456789012:key/test",
+	})
+	if err != nil || storeWithProvider == nil {
+		t.Fatalf("config with CredentialsProvider failed: %v", err)
+	}
+
+	// Missing both CredentialsProvider and static keys fails closed with ErrStorageUnconfigured
+	_, err = storage.NewS3Store(storage.S3Config{
+		Bucket:               "my-bucket",
+		ServerSideEncryption: "AES256",
+	})
+	if !errors.Is(err, storage.ErrStorageUnconfigured) {
+		t.Fatalf("missing credentials expected ErrStorageUnconfigured, got %v", err)
 	}
 
 	// Endpoint security validations
@@ -663,4 +685,161 @@ func TestS3Store_ConcurrentPutAtomicBackend(t *testing.T) {
 			t.Fatalf("stored bytes do not match winning writer B: got %q, want %q", string(storedBytes), string(payloadB))
 		}
 	}
+}
+
+func TestResolveRuntimeCredentials(t *testing.T) {
+	t.Parallel()
+
+	t.Run("static_credentials_with_session_token", func(t *testing.T) {
+		t.Parallel()
+		lookup := func(k string) string {
+			switch k {
+			case "AWS_ACCESS_KEY_ID":
+				return "AKIAIOSFODNN7EXAMPLE"
+			case "AWS_SECRET_ACCESS_KEY":
+				return "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+			case "AWS_SESSION_TOKEN":
+				return "fake-session-token"
+			default:
+				return ""
+			}
+		}
+		provider, err := storage.ResolveRuntimeCredentials(lookup, nil)
+		if err != nil {
+			t.Fatalf("unexpected error resolving static credentials: %v", err)
+		}
+		creds, err := provider.Retrieve(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error retrieving static credentials: %v", err)
+		}
+		if creds.AccessKeyID != "AKIAIOSFODNN7EXAMPLE" || creds.SecretAccessKey != "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" || creds.SessionToken != "fake-session-token" {
+			t.Errorf("unexpected credentials retrieved: %+v", creds)
+		}
+	})
+
+	t.Run("valid_relative_uri_resolves_ecs_provider", func(t *testing.T) {
+		t.Parallel()
+		lookup := func(k string) string {
+			if k == "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI" {
+				return "/v2/credentials/fake-role"
+			}
+			return ""
+		}
+		provider, err := storage.ResolveRuntimeCredentials(lookup, nil)
+		if err != nil {
+			t.Fatalf("unexpected error resolving relative URI: %v", err)
+		}
+		if provider == nil {
+			t.Fatal("expected non-nil provider")
+		}
+	})
+
+	t.Run("malformed_relative_uris_rejected", func(t *testing.T) {
+		t.Parallel()
+		badURIs := []string{"no-leading-slash", "/../traversal", "http://attacker.com/creds"}
+		for _, bad := range badURIs {
+			lookup := func(k string) string {
+				if k == "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI" {
+					return bad
+				}
+				return ""
+			}
+			_, err := storage.ResolveRuntimeCredentials(lookup, nil)
+			if err == nil {
+				t.Errorf("expected error for relative URI %q, got nil", bad)
+			}
+		}
+	})
+
+	t.Run("full_uri_security_restrictions", func(t *testing.T) {
+		t.Parallel()
+		// Plain HTTP to arbitrary host must be rejected
+		lookupArbitrary := func(k string) string {
+			if k == "AWS_CONTAINER_CREDENTIALS_FULL_URI" {
+				return "http://attacker.com/creds"
+			}
+			return ""
+		}
+		_, err := storage.ResolveRuntimeCredentials(lookupArbitrary, nil)
+		if err == nil {
+			t.Fatal("expected error for plain HTTP to arbitrary host, got nil")
+		}
+
+		// Userinfo in full URI must be rejected
+		lookupUserinfo := func(k string) string {
+			if k == "AWS_CONTAINER_CREDENTIALS_FULL_URI" {
+				return "https://user:pass@127.0.0.1/creds"
+			}
+			return ""
+		}
+		_, err = storage.ResolveRuntimeCredentials(lookupUserinfo, nil)
+		if err == nil {
+			t.Fatal("expected error for userinfo in full URI, got nil")
+		}
+
+		// Loopback HTTP permitted
+		lookupLoopback := func(k string) string {
+			if k == "AWS_CONTAINER_CREDENTIALS_FULL_URI" {
+				return "http://127.0.0.1:8080/creds"
+			}
+			return ""
+		}
+		provider, err := storage.ResolveRuntimeCredentials(lookupLoopback, nil)
+		if err != nil || provider == nil {
+			t.Fatalf("expected loopback full URI to succeed, got %v", err)
+		}
+
+		// Link-local HTTP permitted
+		lookupLinkLocal := func(k string) string {
+			if k == "AWS_CONTAINER_CREDENTIALS_FULL_URI" {
+				return "http://169.254.170.2/v2/credentials/fake-role"
+			}
+			return ""
+		}
+		provider, err = storage.ResolveRuntimeCredentials(lookupLinkLocal, nil)
+		if err != nil || provider == nil {
+			t.Fatalf("expected link-local full URI to succeed, got %v", err)
+		}
+
+		// HTTPS to remote host permitted
+		lookupHTTPS := func(k string) string {
+			if k == "AWS_CONTAINER_CREDENTIALS_FULL_URI" {
+				return "https://creds.internal.company.com/creds"
+			}
+			return ""
+		}
+		provider, err = storage.ResolveRuntimeCredentials(lookupHTTPS, nil)
+		if err != nil || provider == nil {
+			t.Fatalf("expected HTTPS full URI to succeed, got %v", err)
+		}
+	})
+
+	t.Run("unreadable_token_file_returns_error", func(t *testing.T) {
+		t.Parallel()
+		lookup := func(k string) string {
+			if k == "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI" {
+				return "/v2/credentials/fake-role"
+			}
+			if k == "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE" {
+				return "/nonexistent/path/to/token.txt"
+			}
+			return ""
+		}
+		_, err := storage.ResolveRuntimeCredentials(lookup, nil)
+		if err == nil {
+			t.Fatal("expected error when token file is unreadable, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to read container authorization token file") {
+			t.Errorf("expected token file read error message, got: %v", err)
+		}
+	})
+
+	t.Run("unconfigured_returns_err_storage_unconfigured", func(t *testing.T) {
+		t.Parallel()
+		lookup := func(k string) string { return "" }
+		_, err := storage.ResolveRuntimeCredentials(lookup, nil)
+		if !errors.Is(err, storage.ErrStorageUnconfigured) {
+			t.Errorf("expected ErrStorageUnconfigured, got: %v", err)
+		}
+	})
 }

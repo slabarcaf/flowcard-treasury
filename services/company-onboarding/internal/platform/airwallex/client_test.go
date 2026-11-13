@@ -35,6 +35,49 @@ func TestNewClient_Validation(t *testing.T) {
 		t.Fatalf("expected strict HTTPS error for remote base URL, got %v", err)
 	}
 
+	// Production endpoint is strictly rejected in demo/sandbox environment
+	_, err = airwallex.NewClient(airwallex.ClientConfig{
+		BaseURL:             "https://api.airwallex.com",
+		ClientID:            "cid",
+		APIKey:              "key",
+		PlatformEnvironment: "sandbox",
+	})
+	if err == nil || !strings.Contains(err.Error(), "must target sandbox") {
+		t.Fatalf("expected sandbox enforcement error for production base URL in demo, got %v", err)
+	}
+
+	// In explicit production platform environment, api.airwallex.com is permitted
+	prodClient, err := airwallex.NewClient(airwallex.ClientConfig{
+		BaseURL:             "https://api.airwallex.com",
+		ClientID:            "cid",
+		APIKey:              "key",
+		PlatformEnvironment: "production",
+	})
+	if err != nil || prodClient == nil {
+		t.Fatalf("expected api.airwallex.com to be permitted in production environment, got %v", err)
+	}
+
+	// In explicit production platform environment, sandbox URL is rejected
+	_, err = airwallex.NewClient(airwallex.ClientConfig{
+		BaseURL:             "https://api.sandbox.airwallex.com",
+		ClientID:            "cid",
+		APIKey:              "key",
+		PlatformEnvironment: "production",
+	})
+	if err == nil || !strings.Contains(err.Error(), "must target api.airwallex.com") {
+		t.Fatalf("expected error for sandbox base URL in production environment, got %v", err)
+	}
+
+	// Remote sandbox endpoint is permitted
+	sandboxClient, err := airwallex.NewClient(airwallex.ClientConfig{
+		BaseURL:  "https://api.sandbox.airwallex.com",
+		ClientID: "cid",
+		APIKey:   "key",
+	})
+	if err != nil || sandboxClient == nil {
+		t.Fatalf("expected api.sandbox.airwallex.com to be permitted, got %v", err)
+	}
+
 	// Localhost HTTP permitted
 	client, err := airwallex.NewClient(airwallex.ClientConfig{
 		BaseURL:  "http://127.0.0.1:8080",

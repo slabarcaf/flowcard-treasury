@@ -837,15 +837,15 @@ func TestDeadlockFreeConcurrentArchiveAndInitiateSubmission(t *testing.T) {
 
 // 12. Fenced Idempotency Reservations with Leases and Crash Recovery
 func TestFencedIdempotencyReservationsAndCrashRecovery(t *testing.T) {
-	_, repo := setupTestDB(t)
+	pool, repo := setupTestDB(t)
 	ctx := context.Background()
 
 	scope := "test_scope"
 	key := fmt.Sprintf("key_%d", time.Now().UnixNano())
 	fingerprint := "fingerprint_123"
 
-	// 1. Reserve key with short TTL (50ms)
-	res1, err := repo.ReserveIdempotencyKey(ctx, scope, key, fingerprint, 50*time.Millisecond)
+	// 1. Reserve the key with enough lease time for the active-reservation checks.
+	res1, err := repo.ReserveIdempotencyKey(ctx, scope, key, fingerprint, time.Minute)
 	if err != nil {
 		t.Fatalf("ReserveIdempotencyKey failed: %v", err)
 	}
@@ -866,8 +866,18 @@ func TestFencedIdempotencyReservationsAndCrashRecovery(t *testing.T) {
 		t.Fatalf("wrong token error = %v, want %v", err, postgres.ErrInvalidIdempotencyReservationToken)
 	}
 
-	// 4. Simulate crash: worker crashed without completing; wait for TTL (50ms) to expire
-	time.Sleep(70 * time.Millisecond)
+	// 4. Simulate a crashed worker by expiring its lease directly in the test database.
+	tag, err := pool.Exec(ctx, `
+		UPDATE onboarding.idempotency_keys
+		SET expires_at = now() - interval '1 second'
+		WHERE key_scope = $1 AND idempotency_key = $2
+	`, scope, key)
+	if err != nil {
+		t.Fatalf("failed to expire crashed reservation: %v", err)
+	}
+	if tag.RowsAffected() != 1 {
+		t.Fatalf("expiring crashed reservation updated %d rows, want 1", tag.RowsAffected())
+	}
 
 	// 5. Expired reservation reclaimed by new worker
 	res2, err := repo.ReserveIdempotencyKey(ctx, scope, key, fingerprint, 5*time.Second)

@@ -1,0 +1,657 @@
+name: AWS Demo Deployment
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: aws-demo-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-test:
+    name: Validate, Lint & Test (Unprivileged Gate)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && github.repository == 'slabarcaf/flowcard-treasury'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: flowcard_onboarding_test
+          POSTGRES_USER: test_onboarding
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POLICY_ACCEPTANCE_DATABASE_URL: postgres://test_onboarding:test_password@localhost:54329/flowcard_onboarding_test?sslmode=disable
+    steps:
+      - name: Checkout pinned commit SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Setup Node.js 20.19.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20.19.0"
+          cache: "npm"
+
+      - name: Setup Go from go.mod (1.27.3)
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: services/company-onboarding/go.mod
+          cache-dependency-path: services/company-onboarding/go.sum
+
+      - name: Setup Terraform 1.10.5
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Code Quality & Type Checks
+        run: |
+          npm run lint
+          npm run build
+          npm run server:build
+
+      - name: OpenAPI Specification Freshness Gate
+        run: |
+          cd services/company-onboarding
+          go run ./cmd/openapi -check
+
+      - name: Go Service Unit & Integration Tests (Isolated DB)
+        run: |
+          cd services/company-onboarding
+          go test -v -race ./...
+
+      - name: Strict Baseline Test Gate (Fail Closed on Regressions & Crashes)
+        run: node infra/scripts/check-test-baseline.js
+
+      - name: Infrastructure Configuration Validation (All Infra Scopes)
+        run: |
+          terraform fmt -check -recursive infra
+          terraform -chdir=infra/environments/demo init -backend=false
+          terraform -chdir=infra/environments/demo validate
+
+      - name: Offline Release Safety Invariants Verification
+        run: python3 infra/scripts/verify-offline-safety.py
+
+  build-and-metadata:
+    name: Build Artifacts & Generate Release Manifest
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && github.repository == 'slabarcaf/flowcard-treasury'
+    outputs:
+      release_manifest: ${{ steps.manifest.outputs.manifest_path }}
+      commit_sha: ${{ steps.meta.outputs.commit_sha }}
+      release_identity: ${{ steps.meta.outputs.release_identity }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      frontend_artifact_name: ${{ steps.meta.outputs.frontend_artifact_name }}
+      container_artifact_name: ${{ steps.meta.outputs.container_artifact_name }}
+      manifest_artifact_name: ${{ steps.meta.outputs.manifest_artifact_name }}
+      recovery_artifact_name: ${{ steps.meta.outputs.recovery_artifact_name }}
+      frontend_checksum: ${{ steps.frontend.outputs.checksum }}
+      node_archive_sha: ${{ steps.container-archives.outputs.node_archive_sha }}
+      go_archive_sha: ${{ steps.container-archives.outputs.go_archive_sha }}
+    steps:
+      - name: Checkout pinned commit SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Setup Node.js 20.19.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20.19.0"
+          cache: "npm"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
+
+      - name: Record Metadata & Commit Identity
+        id: meta
+        run: |
+          COMMIT_SHA="${GITHUB_SHA}"
+          RUN_ID="${GITHUB_RUN_ID}"
+          RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT}"
+          RELEASE_ID="${COMMIT_SHA}/${RUN_ID}-${RUN_ATTEMPT}"
+          IMAGE_TAG="${COMMIT_SHA}-${RUN_ID}-${RUN_ATTEMPT}"
+          FRONTEND_ARTIFACT_NAME="frontend-dist-${IMAGE_TAG}"
+          CONTAINER_ARTIFACT_NAME="container-images-${IMAGE_TAG}"
+          MANIFEST_ARTIFACT_NAME="release-manifest-${IMAGE_TAG}"
+          RECOVERY_ARTIFACT_NAME="release-recovery-${IMAGE_TAG}"
+          echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "release_identity=${RELEASE_ID}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "frontend_artifact_name=${FRONTEND_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "container_artifact_name=${CONTAINER_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "manifest_artifact_name=${MANIFEST_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "recovery_artifact_name=${RECOVERY_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+          echo "RELEASE_ID=${RELEASE_ID}" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
+          echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
+          echo "RUN_ATTEMPT=${RUN_ATTEMPT}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies & Build Frontend
+        id: frontend
+        run: |
+          npm ci
+          npm run build
+          chmod +x infra/scripts/compute-frontend-hash.sh
+          FRONTEND_CHECKSUM="$(./infra/scripts/compute-frontend-hash.sh .dev/dist)"
+          echo "checksum=${FRONTEND_CHECKSUM}" >> "$GITHUB_OUTPUT"
+          echo "FRONTEND_CHECKSUM=${FRONTEND_CHECKSUM}" >> "$GITHUB_ENV"
+
+      - name: Verify Container Build Reproducibility & Export Immutable Archives
+        id: container-archives
+        run: |
+          IMAGE_TAG="${{ steps.meta.outputs.image_tag }}"
+          mkdir -p .image-archives
+
+          # 1. Build Node Gateway container
+          docker build \
+            --platform linux/amd64 \
+            -t "flowcard-node-gateway:${IMAGE_TAG}" \
+            -f Dockerfile .
+
+          # 2. Build Go runtime container (contains /bin/api, /bin/worker, and /bin/migrate)
+          docker build \
+            --platform linux/amd64 \
+            -t "flowcard-go-runtime:${IMAGE_TAG}" \
+            -f services/company-onboarding/Dockerfile services/company-onboarding
+
+          # 3. Capture exact Image IDs
+          NODE_IMAGE_ID="$(docker inspect --format='{{.Id}}' "flowcard-node-gateway:${IMAGE_TAG}")"
+          GO_IMAGE_ID="$(docker inspect --format='{{.Id}}' "flowcard-go-runtime:${IMAGE_TAG}")"
+
+          # 4. Save immutable container archives
+          docker save "flowcard-node-gateway:${IMAGE_TAG}" | gzip > .image-archives/node-gateway.tar.gz
+          docker save "flowcard-go-runtime:${IMAGE_TAG}" | gzip > .image-archives/go-runtime.tar.gz
+
+          # 5. Compute SHA-256 archive digests
+          NODE_ARCHIVE_SHA="$(sha256sum .image-archives/node-gateway.tar.gz | awk '{print $1}')"
+          GO_ARCHIVE_SHA="$(sha256sum .image-archives/go-runtime.tar.gz | awk '{print $1}')"
+
+          echo "node_image_id=${NODE_IMAGE_ID}" >> "$GITHUB_OUTPUT"
+          echo "go_image_id=${GO_IMAGE_ID}" >> "$GITHUB_OUTPUT"
+          echo "node_archive_sha=${NODE_ARCHIVE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "go_archive_sha=${GO_ARCHIVE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "NODE_ARCHIVE_SHA=${NODE_ARCHIVE_SHA}" >> "$GITHUB_ENV"
+          echo "GO_ARCHIVE_SHA=${GO_ARCHIVE_SHA}" >> "$GITHUB_ENV"
+          echo "NODE_IMAGE_ID=${NODE_IMAGE_ID}" >> "$GITHUB_ENV"
+          echo "GO_IMAGE_ID=${GO_IMAGE_ID}" >> "$GITHUB_ENV"
+
+      - name: Generate Immutable Release Manifest
+        id: manifest
+        run: |
+          mkdir -p .dev/.release-metadata
+          cat <<EOF > .dev/.release-metadata/release-manifest.json
+          {
+            "repository": "slabarcaf/flowcard-treasury",
+            "branch": "develop",
+            "commit_sha": "${{ steps.meta.outputs.commit_sha }}",
+            "release_identity": "${RELEASE_ID}",
+            "run_id": "${RUN_ID}",
+            "run_attempt": "${RUN_ATTEMPT}",
+            "image_tag": "${IMAGE_TAG}",
+            "artifacts": {
+              "frontend": "${{ steps.meta.outputs.frontend_artifact_name }}",
+              "container_images": "${{ steps.meta.outputs.container_artifact_name }}",
+              "manifest": "${{ steps.meta.outputs.manifest_artifact_name }}",
+              "recovery": "${{ steps.meta.outputs.recovery_artifact_name }}"
+            },
+            "generated_at": "${TIMESTAMP}",
+            "fargate_cpu_architecture": "X86_64",
+            "docker_platform": "linux/amd64",
+            "frontend_dist_checksum_sha256": "${FRONTEND_CHECKSUM}",
+            "target_environment": "demo",
+            "status": "build_ready_pending_deployment",
+            "container_archives": {
+              "node_gateway": {
+                "image_tag": "flowcard-node-gateway:${IMAGE_TAG}",
+                "image_id": "${NODE_IMAGE_ID}",
+                "archive_file": "node-gateway.tar.gz",
+                "archive_sha256": "${NODE_ARCHIVE_SHA}",
+                "platform": "linux/amd64"
+              },
+              "go_runtime": {
+                "image_tag": "flowcard-go-runtime:${IMAGE_TAG}",
+                "image_id": "${GO_IMAGE_ID}",
+                "archive_file": "go-runtime.tar.gz",
+                "archive_sha256": "${GO_ARCHIVE_SHA}",
+                "platform": "linux/amd64"
+              }
+            },
+            "images": {
+              "node_gateway": "flowcard-node-gateway:${IMAGE_TAG}",
+              "go_api": "flowcard-go-api:${IMAGE_TAG}",
+              "go_worker": "flowcard-go-worker:${IMAGE_TAG}",
+              "migration": "flowcard-migration:${IMAGE_TAG}"
+            }
+          }
+          EOF
+          echo "manifest_path=.dev/.release-metadata/release-manifest.json" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Build Summary
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ### FlowCard Demo Release Manifest
+          - **Repository:** \`slabarcaf/flowcard-treasury\`
+          - **Branch:** \`develop\`
+          - **Commit SHA:** \`${{ steps.meta.outputs.commit_sha }}\`
+          - **Release identity:** \`${RELEASE_ID}\`
+          - **Run attempt:** \`${RUN_ID}-${RUN_ATTEMPT}\`
+          - **Immutable image tag:** \`${IMAGE_TAG}\`
+          - **Build Timestamp:** \`${TIMESTAMP}\`
+          - **Architecture:** \`linux/amd64\` (AWS Fargate X86_64)
+          - **Frontend SHA-256 Checksum:** \`${FRONTEND_CHECKSUM}\`
+          - **Node Gateway Archive SHA-256:** \`${NODE_ARCHIVE_SHA}\`
+          - **Go Runtime Archive SHA-256:** \`${GO_ARCHIVE_SHA}\`
+          - **Frontend artifact:** \`${{ steps.meta.outputs.frontend_artifact_name }}\`
+          - **Container artifact:** \`${{ steps.meta.outputs.container_artifact_name }}\`
+          - **Manifest artifact:** \`${{ steps.meta.outputs.manifest_artifact_name }}\`
+          - **Recovery artifact:** \`${{ steps.meta.outputs.recovery_artifact_name }}\`
+          - **Run mode:** Manual dispatch from \`develop\` runs the release after checks pass.
+          EOF
+
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: ${{ steps.meta.outputs.frontend_artifact_name }}
+          path: .dev/dist/
+          include-hidden-files: true
+          retention-days: 14
+
+      - name: Upload Container Image Archives Artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: ${{ steps.meta.outputs.container_artifact_name }}
+          path: .image-archives/
+          include-hidden-files: true
+          retention-days: 14
+
+      - name: Upload Release Manifest Artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: ${{ steps.meta.outputs.manifest_artifact_name }}
+          path: .dev/.release-metadata/release-manifest.json
+          include-hidden-files: true
+          retention-days: 30
+
+  deploy-demo:
+    name: Execute Release (Privileged OIDC Deployment)
+    needs: build-and-metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    if: github.ref == 'refs/heads/develop' && github.repository == 'slabarcaf/flowcard-treasury'
+    steps:
+      - name: Checkout pinned commit SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: ${{ needs.build-and-metadata.outputs.frontend_artifact_name }}
+          path: .dev/dist/
+
+      - name: Download Container Image Archives Artifact
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: ${{ needs.build-and-metadata.outputs.container_artifact_name }}
+          path: .image-archives/
+
+      - name: Download Release Manifest Artifact
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: ${{ needs.build-and-metadata.outputs.manifest_artifact_name }}
+          path: .dev/.release-metadata/
+
+      - name: Verify Provenance & Artifact Integrity
+        run: |
+          MANIFEST_FILE=".dev/.release-metadata/release-manifest.json"
+          if [[ ! -f "${MANIFEST_FILE}" ]]; then
+            echo "FATAL: Release manifest ${MANIFEST_FILE} not found!" >&2
+            exit 1
+          fi
+
+          MANIFEST_COMMIT="$(jq -r '.commit_sha // empty' "${MANIFEST_FILE}")"
+          CURRENT_SHA="${{ github.sha }}"
+          if [[ "${MANIFEST_COMMIT}" != "${CURRENT_SHA}" ]]; then
+            echo "FATAL: Manifest commit SHA (${MANIFEST_COMMIT}) does not match deployment commit SHA (${CURRENT_SHA})!" >&2
+            exit 1
+          fi
+
+          CURRENT_RUN_ID="${GITHUB_RUN_ID}"
+          CURRENT_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT}"
+          CURRENT_RELEASE_ID="${CURRENT_SHA}/${CURRENT_RUN_ID}-${CURRENT_RUN_ATTEMPT}"
+          CURRENT_IMAGE_TAG="${CURRENT_SHA}-${CURRENT_RUN_ID}-${CURRENT_RUN_ATTEMPT}"
+          if [[ "$(jq -r '.release_identity // empty' "${MANIFEST_FILE}")" != "${CURRENT_RELEASE_ID}" || \
+                "$(jq -r '.run_id // empty' "${MANIFEST_FILE}")" != "${CURRENT_RUN_ID}" || \
+                "$(jq -r '.run_attempt // empty' "${MANIFEST_FILE}")" != "${CURRENT_RUN_ATTEMPT}" || \
+                "$(jq -r '.image_tag // empty' "${MANIFEST_FILE}")" != "${CURRENT_IMAGE_TAG}" || \
+                "$(jq -r '.artifacts.frontend // empty' "${MANIFEST_FILE}")" != "frontend-dist-${CURRENT_IMAGE_TAG}" || \
+                "$(jq -r '.artifacts.container_images // empty' "${MANIFEST_FILE}")" != "container-images-${CURRENT_IMAGE_TAG}" || \
+                "$(jq -r '.artifacts.manifest // empty' "${MANIFEST_FILE}")" != "release-manifest-${CURRENT_IMAGE_TAG}" || \
+                "$(jq -r '.artifacts.recovery // empty' "${MANIFEST_FILE}")" != "release-recovery-${CURRENT_IMAGE_TAG}" ]]; then
+            echo "FATAL: Release identity, image tag, or artifact names do not match this workflow run attempt." >&2
+            echo "Select Re-run all jobs so build and deployment use the same attempt." >&2
+            exit 1
+          fi
+
+          EXPECTED_FRONTEND_CHECKSUM="$(jq -r '.frontend_dist_checksum_sha256 // empty' "${MANIFEST_FILE}")"
+          chmod +x infra/scripts/compute-frontend-hash.sh
+          ACTUAL_FRONTEND_CHECKSUM="$(./infra/scripts/compute-frontend-hash.sh .dev/dist)"
+          if [[ "${EXPECTED_FRONTEND_CHECKSUM}" != "${ACTUAL_FRONTEND_CHECKSUM}" ]]; then
+            echo "FATAL: Frontend distribution checksum (${ACTUAL_FRONTEND_CHECKSUM}) does not match manifest checksum (${EXPECTED_FRONTEND_CHECKSUM})!" >&2
+            exit 1
+          fi
+
+          # Verify container archive checksums before loading
+          EXPECTED_NODE_ARCHIVE_SHA="$(jq -r '.container_archives.node_gateway.archive_sha256 // empty' "${MANIFEST_FILE}")"
+          ACTUAL_NODE_ARCHIVE_SHA="$(sha256sum .image-archives/node-gateway.tar.gz | awk '{print $1}')"
+          if [[ "${EXPECTED_NODE_ARCHIVE_SHA}" != "${ACTUAL_NODE_ARCHIVE_SHA}" ]]; then
+            echo "FATAL: Node gateway image archive checksum mismatch!" >&2
+            exit 1
+          fi
+
+          EXPECTED_GO_ARCHIVE_SHA="$(jq -r '.container_archives.go_runtime.archive_sha256 // empty' "${MANIFEST_FILE}")"
+          ACTUAL_GO_ARCHIVE_SHA="$(sha256sum .image-archives/go-runtime.tar.gz | awk '{print $1}')"
+          if [[ "${EXPECTED_GO_ARCHIVE_SHA}" != "${ACTUAL_GO_ARCHIVE_SHA}" ]]; then
+            echo "FATAL: Go runtime image archive checksum mismatch!" >&2
+            exit 1
+          fi
+
+          echo "Verified manifest provenance, frontend checksum (${ACTUAL_FRONTEND_CHECKSUM}), and container archive checksums."
+
+      - name: Validate Fixed Foundation Configuration (Fail Closed)
+        env:
+          FOUNDATION_PATH: infra/environments/demo/foundation-outputs.json
+          AUTHORIZED_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+          TARGET_REGION: ${{ vars.AWS_REGION }}
+          TARGET_FRONTEND_BUCKET: ${{ vars.S3_FRONTEND_BUCKET }}
+          TARGET_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          if [[ ! -f "${FOUNDATION_PATH}" ]]; then
+            echo "FATAL [CONFIGURATION]: Fixed foundation configuration is missing from the pinned checkout." >&2
+            exit 1
+          fi
+          if ! git ls-files --error-unmatch "${FOUNDATION_PATH}" >/dev/null 2>&1; then
+            echo "FATAL [CONFIGURATION]: Foundation configuration must be tracked in the pinned checkout." >&2
+            exit 1
+          fi
+          echo "Validating fixed foundation configuration against repository targets..."
+
+          # Validate the configured deployment target and foundation resource schema.
+          if [[ ! "${AUTHORIZED_ACCOUNT}" =~ ^[0-9]{12}$ || \
+                ! "${TARGET_REGION}" =~ ^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$ || \
+                ! "${TARGET_FRONTEND_BUCKET}" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ || \
+                ! "${TARGET_CLOUDFRONT_DISTRIBUTION_ID}" =~ ^E[A-Z0-9]+$ ]]; then
+            echo "FATAL [CONFIGURATION]: Required repository deployment targets are missing or malformed." >&2
+            exit 1
+          fi
+
+          FOUNDATION_ACCOUNT="$(jq -r '.account_id // empty' "${FOUNDATION_PATH}")"
+          if [[ ! "${AUTHORIZED_ACCOUNT}" =~ ^[0-9]{12}$ || "${FOUNDATION_ACCOUNT}" != "${AUTHORIZED_ACCOUNT}" ]]; then
+            echo "FATAL [CONFIGURATION]: Foundation account does not match the configured deployment account." >&2
+            exit 1
+          fi
+
+          FOUNDATION_REGION="$(jq -r '.aws_region // empty' "${FOUNDATION_PATH}")"
+          if [[ "${FOUNDATION_REGION}" != "${TARGET_REGION}" ]]; then
+            echo "FATAL [CONFIGURATION]: Foundation region does not match the configured deployment region." >&2
+            exit 1
+          fi
+
+          if ! jq -e \
+            --arg account "${AUTHORIZED_ACCOUNT}" \
+            --arg region "${TARGET_REGION}" \
+            --arg frontend_bucket "${TARGET_FRONTEND_BUCKET}" \
+            --arg distribution_id "${TARGET_CLOUDFRONT_DISTRIBUTION_ID}" '
+              def real_string:
+                type == "string" and length > 0 and
+                (test("REPLACE_WITH_|placeholder|example"; "i") | not);
+              def task_definition($family):
+                type == "string" and
+                test("^arn:aws:ecs:" + $region + ":" + $account + ":task-definition/" + $family + ":[1-9][0-9]*$");
+              . as $f |
+              ($f.ecs_cluster_name | real_string) and
+              ($f.ecs_cluster_name | test("^[A-Za-z0-9_-]+$")) and
+              ($f.ecs_cluster_arn |
+                type == "string" and
+                test("^arn:aws:ecs:" + $region + ":" + $account + ":cluster/[A-Za-z0-9_-]+$")) and
+              (($f.ecs_cluster_arn | split("/")[-1]) == $f.ecs_cluster_name) and
+              ($f.private_subnet_ids |
+                if type == "array" then
+                  length >= 2 and (unique | length) == length and
+                  all(.[]; type == "string" and test("^subnet-[0-9a-f]+$"))
+                else false end) and
+              ($f.migration_task_security_group_id |
+                type == "string" and test("^sg-[0-9a-f]+$")) and
+              ($f.ecr_repository_urls |
+                type == "object" and
+                (keys == ["flowcard-go-api", "flowcard-go-worker", "flowcard-migration", "flowcard-node-gateway"]) and
+                .["flowcard-node-gateway"] == ($account + ".dkr.ecr." + $region + ".amazonaws.com/flowcard-node-gateway") and
+                .["flowcard-go-api"] == ($account + ".dkr.ecr." + $region + ".amazonaws.com/flowcard-go-api") and
+                .["flowcard-go-worker"] == ($account + ".dkr.ecr." + $region + ".amazonaws.com/flowcard-go-worker") and
+                .["flowcard-migration"] == ($account + ".dkr.ecr." + $region + ".amazonaws.com/flowcard-migration")) and
+              ($f.frontend_bucket_name == $frontend_bucket) and
+              ($f.cloudfront_distribution_id == $distribution_id) and
+              ($f.initial_task_definition_arns |
+                type == "object" and
+                (keys == ["go_api", "go_migration", "go_worker", "node_gateway", "node_migration", "synthetic_seed"]) and
+                (.node_gateway | task_definition("flowcard-demo-node-gateway")) and
+                (.go_api | task_definition("flowcard-demo-go-api")) and
+                (.go_worker | task_definition("flowcard-demo-go-worker")) and
+                (.node_migration | task_definition("flowcard-demo-node-migration")) and
+                (.go_migration | task_definition("flowcard-demo-go-migration")) and
+                (.synthetic_seed | task_definition("flowcard-demo-synthetic-seed"))) and
+              ($f.frontend_bucket_name | real_string) and
+              ($f.cloudfront_distribution_id | type == "string" and test("^E[A-Z0-9]+$")) and
+              ([
+                $f.account_id,
+                $f.aws_region,
+                $f.ecs_cluster_arn,
+                $f.ecs_cluster_name,
+                ($f.private_subnet_ids // [])[]?,
+                $f.migration_task_security_group_id,
+                ($f.ecr_repository_urls // {} | .[]?),
+                $f.frontend_bucket_name,
+                $f.cloudfront_distribution_id,
+                ($f.initial_task_definition_arns // {} | .[]?)
+              ] | all(.[]; type == "string" and (test("REPLACE_WITH_|placeholder|example"; "i") | not)))
+            ' "${FOUNDATION_PATH}" >/dev/null 2>&1; then
+            echo "FATAL [CONFIGURATION]: Foundation configuration is incomplete, contains placeholders, or conflicts with repository deployment targets." >&2
+            exit 1
+          fi
+
+          echo "Foundation resource references and repository deployment targets validated."
+
+      - name: Validate Repository Deployment Variables
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          S3_FRONTEND_BUCKET: ${{ vars.S3_FRONTEND_BUCKET }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          [[ "${AWS_ACCOUNT_ID}" == "968198283143" ]] || { echo "AWS_ACCOUNT_ID must match the configured demo account." >&2; exit 1; }
+          [[ "${AWS_REGION}" == "us-west-2" ]] || { echo "AWS_REGION must be us-west-2." >&2; exit 1; }
+          [[ "${AWS_DEPLOY_ROLE_ARN}" == "arn:aws:iam::968198283143:role/FlowCardGitHubDeployer" ]] || { echo "AWS_DEPLOY_ROLE_ARN must identify the scoped demo deployer role." >&2; exit 1; }
+          [[ -n "${S3_FRONTEND_BUCKET}" ]] || { echo "S3_FRONTEND_BUCKET is required." >&2; exit 1; }
+          [[ "${CLOUDFRONT_DISTRIBUTION_ID}" =~ ^E[A-Z0-9]+$ ]] || { echo "CLOUDFRONT_DISTRIBUTION_ID is missing or malformed." >&2; exit 1; }
+
+      - name: Assume AWS Deployer Role via GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Log in to Amazon ECR (Official Secure Password Stdin)
+        id: login-ecr
+        env:
+          ECR_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          ECR_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          REGISTRY="${ECR_ACCOUNT_ID}.dkr.ecr.${ECR_REGION}.amazonaws.com"
+          aws ecr get-login-password --region "${ECR_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"
+
+      - name: Load and Push Validated Container Images to ECR
+        id: load-and-push
+        env:
+          ECR_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          ECR_REGION: ${{ vars.AWS_REGION }}
+          IMAGE_TAG: ${{ needs.build-and-metadata.outputs.image_tag }}
+        run: |
+          REGISTRY="${ECR_ACCOUNT_ID}.dkr.ecr.${ECR_REGION}.amazonaws.com"
+          MANIFEST_FILE=".dev/.release-metadata/release-manifest.json"
+
+          # 1. Load exact immutable archives (No rebuilds in deployment environment)
+          docker load -i .image-archives/node-gateway.tar.gz
+          docker load -i .image-archives/go-runtime.tar.gz
+
+          # 2. Verify loaded image IDs match the build manifest
+          EXPECTED_NODE_ID="$(jq -r '.container_archives.node_gateway.image_id // empty' "${MANIFEST_FILE}")"
+          ACTUAL_NODE_ID="$(docker inspect --format='{{.Id}}' "flowcard-node-gateway:${IMAGE_TAG}")"
+          if [[ -n "${EXPECTED_NODE_ID}" && "${EXPECTED_NODE_ID}" != "${ACTUAL_NODE_ID}" ]]; then
+            echo "FATAL: Loaded Node gateway image ID (${ACTUAL_NODE_ID}) does not match the build manifest (${EXPECTED_NODE_ID})!" >&2
+            exit 1
+          fi
+
+          EXPECTED_GO_ID="$(jq -r '.container_archives.go_runtime.image_id // empty' "${MANIFEST_FILE}")"
+          ACTUAL_GO_ID="$(docker inspect --format='{{.Id}}' "flowcard-go-runtime:${IMAGE_TAG}")"
+          if [[ -n "${EXPECTED_GO_ID}" && "${EXPECTED_GO_ID}" != "${ACTUAL_GO_ID}" ]]; then
+            echo "FATAL: Loaded Go runtime image ID (${ACTUAL_GO_ID}) does not match the build manifest (${EXPECTED_GO_ID})!" >&2
+            exit 1
+          fi
+
+          # 3. Tag loaded images for ECR
+          docker tag "flowcard-node-gateway:${IMAGE_TAG}" "${REGISTRY}/flowcard-node-gateway:${IMAGE_TAG}"
+          docker tag "flowcard-go-runtime:${IMAGE_TAG}" "${REGISTRY}/flowcard-go-api:${IMAGE_TAG}"
+          docker tag "flowcard-go-runtime:${IMAGE_TAG}" "${REGISTRY}/flowcard-go-worker:${IMAGE_TAG}"
+          docker tag "flowcard-go-runtime:${IMAGE_TAG}" "${REGISTRY}/flowcard-migration:${IMAGE_TAG}"
+
+          # 4. Push exact images to ECR
+          docker push "${REGISTRY}/flowcard-node-gateway:${IMAGE_TAG}"
+          docker push "${REGISTRY}/flowcard-go-api:${IMAGE_TAG}"
+          docker push "${REGISTRY}/flowcard-go-worker:${IMAGE_TAG}"
+          docker push "${REGISTRY}/flowcard-migration:${IMAGE_TAG}"
+
+          # 5. Capture exact immutable repo digests post-push
+          NODE_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-node-gateway:${IMAGE_TAG}" | awk -F'@' '{print $2}')"
+          API_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-go-api:${IMAGE_TAG}" | awk -F'@' '{print $2}')"
+          WORKER_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-go-worker:${IMAGE_TAG}" | awk -F'@' '{print $2}')"
+          MIGRATION_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-migration:${IMAGE_TAG}" | awk -F'@' '{print $2}')"
+
+          echo "node_digest=${NODE_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "api_digest=${API_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "worker_digest=${WORKER_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "migration_digest=${MIGRATION_DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Execute Backend Deployment (deploy-demo.sh with OIDC)
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          FRONTEND_BUCKET: ${{ vars.S3_FRONTEND_BUCKET }}
+          CLOUDFRONT_DIST_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+          FRONTEND_CHECKSUM: ${{ needs.build-and-metadata.outputs.frontend_checksum }}
+          RELEASE_ID: ${{ needs.build-and-metadata.outputs.release_identity }}
+          IMAGE_TAG: ${{ needs.build-and-metadata.outputs.image_tag }}
+          NODE_DIGEST: ${{ steps.load-and-push.outputs.node_digest }}
+          API_DIGEST: ${{ steps.load-and-push.outputs.api_digest }}
+          WORKER_DIGEST: ${{ steps.load-and-push.outputs.worker_digest }}
+          MIGRATION_DIGEST: ${{ steps.load-and-push.outputs.migration_digest }}
+        run: |
+          chmod +x infra/scripts/deploy-demo.sh
+          DEPLOY_ARGS=(
+            --oidc
+            --confirm-approval
+            --account-id "${AWS_ACCOUNT_ID}"
+            --region "${AWS_REGION}"
+            --infra-outputs-file "infra/environments/demo/foundation-outputs.json"
+            --bucket "${FRONTEND_BUCKET}"
+            --distribution-id "${CLOUDFRONT_DIST_ID}"
+            --frontend-checksum "${FRONTEND_CHECKSUM}"
+            --node-digest "${NODE_DIGEST}"
+            --api-digest "${API_DIGEST}"
+            --worker-digest "${WORKER_DIGEST}"
+            --migration-digest "${MIGRATION_DIGEST}"
+            --desired-count 1
+            --seed
+          )
+          DEPLOY_ARGS+=(--frontend-artifact-id "${IMAGE_TAG}")
+          ./infra/scripts/deploy-demo.sh "${DEPLOY_ARGS[@]}"
+
+      - name: Execute Frontend Deployment (deploy-frontend.sh with OIDC)
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          FRONTEND_BUCKET: ${{ vars.S3_FRONTEND_BUCKET }}
+          CLOUDFRONT_DIST_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+          FRONTEND_CHECKSUM: ${{ needs.build-and-metadata.outputs.frontend_checksum }}
+        run: |
+          chmod +x infra/scripts/deploy-frontend.sh
+          ./infra/scripts/deploy-frontend.sh \
+            --oidc \
+            --confirm-approval \
+            --account-id "${AWS_ACCOUNT_ID}" \
+            --region "${AWS_REGION}" \
+            --bucket "${FRONTEND_BUCKET}" \
+            --distribution-id "${CLOUDFRONT_DIST_ID}" \
+            --build-dir .dev/dist \
+            --expected-checksum "${FRONTEND_CHECKSUM}"
+
+      - name: Finalize Successful Frontend and Backend Release
+        env:
+          RELEASE_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          RELEASE_REGION: ${{ vars.AWS_REGION }}
+          RELEASE_COMMIT_SHA: ${{ github.sha }}
+          RELEASE_FRONTEND_CHECKSUM: ${{ needs.build-and-metadata.outputs.frontend_checksum }}
+        run: |
+          chmod +x infra/scripts/finalize-release.sh
+          ./infra/scripts/finalize-release.sh \
+            --manifest .dev/.release-metadata/deployed-release.json \
+            --account-id "${RELEASE_ACCOUNT_ID}" \
+            --region "${RELEASE_REGION}" \
+            --commit-sha "${RELEASE_COMMIT_SHA}" \
+            --frontend-checksum "${RELEASE_FRONTEND_CHECKSUM}"
+
+      - name: Upload Release Recovery Metadata (Preserve State On Failure)
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: ${{ needs.build-and-metadata.outputs.recovery_artifact_name }}
+          path: .dev/.release-metadata/
+          include-hidden-files: true
+          retention-days: 90
+
+      - name: Release Failure Diagnostic
+        if: failure()
+        run: |
+          cat <<'EOF' >&2
+          ==============================================================================
+          RELEASE DEPLOYMENT FAILED
+          ==============================================================================
+          The workflow did not run an automatic rollback. Inspect the failed
+          phase and the release-recovery-metadata artifact before any separate
+          recovery action. A backend-only result is not a successful release.
+          Inspect current service state before retrying or taking recovery action.
+          ==============================================================================
+          EOF

@@ -967,7 +967,8 @@ func TestWebhookProcessor_RealPostgres_StaleConcurrentReads_DelayedDoesNotOverwr
 	createRealPostgresCompanyAndApplication(t, ctx, repo, compID, appID, internalPAID, extAccountID, domain.ApplicationStatusUnderReview)
 
 	// Simulate: Read B was processed at T2 with newer status SUSPENDED
-	t2 := time.Now().UTC()
+	// PostgreSQL stores TIMESTAMPTZ at microsecond precision.
+	t2 := time.Now().UTC().Truncate(time.Microsecond)
 	t1 := t2.Add(-10 * time.Minute) // Read A happened 10 minutes earlier at T1 with ACTIVE
 
 	// Apply Read B (newer: SUSPENDED at T2)

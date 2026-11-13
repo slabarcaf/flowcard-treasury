@@ -41,32 +41,12 @@ func main() {
 func run(ctx context.Context, cfg *config.Config) error {
 	log.Printf("starting company-onboarding worker process (%s)", cfg.Environment)
 
-	// Adapters fail-closed by default; production execution requires explicit external credentials.
-	platformClient := airwallex.NewUnconfiguredClient("production Airwallex credentials unconfigured; live calls disabled")
-	storageStore := storage.NewUnavailableStore("production object store unconfigured; live access disabled")
-
-	var subWorker *worker.Worker
-	var whProcessor *webhooks.Processor
-
-	if strings.TrimSpace(cfg.DatabaseURL) != "" {
-		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
-		if err != nil {
-			return fmt.Errorf("DATABASE_CONNECT_FAILED: %w", postgres.SanitizeDBError(err))
-		}
-		defer pool.Close()
-
-		if err := postgres.VerifySchemaReadiness(ctx, pool); err != nil {
-			return fmt.Errorf("DATABASE_SCHEMA_FAILED: %w", err)
-		}
-
-		repo := postgres.NewRepository(pool)
-		subWorker = worker.NewWorker(repo, storageStore, platformClient, worker.Config{
-			LeaseDuration: 30 * time.Second,
-			RetryBackoff:  5 * time.Second,
-		})
-		whProcessor = webhooks.NewProcessor(repo, platformClient)
-	} else {
-		log.Println("DATABASE_URL not configured; worker running idle / fail-closed")
+	_, _, subWorker, whProcessor, closeFn, err := buildWorkerDependencies(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize worker dependencies: %w", err)
+	}
+	if closeFn != nil {
+		defer closeFn()
 	}
 
 	jobTicker := time.NewTicker(2 * time.Second)
@@ -86,11 +66,89 @@ func run(ctx context.Context, cfg *config.Config) error {
 			log.Printf("worker process stopped cleanly")
 			return nil
 		case <-jobTicker.C:
-			_, _ = subWorker.ProcessNextJob(ctx)
+			if subWorker != nil {
+				_, _ = subWorker.ProcessNextJob(ctx)
+			}
 		case <-webhookTicker.C:
-			_, _ = whProcessor.ProcessPending(ctx)
+			if whProcessor != nil {
+				_, _ = whProcessor.ProcessPending(ctx)
+			}
 		case <-reconTicker.C:
-			_, _ = whProcessor.ReconcileAccounts(ctx)
+			if whProcessor != nil {
+				_, _ = whProcessor.ReconcileAccounts(ctx)
+			}
 		}
 	}
+}
+
+// buildWorkerDependencies constructs runtime dependencies for the background worker.
+// Fails closed if configured credentials or endpoints are invalid.
+func buildWorkerDependencies(ctx context.Context, cfg *config.Config) (airwallex.PlatformClient, storage.ObjectStore, *worker.Worker, *webhooks.Processor, func(), error) {
+	var platformClient airwallex.PlatformClient
+	if strings.TrimSpace(cfg.AirwallexClientID) != "" && strings.TrimSpace(cfg.AirwallexAPIKey) != "" {
+		baseURL := strings.TrimSpace(cfg.AirwallexBaseURL)
+		if baseURL == "" {
+			baseURL = "https://api.sandbox.airwallex.com"
+		}
+		c, err := airwallex.NewClient(airwallex.ClientConfig{
+			BaseURL:             baseURL,
+			ClientID:            cfg.AirwallexClientID,
+			APIKey:              cfg.AirwallexAPIKey,
+			PlatformEnvironment: "sandbox", // Explicit constructor-level sandbox boundary for this demo runtime
+		})
+		if err != nil {
+			return nil, nil, nil, nil, nil, fmt.Errorf("failed to initialize Airwallex client: %w", err)
+		}
+		platformClient = c
+	} else {
+		platformClient = airwallex.NewUnconfiguredClient("production Airwallex credentials unconfigured; live calls disabled")
+	}
+
+	var storageStore storage.ObjectStore
+	if strings.TrimSpace(cfg.S3BucketDocuments) != "" && strings.TrimSpace(cfg.S3KMSKeyID) != "" {
+		region := strings.TrimSpace(cfg.AWSRegion)
+		if region == "" {
+			region = "us-west-2"
+		}
+		s, err := storage.NewS3Store(storage.S3Config{
+			Bucket:               cfg.S3BucketDocuments,
+			ServerSideEncryption: "aws:kms",
+			KMSKeyID:             cfg.S3KMSKeyID,
+			Region:               region,
+		})
+		if err != nil {
+			return nil, nil, nil, nil, nil, fmt.Errorf("failed to initialize S3 document store: %w", err)
+		}
+		storageStore = s
+	} else {
+		storageStore = storage.NewUnavailableStore("production object store unconfigured; live access disabled")
+	}
+
+	var subWorker *worker.Worker
+	var whProcessor *webhooks.Processor
+	var closeFn func()
+
+	if strings.TrimSpace(cfg.DatabaseURL) != "" {
+		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+		if err != nil {
+			return nil, nil, nil, nil, nil, fmt.Errorf("DATABASE_CONNECT_FAILED: %w", postgres.SanitizeDBError(err))
+		}
+
+		if err := postgres.VerifySchemaReadiness(ctx, pool); err != nil {
+			pool.Close()
+			return nil, nil, nil, nil, nil, fmt.Errorf("DATABASE_SCHEMA_FAILED: %w", err)
+		}
+
+		closeFn = func() { pool.Close() }
+		repo := postgres.NewRepository(pool)
+		subWorker = worker.NewWorker(repo, storageStore, platformClient, worker.Config{
+			LeaseDuration: 30 * time.Second,
+			RetryBackoff:  5 * time.Second,
+		})
+		whProcessor = webhooks.NewProcessor(repo, platformClient)
+	} else {
+		log.Println("DATABASE_URL not configured; worker running idle / fail-closed")
+	}
+
+	return platformClient, storageStore, subWorker, whProcessor, closeFn, nil
 }

@@ -8,11 +8,13 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/credentials/endpointcreds"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
@@ -20,13 +22,16 @@ import (
 )
 
 // S3Config defines configuration parameters for the S3-compatible encrypted object store.
-// Injected via constructor; no environment variables are read automatically.
+// Injected via constructor; no environment variables are read automatically unless
+// credentials are not explicitly provided.
 type S3Config struct {
 	Endpoint             string
 	Bucket               string
 	Region               string
 	AccessKeyID          string
 	SecretAccessKey      string
+	SessionToken         string
+	CredentialsProvider  aws.CredentialsProvider
 	ServerSideEncryption string // "aws:kms" or "AES256"; required
 	KMSKeyID             string // Required when ServerSideEncryption is "aws:kms"
 	HTTPClient           *http.Client
@@ -38,16 +43,120 @@ type S3Store struct {
 	client *s3.Client
 }
 
+// ResolveRuntimeCredentials resolves AWS credentials supporting:
+// 1. Static environment credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
+// 2. ECS task role container credentials (AWS_CONTAINER_CREDENTIALS_RELATIVE_URI or AWS_CONTAINER_CREDENTIALS_FULL_URI)
+// Returns ErrStorageUnconfigured if credentials cannot be resolved.
+func ResolveRuntimeCredentials(lookup func(string) string, httpClient endpointcreds.HTTPClient) (aws.CredentialsProvider, error) {
+	if lookup == nil {
+		lookup = os.Getenv
+	}
+
+	accessKey := strings.TrimSpace(lookup("AWS_ACCESS_KEY_ID"))
+	secretKey := strings.TrimSpace(lookup("AWS_SECRET_ACCESS_KEY"))
+	sessionToken := strings.TrimSpace(lookup("AWS_SESSION_TOKEN"))
+	if accessKey != "" && secretKey != "" {
+		return credentials.NewStaticCredentialsProvider(accessKey, secretKey, sessionToken), nil
+	}
+
+	var endpoint string
+	if relURI := strings.TrimSpace(lookup("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")); relURI != "" {
+		// Relative URI validation: must be an absolute path without scheme or traversal
+		if !strings.HasPrefix(relURI, "/") || strings.Contains(relURI, "..") || strings.Contains(relURI, "://") {
+			return nil, fmt.Errorf("%w: invalid container credentials relative URI format", ErrStorageUnconfigured)
+		}
+		endpoint = "http://169.254.170.2" + relURI
+	} else if fullURI := strings.TrimSpace(lookup("AWS_CONTAINER_CREDENTIALS_FULL_URI")); fullURI != "" {
+		parsed, err := url.Parse(fullURI)
+		if err != nil || !parsed.IsAbs() {
+			return nil, fmt.Errorf("%w: invalid container credentials full URI format", ErrStorageUnconfigured)
+		}
+		if parsed.User != nil {
+			return nil, fmt.Errorf("%w: container credentials URI must not contain credentials", ErrStorageUnconfigured)
+		}
+		host := parsed.Hostname()
+		isLoopback := host == "127.0.0.1" || host == "localhost"
+		isLinkLocal := host == "169.254.170.2" || host == "169.254.169.254" || host == "fd00:ec2::23"
+		switch parsed.Scheme {
+		case "https":
+			// HTTPS permitted
+		case "http":
+			if !isLoopback && !isLinkLocal {
+				return nil, fmt.Errorf("%w: plain HTTP container credentials URI strictly restricted to loopback or link-local host", ErrStorageUnconfigured)
+			}
+		default:
+			return nil, fmt.Errorf("%w: unsupported scheme for container credentials URI", ErrStorageUnconfigured)
+		}
+		endpoint = fullURI
+	}
+
+	if endpoint != "" {
+		var optFns []func(*endpointcreds.Options)
+		if httpClient != nil {
+			optFns = append(optFns, func(o *endpointcreds.Options) {
+				o.HTTPClient = httpClient
+			})
+		} else {
+			safeClient := &http.Client{
+				Timeout: 10 * time.Second,
+				CheckRedirect: func(req *http.Request, via []*http.Request) error {
+					return errors.New("security: credential endpoint redirects are strictly prohibited")
+				},
+			}
+			optFns = append(optFns, func(o *endpointcreds.Options) {
+				o.HTTPClient = safeClient
+			})
+		}
+
+		if token := strings.TrimSpace(lookup("AWS_CONTAINER_AUTHORIZATION_TOKEN")); token != "" {
+			optFns = append(optFns, func(o *endpointcreds.Options) {
+				o.AuthorizationToken = token
+			})
+		} else if tokenFile := strings.TrimSpace(lookup("AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE")); tokenFile != "" {
+			tokenBytes, err := os.ReadFile(tokenFile)
+			if err != nil {
+				return nil, fmt.Errorf("%w: failed to read container authorization token file: %v", ErrStorageUnconfigured, err)
+			}
+			optFns = append(optFns, func(o *endpointcreds.Options) {
+				o.AuthorizationToken = strings.TrimSpace(string(tokenBytes))
+			})
+		}
+
+		return aws.NewCredentialsCache(endpointcreds.New(endpoint, optFns...)), nil
+	}
+
+	return nil, ErrStorageUnconfigured
+}
+
 // NewS3Store initializes an S3Store using the official AWS SDK v2 with strict validation
 // of credentials, URL security (strict HTTPS, no userinfo/path/query, redirect refusal),
 // and mandatory server-side at-rest encryption. Fails closed on any misconfiguration.
 func NewS3Store(cfg S3Config) (*S3Store, error) {
 	bucket := strings.TrimSpace(cfg.Bucket)
-	accessKey := strings.TrimSpace(cfg.AccessKeyID)
-	secretKey := strings.TrimSpace(cfg.SecretAccessKey)
-
-	if bucket == "" || accessKey == "" || secretKey == "" {
+	if bucket == "" {
 		return nil, ErrStorageUnconfigured
+	}
+
+	var creds aws.CredentialsProvider
+	if cfg.CredentialsProvider != nil {
+		creds = cfg.CredentialsProvider
+	} else {
+		accessKey := strings.TrimSpace(cfg.AccessKeyID)
+		secretKey := strings.TrimSpace(cfg.SecretAccessKey)
+		sessionToken := strings.TrimSpace(cfg.SessionToken)
+		if accessKey != "" && secretKey != "" {
+			creds = credentials.NewStaticCredentialsProvider(accessKey, secretKey, sessionToken)
+		} else {
+			var endpointHTTPClient endpointcreds.HTTPClient
+			if cfg.HTTPClient != nil {
+				endpointHTTPClient = cfg.HTTPClient
+			}
+			resolved, err := ResolveRuntimeCredentials(os.Getenv, endpointHTTPClient)
+			if err != nil {
+				return nil, err
+			}
+			creds = resolved
+		}
 	}
 
 	sse := strings.TrimSpace(cfg.ServerSideEncryption)
@@ -118,7 +227,7 @@ func NewS3Store(cfg S3Config) (*S3Store, error) {
 
 	opts := s3.Options{
 		Region:       region,
-		Credentials:  credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
+		Credentials:  creds,
 		HTTPClient:   httpClient,
 		UsePathStyle: true,
 	}
