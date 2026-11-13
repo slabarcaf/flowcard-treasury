@@ -39,18 +39,18 @@ describe("Real PostgreSQL Integration (Disposable Container 54329)", () => {
   });
 
   afterAll(async () => {
-    if (leaseClient) {
-      await leaseClient.query("SELECT pg_advisory_unlock($1)", [SEED_ADVISORY_LOCK_ID]);
-      leaseClient.release();
+    try {
+      if (leaseClient) {
+        const result = await leaseClient.query<{ unlocked: boolean }>(
+          "SELECT pg_advisory_unlock($1) AS unlocked",
+          [SEED_ADVISORY_LOCK_ID],
+        );
+        expect(result.rows[0]?.unlocked).toBe(true);
+      }
+    } finally {
+      if (leaseClient) leaseClient.release();
+      if (pool) await pool.end();
     }
-    // Verify advisory lock is completely released after suite teardown
-    const check = await pool.query<{ unlocked: boolean }>(
-      "SELECT pg_try_advisory_lock($1) as unlocked",
-      [SEED_ADVISORY_LOCK_ID],
-    );
-    expect(check.rows[0].unlocked).toBe(true);
-    await pool.query("SELECT pg_advisory_unlock($1)", [SEED_ADVISORY_LOCK_ID]);
-    await pool.end();
   });
 
   describe("Safety Guard Enforcement", () => {
@@ -338,8 +338,27 @@ describe("Real PostgreSQL Integration (Disposable Container 54329)", () => {
         );
         expect(Number.parseInt(paCheck.rows[0].count, 10)).toBe(0);
 
+        const syntheticFixtureCheck = await pool.query<{
+          company_id: string;
+          application_id: string;
+          platform_account_id: string | null;
+        }>(`
+          SELECT c.id AS company_id, a.id AS application_id, a.platform_account_id
+            FROM onboarding.companies c
+            JOIN onboarding.applications a ON a.company_id = c.id
+           WHERE c.id IN ('comp_synthetic_bloom', 'comp_synthetic_atlas')
+             AND a.id IN ('app_synthetic_bloom', 'app_synthetic_atlas')
+           ORDER BY c.id
+        `);
+        expect(syntheticFixtureCheck.rows).toEqual([
+          { company_id: "comp_synthetic_atlas", application_id: "app_synthetic_atlas", platform_account_id: null },
+          { company_id: "comp_synthetic_bloom", application_id: "app_synthetic_bloom", platform_account_id: null },
+        ]);
+
         const livePollCheck = await pool.query<{ count: string }>(
-          "SELECT count(*) as count FROM onboarding.platform_accounts WHERE external_account_id IS NOT NULL AND external_account_id != ''",
+          `SELECT count(*) as count FROM onboarding.platform_accounts
+            WHERE company_id IN ('comp_synthetic_bloom', 'comp_synthetic_atlas')
+              AND external_account_id IS NOT NULL AND external_account_id != ''`,
         );
         expect(Number.parseInt(livePollCheck.rows[0].count, 10)).toBe(0);
       } finally {

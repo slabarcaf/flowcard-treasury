@@ -806,19 +806,55 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
     });
 
     it("deploy-demo.sh accepts --oidc flag and proceeds past credential argument validation", () => {
-      const res = spawnSync(DEPLOY_SCRIPT, [
-        "--confirm-approval",
-        "--oidc",
-        "--account-id", VALID_ACCOUNT,
-        "--region", "us-west-2",
-        "--node-digest", VALID_DIGEST,
-        "--api-digest", VALID_DIGEST,
-        "--worker-digest", VALID_DIGEST,
-        "--migration-digest", VALID_DIGEST,
-      ], { encoding: "utf8" });
+      const tmpDir = mkdtempSync(join(tmpdir(), "oidc-argument-test-"));
+      const sentinel = join(tmpDir, "aws-called");
+      try {
+        const mockAws = join(tmpDir, "aws");
+        writeFileSync(mockAws, `#!/usr/bin/env bash
+printf '%s\\n' "$*" > "$AWS_CALL_SENTINEL"
+exit 42
+`);
+        chmodSync(mockAws, 0o755);
 
-      expect(res.stderr).not.toContain("Either --profile <name> or --oidc must be specified");
-      expect(res.stderr).not.toContain("Unknown option");
+        const res = spawnSync(DEPLOY_SCRIPT, [
+          "--confirm-approval",
+          "--oidc",
+          "--account-id", VALID_ACCOUNT,
+          "--region", "us-west-2",
+          "--node-digest", VALID_DIGEST,
+          "--api-digest", VALID_DIGEST,
+          "--worker-digest", VALID_DIGEST,
+          "--migration-digest", VALID_DIGEST,
+        ], {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            PATH: `${tmpDir}:${process.env.PATH ?? ""}`,
+            AWS_PROFILE: "",
+            AWS_DEFAULT_PROFILE: "",
+            AWS_ACCESS_KEY_ID: "",
+            AWS_SECRET_ACCESS_KEY: "",
+            AWS_SESSION_TOKEN: "",
+            AWS_SECURITY_TOKEN: "",
+            AWS_WEB_IDENTITY_TOKEN_FILE: "",
+            AWS_ROLE_ARN: "",
+            AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "",
+            AWS_CONTAINER_CREDENTIALS_FULL_URI: "",
+            AWS_EC2_METADATA_DISABLED: "true",
+            AWS_CONFIG_FILE: join(tmpDir, "config"),
+            AWS_SHARED_CREDENTIALS_FILE: join(tmpDir, "credentials"),
+            AWS_CALL_SENTINEL: sentinel,
+          },
+        });
+
+        expect(res.status).toBe(1);
+        expect(res.stderr).not.toContain("Either --profile <name> or --oidc must be specified");
+        expect(res.stderr).not.toContain("Unknown option");
+        expect(res.stderr).toContain("Failed to retrieve AWS caller account from STS identity check");
+        expect(readFileSync(sentinel, "utf8").trim()).toBe("sts get-caller-identity --output json");
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
     });
 
     it("deploy-frontend.sh rejects execution when neither --profile nor --oidc is supplied", () => {
