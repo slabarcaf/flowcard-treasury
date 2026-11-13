@@ -494,7 +494,15 @@ exit 1
         ], {
           encoding: "utf8",
           cwd: tmpDir,
-          env: { ...process.env, PATH: `${tmpDir}:${process.env.PATH}` },
+          env: {
+            ...process.env,
+            PATH: `${tmpDir}:${process.env.PATH}`,
+            GITHUB_SHA: "a".repeat(40),
+            GITHUB_RUN_ID: "1234",
+            GITHUB_RUN_ATTEMPT: "2",
+            RELEASE_ID: `${"a".repeat(40)}/1234-2`,
+            IMAGE_TAG: `${"a".repeat(40)}-1234-2`,
+          },
         });
 
         expect(res.status).toBe(0);
@@ -505,6 +513,12 @@ exit 1
           "utf8",
         ));
         expect(deployedRelease.status).toBe("backend_verified_frontend_pending");
+        expect(deployedRelease.release_identity).toBe(`${"a".repeat(40)}/1234-2`);
+        expect(deployedRelease.run_id).toBe("1234");
+        expect(deployedRelease.run_attempt).toBe("2");
+        expect(deployedRelease.image_tag).toBe(`${"a".repeat(40)}-1234-2`);
+        expect(deployedRelease.target_release.release_identity).toBe(`${"a".repeat(40)}/1234-2`);
+        expect(deployedRelease.target_release.image_tag).toBe(`${"a".repeat(40)}-1234-2`);
         expect(deployedRelease).not.toHaveProperty("previous_release");
       } finally {
         rmSync(tmpDir, { recursive: true, force: true });
@@ -694,6 +708,10 @@ exit 1
       try {
         writeFileSync(manifestPath, JSON.stringify({
           status: "backend_verified_frontend_pending",
+          release_identity: `${commit}/123-1`,
+          run_id: "123",
+          run_attempt: "1",
+          image_tag: `${commit}-123-1`,
           account_id: VALID_ACCOUNT,
           region: "us-west-2",
           services: {
@@ -709,6 +727,8 @@ exit 1
           },
           target_release: {
             commit_sha: commit,
+            release_identity: `${commit}/123-1`,
+            image_tag: `${commit}-123-1`,
             frontend_artifact_id: "release-123",
             frontend_checksum_sha256: checksum,
           },
@@ -739,6 +759,12 @@ exit 1
         manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
         expect(manifest.status).toBe("deployed_and_verified");
         expect(manifest.frontend.status).toBe("published_and_invalidation_completed");
+        expect(manifest.release_identity).toBe(`${commit}/123-1`);
+        expect(manifest.run_id).toBe("123");
+        expect(manifest.run_attempt).toBe("1");
+        expect(manifest.image_tag).toBe(`${commit}-123-1`);
+        expect(manifest.target_release.release_identity).toBe(`${commit}/123-1`);
+        expect(manifest.target_release.image_tag).toBe(`${commit}-123-1`);
         expect(manifest.release_verified_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       } finally {
         rmSync(tmpDir, { recursive: true, force: true });

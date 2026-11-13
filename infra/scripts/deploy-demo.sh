@@ -333,12 +333,18 @@ cat <<PRE_EOF > .dev/.release-metadata/deployed-release.json
 {
   "schema_version": "1.0",
   "status": "backend_in_progress",
+  "release_identity": "${RELEASE_ID:-local-unverified}",
+  "run_id": "${GITHUB_RUN_ID:-}",
+  "run_attempt": "${GITHUB_RUN_ATTEMPT:-}",
+  "image_tag": "${IMAGE_TAG:-}",
   "account_id": "${AUTHORIZED_ACCOUNT_ID}",
   "region": "${REGION}",
   "cluster_name": "${CLUSTER_NAME}",
   "snapshot_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
   "target_release": {
     "commit_sha": "${GITHUB_SHA:-local-unverified}",
+    "release_identity": "${RELEASE_ID:-local-unverified}",
+    "image_tag": "${IMAGE_TAG:-}",
     "node_digest": "${NODE_DIGEST}",
     "api_digest": "${API_DIGEST}",
     "worker_digest": "${WORKER_DIGEST}",
@@ -547,6 +553,10 @@ verify_service_deployment "flowcard-demo-node-gateway" "${NODE_TD_ARN}"
 cat <<FINAL_EOF > .dev/.release-metadata/deployed-release.json
 {
   "schema_version": "1.0",
+  "release_identity": "${RELEASE_ID:-local-unverified}",
+  "run_id": "${GITHUB_RUN_ID:-}",
+  "run_attempt": "${GITHUB_RUN_ATTEMPT:-}",
+  "image_tag": "${IMAGE_TAG:-}",
   "account_id": "${AUTHORIZED_ACCOUNT_ID}",
   "region": "${REGION}",
   "cluster_name": "${CLUSTER_NAME}",
@@ -588,6 +598,8 @@ cat <<FINAL_EOF > .dev/.release-metadata/deployed-release.json
   },
   "target_release": {
     "commit_sha": "${GITHUB_SHA:-local-unverified}",
+    "release_identity": "${RELEASE_ID:-local-unverified}",
+    "image_tag": "${IMAGE_TAG:-}",
     "node_digest": "${NODE_DIGEST}",
     "api_digest": "${API_DIGEST}",
     "worker_digest": "${WORKER_DIGEST}",

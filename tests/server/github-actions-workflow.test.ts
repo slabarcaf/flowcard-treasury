@@ -176,6 +176,13 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(content).toContain("EXPECTED_FRONTEND_CHECKSUM");
       expect(content).toContain("ACTUAL_FRONTEND_CHECKSUM");
       expect(content).toContain("sha256sum");
+      expect(content).toContain('CURRENT_RELEASE_ID="${CURRENT_SHA}/${CURRENT_RUN_ID}-${CURRENT_RUN_ATTEMPT}"');
+      expect(content).toContain(".artifacts.frontend");
+      expect(content).toContain(".artifacts.recovery");
+      const deploySection = content.split("deploy-demo:")[1] || "";
+      expect(deploySection.indexOf("Release identity, image tag, or artifact names")).toBeGreaterThan(0);
+      expect(deploySection.indexOf("Release identity, image tag, or artifact names"))
+        .toBeLessThan(deploySection.indexOf("Assume AWS Deployer Role via GitHub OIDC"));
     });
 
     it("publishes a pending release manifest and build summary without approval gates", () => {
@@ -183,6 +190,11 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(content).toContain("release-manifest.json");
       expect(content).toContain("$GITHUB_STEP_SUMMARY");
       expect(content).toContain('"status": "build_ready_pending_deployment"');
+      expect(content).toContain('"release_identity": "${RELEASE_ID}"');
+      expect(content).toContain('"run_id": "${RUN_ID}"');
+      expect(content).toContain('"run_attempt": "${RUN_ATTEMPT}"');
+      expect(content).toContain('"image_tag": "${IMAGE_TAG}"');
+      expect(content).toContain("Recovery artifact:");
       expect(content).not.toContain("activation_preconditions");
       expect(content).not.toContain("pending_manual_foundation");
       expect(content).not.toContain("approval_evidence");
@@ -193,18 +205,88 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
     it("saves container archives with sha256 checksums in unprivileged job and loads without rebuild in deploy job", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       // Build job saves archives
-      expect(content).toContain("docker save \"flowcard-node-gateway:${COMMIT}\" | gzip > .image-archives/node-gateway.tar.gz");
-      expect(content).toContain("docker save \"flowcard-go-runtime:${COMMIT}\" | gzip > .image-archives/go-runtime.tar.gz");
+      expect(content).toContain("docker save \"flowcard-node-gateway:${IMAGE_TAG}\" | gzip > .image-archives/node-gateway.tar.gz");
+      expect(content).toContain("docker save \"flowcard-go-runtime:${IMAGE_TAG}\" | gzip > .image-archives/go-runtime.tar.gz");
       expect(content).toContain("NODE_ARCHIVE_SHA=");
       expect(content).toContain("GO_ARCHIVE_SHA=");
-      expect(content).toContain("name: container-images");
+      expect(content).toContain("IMAGE_TAG=\"${COMMIT_SHA}-${RUN_ID}-${RUN_ATTEMPT}\"");
+      expect(content).toContain("RELEASE_ID=\"${COMMIT_SHA}/${RUN_ID}-${RUN_ATTEMPT}\"");
+      expect(content).toContain("name: ${{ steps.meta.outputs.container_artifact_name }}");
 
       // Deploy job downloads and loads archives without rebuild
       const deploySection = content.split("deploy-demo:")[1] || "";
-      expect(deploySection).toContain("name: container-images");
+      expect(deploySection).toContain("name: ${{ needs.build-and-metadata.outputs.container_artifact_name }}");
       expect(deploySection).toContain("docker load -i .image-archives/node-gateway.tar.gz");
       expect(deploySection).toContain("docker load -i .image-archives/go-runtime.tar.gz");
+      expect(deploySection).toContain("IMAGE_TAG: ${{ needs.build-and-metadata.outputs.image_tag }}");
+      expect(deploySection).toContain('docker push "${REGISTRY}/flowcard-node-gateway:${IMAGE_TAG}"');
+      expect(deploySection).toContain('docker push "${REGISTRY}/flowcard-go-api:${IMAGE_TAG}"');
+      expect(deploySection).toContain('docker push "${REGISTRY}/flowcard-go-worker:${IMAGE_TAG}"');
+      expect(deploySection).toContain('docker push "${REGISTRY}/flowcard-migration:${IMAGE_TAG}"');
+      expect(deploySection).toContain('--node-digest "${NODE_DIGEST}"');
+      expect(deploySection).toContain('--api-digest "${API_DIGEST}"');
+      expect(deploySection).toContain('--worker-digest "${WORKER_DIGEST}"');
+      expect(deploySection).toContain('--migration-digest "${MIGRATION_DIGEST}"');
       expect(deploySection).not.toContain("docker build");
+    });
+
+    it("uses identical run-scoped artifact names across upload and download steps", () => {
+      const content = readFileSync(WORKFLOW_PATH, "utf8");
+      const deploySection = content.split("deploy-demo:")[1] || "";
+      const metaBlock = workflowStepRunBlock(content, "Record Metadata & Commit Identity");
+      for (const [stepOutput, jobOutput] of [
+        ["frontend_artifact_name", "frontend_artifact_name"],
+        ["container_artifact_name", "container_artifact_name"],
+        ["manifest_artifact_name", "manifest_artifact_name"],
+      ]) {
+        expect(content).toContain("name: ${{ steps.meta.outputs." + stepOutput + " }}");
+        expect(deploySection).toContain("name: ${{ needs.build-and-metadata.outputs." + jobOutput + " }}");
+      }
+      expect(content).toContain("release-recovery-${IMAGE_TAG}");
+      expect(deploySection).toContain("needs.build-and-metadata.outputs.recovery_artifact_name");
+
+      const runMetadata = (attempt: string) => {
+        const tmpDir = mkdtempSync(join(tmpdir(), "release-identity-"));
+        const outputPath = join(tmpDir, "outputs.txt");
+        const envPath = join(tmpDir, "env.txt");
+        try {
+          const result = spawnSync("bash", ["-c", metaBlock], {
+            cwd: tmpDir,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              GITHUB_SHA: "a".repeat(40),
+              GITHUB_RUN_ID: "123456",
+              GITHUB_RUN_ATTEMPT: attempt,
+              GITHUB_OUTPUT: outputPath,
+              GITHUB_ENV: envPath,
+            },
+          });
+          expect(result.status, result.stderr).toBe(0);
+          return Object.fromEntries(readFileSync(outputPath, "utf8").trim().split("\n").map((line) => {
+            const [key, ...valueParts] = line.split("=");
+            return [key, valueParts.join("=")];
+          })) as Record<string, string>;
+        } finally {
+          rmSync(tmpDir, { recursive: true, force: true });
+        }
+      };
+
+      const firstRun = runMetadata("1");
+      const retry = runMetadata("2");
+      expect(firstRun.release_identity).toBe(`${"a".repeat(40)}/123456-1`);
+      expect(firstRun.image_tag).toBe(`${"a".repeat(40)}-123456-1`);
+      expect(firstRun.frontend_artifact_name).toBe(`frontend-dist-${firstRun.image_tag}`);
+      expect(firstRun.container_artifact_name).toBe(`container-images-${firstRun.image_tag}`);
+      expect(firstRun.manifest_artifact_name).toBe(`release-manifest-${firstRun.image_tag}`);
+      expect(firstRun.recovery_artifact_name).toBe(`release-recovery-${firstRun.image_tag}`);
+      expect(firstRun.image_tag).not.toContain("/");
+      expect(retry.release_identity).toBe(`${"a".repeat(40)}/123456-2`);
+      // A failed-jobs-only retry pairs attempt 1 build output with attempt 2 deploy.
+      expect(firstRun.release_identity).not.toBe(retry.release_identity);
+      expect(content).toContain("Select Re-run all jobs so build and deployment use the same attempt.");
+      expect(retry.image_tag).not.toBe(firstRun.image_tag);
+      expect(retry.frontend_artifact_name).not.toBe(firstRun.frontend_artifact_name);
     });
 
     it("validates the pinned foundation and repository targets before OIDC", () => {
@@ -234,7 +316,7 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(deploySection).toContain("infra/environments/demo/foundation-outputs.json");
       expect(deploySection).toContain("Upload Release Recovery Metadata");
       expect(deploySection).toContain("if: always()");
-      expect(deploySection).toContain("name: release-recovery-metadata");
+      expect(deploySection).toContain("needs.build-and-metadata.outputs.recovery_artifact_name");
     });
 
     it("validates the pinned foundation configuration before deployment", () => {

@@ -3,7 +3,8 @@
 ## Overview
 
 Run commands from the repository root. This runbook defines the end-to-end
-procedure for executing, monitoring, and rolling back FlowCard AWS demo releases.
+procedure for executing, monitoring, and rolling back FlowCard AWS demo
+releases.
 
 For current readiness and acceptance status, use
 [`demo-operations.md`](demo-operations.md) and
@@ -198,10 +199,17 @@ executes:
      (`/index.html`, `/`, `/vite.svg`, etc., never `/*`).
    - Waits for the invalidation to complete. A missing invalidation ID or failed
      waiter leaves release metadata pending.
-8. Finalizes `.dev/.release-metadata/deployed-release.json` only after both backend
-   health checks and frontend invalidation complete. The finalizer checks the
+8. Finalizes `.dev/.release-metadata/deployed-release.json` only after both
+   backend health checks and frontend invalidation complete. The finalizer
+   checks the
    account, region, source commit, and frontend checksum before marking the
    release successful.
+
+Build and deployment artifacts are tied to the workflow run attempt. If a
+deployment-only retry reuses artifacts from an earlier attempt, provenance
+verification fails. Select **Re-run all jobs** so build and deployment use the
+same attempt; separate build and deployment attempt identities are not
+supported.
 
 ---
 

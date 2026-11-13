@@ -94,6 +94,12 @@ jobs:
     outputs:
       release_manifest: ${{ steps.manifest.outputs.manifest_path }}
       commit_sha: ${{ steps.meta.outputs.commit_sha }}
+      release_identity: ${{ steps.meta.outputs.release_identity }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      frontend_artifact_name: ${{ steps.meta.outputs.frontend_artifact_name }}
+      container_artifact_name: ${{ steps.meta.outputs.container_artifact_name }}
+      manifest_artifact_name: ${{ steps.meta.outputs.manifest_artifact_name }}
+      recovery_artifact_name: ${{ steps.meta.outputs.recovery_artifact_name }}
       frontend_checksum: ${{ steps.frontend.outputs.checksum }}
       node_archive_sha: ${{ steps.container-archives.outputs.node_archive_sha }}
       go_archive_sha: ${{ steps.container-archives.outputs.go_archive_sha }}
@@ -116,9 +122,27 @@ jobs:
       - name: Record Metadata & Commit Identity
         id: meta
         run: |
-          COMMIT_SHA="${{ github.sha }}"
+          COMMIT_SHA="${GITHUB_SHA}"
+          RUN_ID="${GITHUB_RUN_ID}"
+          RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT}"
+          RELEASE_ID="${COMMIT_SHA}/${RUN_ID}-${RUN_ATTEMPT}"
+          IMAGE_TAG="${COMMIT_SHA}-${RUN_ID}-${RUN_ATTEMPT}"
+          FRONTEND_ARTIFACT_NAME="frontend-dist-${IMAGE_TAG}"
+          CONTAINER_ARTIFACT_NAME="container-images-${IMAGE_TAG}"
+          MANIFEST_ARTIFACT_NAME="release-manifest-${IMAGE_TAG}"
+          RECOVERY_ARTIFACT_NAME="release-recovery-${IMAGE_TAG}"
           echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "release_identity=${RELEASE_ID}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "frontend_artifact_name=${FRONTEND_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "container_artifact_name=${CONTAINER_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "manifest_artifact_name=${MANIFEST_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "recovery_artifact_name=${RECOVERY_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
           echo "TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+          echo "RELEASE_ID=${RELEASE_ID}" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
+          echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
+          echo "RUN_ATTEMPT=${RUN_ATTEMPT}" >> "$GITHUB_ENV"
 
       - name: Install dependencies & Build Frontend
         id: frontend
@@ -133,28 +157,28 @@ jobs:
       - name: Verify Container Build Reproducibility & Export Immutable Archives
         id: container-archives
         run: |
-          COMMIT="${{ steps.meta.outputs.commit_sha }}"
+          IMAGE_TAG="${{ steps.meta.outputs.image_tag }}"
           mkdir -p .image-archives
 
           # 1. Build Node Gateway container
           docker build \
             --platform linux/amd64 \
-            -t "flowcard-node-gateway:${COMMIT}" \
+            -t "flowcard-node-gateway:${IMAGE_TAG}" \
             -f Dockerfile .
 
           # 2. Build Go runtime container (contains /bin/api, /bin/worker, and /bin/migrate)
           docker build \
             --platform linux/amd64 \
-            -t "flowcard-go-runtime:${COMMIT}" \
+            -t "flowcard-go-runtime:${IMAGE_TAG}" \
             -f services/company-onboarding/Dockerfile services/company-onboarding
 
           # 3. Capture exact Image IDs
-          NODE_IMAGE_ID="$(docker inspect --format='{{.Id}}' "flowcard-node-gateway:${COMMIT}")"
-          GO_IMAGE_ID="$(docker inspect --format='{{.Id}}' "flowcard-go-runtime:${COMMIT}")"
+          NODE_IMAGE_ID="$(docker inspect --format='{{.Id}}' "flowcard-node-gateway:${IMAGE_TAG}")"
+          GO_IMAGE_ID="$(docker inspect --format='{{.Id}}' "flowcard-go-runtime:${IMAGE_TAG}")"
 
           # 4. Save immutable container archives
-          docker save "flowcard-node-gateway:${COMMIT}" | gzip > .image-archives/node-gateway.tar.gz
-          docker save "flowcard-go-runtime:${COMMIT}" | gzip > .image-archives/go-runtime.tar.gz
+          docker save "flowcard-node-gateway:${IMAGE_TAG}" | gzip > .image-archives/node-gateway.tar.gz
+          docker save "flowcard-go-runtime:${IMAGE_TAG}" | gzip > .image-archives/go-runtime.tar.gz
 
           # 5. Compute SHA-256 archive digests
           NODE_ARCHIVE_SHA="$(sha256sum .image-archives/node-gateway.tar.gz | awk '{print $1}')"
@@ -178,6 +202,16 @@ jobs:
             "repository": "slabarcaf/flowcard-treasury",
             "branch": "develop",
             "commit_sha": "${{ steps.meta.outputs.commit_sha }}",
+            "release_identity": "${RELEASE_ID}",
+            "run_id": "${RUN_ID}",
+            "run_attempt": "${RUN_ATTEMPT}",
+            "image_tag": "${IMAGE_TAG}",
+            "artifacts": {
+              "frontend": "${{ steps.meta.outputs.frontend_artifact_name }}",
+              "container_images": "${{ steps.meta.outputs.container_artifact_name }}",
+              "manifest": "${{ steps.meta.outputs.manifest_artifact_name }}",
+              "recovery": "${{ steps.meta.outputs.recovery_artifact_name }}"
+            },
             "generated_at": "${TIMESTAMP}",
             "fargate_cpu_architecture": "X86_64",
             "docker_platform": "linux/amd64",
@@ -186,14 +220,14 @@ jobs:
             "status": "build_ready_pending_deployment",
             "container_archives": {
               "node_gateway": {
-                "image_tag": "flowcard-node-gateway:${{ steps.meta.outputs.commit_sha }}",
+                "image_tag": "flowcard-node-gateway:${IMAGE_TAG}",
                 "image_id": "${NODE_IMAGE_ID}",
                 "archive_file": "node-gateway.tar.gz",
                 "archive_sha256": "${NODE_ARCHIVE_SHA}",
                 "platform": "linux/amd64"
               },
               "go_runtime": {
-                "image_tag": "flowcard-go-runtime:${{ steps.meta.outputs.commit_sha }}",
+                "image_tag": "flowcard-go-runtime:${IMAGE_TAG}",
                 "image_id": "${GO_IMAGE_ID}",
                 "archive_file": "go-runtime.tar.gz",
                 "archive_sha256": "${GO_ARCHIVE_SHA}",
@@ -201,10 +235,10 @@ jobs:
               }
             },
             "images": {
-              "node_gateway": "flowcard-node-gateway:${{ steps.meta.outputs.commit_sha }}",
-              "go_api": "flowcard-go-api:${{ steps.meta.outputs.commit_sha }}",
-              "go_worker": "flowcard-go-worker:${{ steps.meta.outputs.commit_sha }}",
-              "migration": "flowcard-migration:${{ steps.meta.outputs.commit_sha }}"
+              "node_gateway": "flowcard-node-gateway:${IMAGE_TAG}",
+              "go_api": "flowcard-go-api:${IMAGE_TAG}",
+              "go_worker": "flowcard-go-worker:${IMAGE_TAG}",
+              "migration": "flowcard-migration:${IMAGE_TAG}"
             }
           }
           EOF
@@ -217,18 +251,25 @@ jobs:
           - **Repository:** \`slabarcaf/flowcard-treasury\`
           - **Branch:** \`develop\`
           - **Commit SHA:** \`${{ steps.meta.outputs.commit_sha }}\`
+          - **Release identity:** \`${RELEASE_ID}\`
+          - **Run attempt:** \`${RUN_ID}-${RUN_ATTEMPT}\`
+          - **Immutable image tag:** \`${IMAGE_TAG}\`
           - **Build Timestamp:** \`${TIMESTAMP}\`
           - **Architecture:** \`linux/amd64\` (AWS Fargate X86_64)
           - **Frontend SHA-256 Checksum:** \`${FRONTEND_CHECKSUM}\`
           - **Node Gateway Archive SHA-256:** \`${NODE_ARCHIVE_SHA}\`
           - **Go Runtime Archive SHA-256:** \`${GO_ARCHIVE_SHA}\`
+          - **Frontend artifact:** \`${{ steps.meta.outputs.frontend_artifact_name }}\`
+          - **Container artifact:** \`${{ steps.meta.outputs.container_artifact_name }}\`
+          - **Manifest artifact:** \`${{ steps.meta.outputs.manifest_artifact_name }}\`
+          - **Recovery artifact:** \`${{ steps.meta.outputs.recovery_artifact_name }}\`
           - **Run mode:** Manual dispatch from \`develop\` runs the release after checks pass.
           EOF
 
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
-          name: frontend-dist
+          name: ${{ steps.meta.outputs.frontend_artifact_name }}
           path: .dev/dist/
           include-hidden-files: true
           retention-days: 14
@@ -236,7 +277,7 @@ jobs:
       - name: Upload Container Image Archives Artifact
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
-          name: container-images
+          name: ${{ steps.meta.outputs.container_artifact_name }}
           path: .image-archives/
           include-hidden-files: true
           retention-days: 14
@@ -244,7 +285,7 @@ jobs:
       - name: Upload Release Manifest Artifact
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
-          name: release-manifest
+          name: ${{ steps.meta.outputs.manifest_artifact_name }}
           path: .dev/.release-metadata/release-manifest.json
           include-hidden-files: true
           retention-days: 30
@@ -267,19 +308,19 @@ jobs:
       - name: Download Frontend Artifact
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
-          name: frontend-dist
+          name: ${{ needs.build-and-metadata.outputs.frontend_artifact_name }}
           path: .dev/dist/
 
       - name: Download Container Image Archives Artifact
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
-          name: container-images
+          name: ${{ needs.build-and-metadata.outputs.container_artifact_name }}
           path: .image-archives/
 
       - name: Download Release Manifest Artifact
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
-          name: release-manifest
+          name: ${{ needs.build-and-metadata.outputs.manifest_artifact_name }}
           path: .dev/.release-metadata/
 
       - name: Verify Provenance & Artifact Integrity
@@ -294,6 +335,23 @@ jobs:
           CURRENT_SHA="${{ github.sha }}"
           if [[ "${MANIFEST_COMMIT}" != "${CURRENT_SHA}" ]]; then
             echo "FATAL: Manifest commit SHA (${MANIFEST_COMMIT}) does not match deployment commit SHA (${CURRENT_SHA})!" >&2
+            exit 1
+          fi
+
+          CURRENT_RUN_ID="${GITHUB_RUN_ID}"
+          CURRENT_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT}"
+          CURRENT_RELEASE_ID="${CURRENT_SHA}/${CURRENT_RUN_ID}-${CURRENT_RUN_ATTEMPT}"
+          CURRENT_IMAGE_TAG="${CURRENT_SHA}-${CURRENT_RUN_ID}-${CURRENT_RUN_ATTEMPT}"
+          if [[ "$(jq -r '.release_identity // empty' "${MANIFEST_FILE}")" != "${CURRENT_RELEASE_ID}" || \
+                "$(jq -r '.run_id // empty' "${MANIFEST_FILE}")" != "${CURRENT_RUN_ID}" || \
+                "$(jq -r '.run_attempt // empty' "${MANIFEST_FILE}")" != "${CURRENT_RUN_ATTEMPT}" || \
+                "$(jq -r '.image_tag // empty' "${MANIFEST_FILE}")" != "${CURRENT_IMAGE_TAG}" || \
+                "$(jq -r '.artifacts.frontend // empty' "${MANIFEST_FILE}")" != "frontend-dist-${CURRENT_IMAGE_TAG}" || \
+                "$(jq -r '.artifacts.container_images // empty' "${MANIFEST_FILE}")" != "container-images-${CURRENT_IMAGE_TAG}" || \
+                "$(jq -r '.artifacts.manifest // empty' "${MANIFEST_FILE}")" != "release-manifest-${CURRENT_IMAGE_TAG}" || \
+                "$(jq -r '.artifacts.recovery // empty' "${MANIFEST_FILE}")" != "release-recovery-${CURRENT_IMAGE_TAG}" ]]; then
+            echo "FATAL: Release identity, image tag, or artifact names do not match this workflow run attempt." >&2
+            echo "Select Re-run all jobs so build and deployment use the same attempt." >&2
             exit 1
           fi
 
@@ -460,7 +518,7 @@ jobs:
         env:
           ECR_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
           ECR_REGION: ${{ vars.AWS_REGION }}
-          COMMIT: ${{ github.sha }}
+          IMAGE_TAG: ${{ needs.build-and-metadata.outputs.image_tag }}
         run: |
           REGISTRY="${ECR_ACCOUNT_ID}.dkr.ecr.${ECR_REGION}.amazonaws.com"
           MANIFEST_FILE=".dev/.release-metadata/release-manifest.json"
@@ -471,36 +529,36 @@ jobs:
 
           # 2. Verify loaded image IDs match the build manifest
           EXPECTED_NODE_ID="$(jq -r '.container_archives.node_gateway.image_id // empty' "${MANIFEST_FILE}")"
-          ACTUAL_NODE_ID="$(docker inspect --format='{{.Id}}' "flowcard-node-gateway:${COMMIT}")"
+          ACTUAL_NODE_ID="$(docker inspect --format='{{.Id}}' "flowcard-node-gateway:${IMAGE_TAG}")"
           if [[ -n "${EXPECTED_NODE_ID}" && "${EXPECTED_NODE_ID}" != "${ACTUAL_NODE_ID}" ]]; then
             echo "FATAL: Loaded Node gateway image ID (${ACTUAL_NODE_ID}) does not match the build manifest (${EXPECTED_NODE_ID})!" >&2
             exit 1
           fi
 
           EXPECTED_GO_ID="$(jq -r '.container_archives.go_runtime.image_id // empty' "${MANIFEST_FILE}")"
-          ACTUAL_GO_ID="$(docker inspect --format='{{.Id}}' "flowcard-go-runtime:${COMMIT}")"
+          ACTUAL_GO_ID="$(docker inspect --format='{{.Id}}' "flowcard-go-runtime:${IMAGE_TAG}")"
           if [[ -n "${EXPECTED_GO_ID}" && "${EXPECTED_GO_ID}" != "${ACTUAL_GO_ID}" ]]; then
             echo "FATAL: Loaded Go runtime image ID (${ACTUAL_GO_ID}) does not match the build manifest (${EXPECTED_GO_ID})!" >&2
             exit 1
           fi
 
           # 3. Tag loaded images for ECR
-          docker tag "flowcard-node-gateway:${COMMIT}" "${REGISTRY}/flowcard-node-gateway:${COMMIT}"
-          docker tag "flowcard-go-runtime:${COMMIT}" "${REGISTRY}/flowcard-go-api:${COMMIT}"
-          docker tag "flowcard-go-runtime:${COMMIT}" "${REGISTRY}/flowcard-go-worker:${COMMIT}"
-          docker tag "flowcard-go-runtime:${COMMIT}" "${REGISTRY}/flowcard-migration:${COMMIT}"
+          docker tag "flowcard-node-gateway:${IMAGE_TAG}" "${REGISTRY}/flowcard-node-gateway:${IMAGE_TAG}"
+          docker tag "flowcard-go-runtime:${IMAGE_TAG}" "${REGISTRY}/flowcard-go-api:${IMAGE_TAG}"
+          docker tag "flowcard-go-runtime:${IMAGE_TAG}" "${REGISTRY}/flowcard-go-worker:${IMAGE_TAG}"
+          docker tag "flowcard-go-runtime:${IMAGE_TAG}" "${REGISTRY}/flowcard-migration:${IMAGE_TAG}"
 
           # 4. Push exact images to ECR
-          docker push "${REGISTRY}/flowcard-node-gateway:${COMMIT}"
-          docker push "${REGISTRY}/flowcard-go-api:${COMMIT}"
-          docker push "${REGISTRY}/flowcard-go-worker:${COMMIT}"
-          docker push "${REGISTRY}/flowcard-migration:${COMMIT}"
+          docker push "${REGISTRY}/flowcard-node-gateway:${IMAGE_TAG}"
+          docker push "${REGISTRY}/flowcard-go-api:${IMAGE_TAG}"
+          docker push "${REGISTRY}/flowcard-go-worker:${IMAGE_TAG}"
+          docker push "${REGISTRY}/flowcard-migration:${IMAGE_TAG}"
 
           # 5. Capture exact immutable repo digests post-push
-          NODE_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-node-gateway:${COMMIT}" | awk -F'@' '{print $2}')"
-          API_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-go-api:${COMMIT}" | awk -F'@' '{print $2}')"
-          WORKER_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-go-worker:${COMMIT}" | awk -F'@' '{print $2}')"
-          MIGRATION_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-migration:${COMMIT}" | awk -F'@' '{print $2}')"
+          NODE_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-node-gateway:${IMAGE_TAG}" | awk -F'@' '{print $2}')"
+          API_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-go-api:${IMAGE_TAG}" | awk -F'@' '{print $2}')"
+          WORKER_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-go-worker:${IMAGE_TAG}" | awk -F'@' '{print $2}')"
+          MIGRATION_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}/flowcard-migration:${IMAGE_TAG}" | awk -F'@' '{print $2}')"
 
           echo "node_digest=${NODE_DIGEST}" >> "$GITHUB_OUTPUT"
           echo "api_digest=${API_DIGEST}" >> "$GITHUB_OUTPUT"
@@ -514,6 +572,8 @@ jobs:
           FRONTEND_BUCKET: ${{ vars.S3_FRONTEND_BUCKET }}
           CLOUDFRONT_DIST_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
           FRONTEND_CHECKSUM: ${{ needs.build-and-metadata.outputs.frontend_checksum }}
+          RELEASE_ID: ${{ needs.build-and-metadata.outputs.release_identity }}
+          IMAGE_TAG: ${{ needs.build-and-metadata.outputs.image_tag }}
           NODE_DIGEST: ${{ steps.load-and-push.outputs.node_digest }}
           API_DIGEST: ${{ steps.load-and-push.outputs.api_digest }}
           WORKER_DIGEST: ${{ steps.load-and-push.outputs.worker_digest }}
@@ -536,7 +596,7 @@ jobs:
             --desired-count 1
             --seed
           )
-          DEPLOY_ARGS+=(--frontend-artifact-id "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}")
+          DEPLOY_ARGS+=(--frontend-artifact-id "${IMAGE_TAG}")
           ./infra/scripts/deploy-demo.sh "${DEPLOY_ARGS[@]}"
 
       - name: Execute Frontend Deployment (deploy-frontend.sh with OIDC)
@@ -577,7 +637,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
-          name: release-recovery-metadata
+          name: ${{ needs.build-and-metadata.outputs.recovery_artifact_name }}
           path: .dev/.release-metadata/
           include-hidden-files: true
           retention-days: 90

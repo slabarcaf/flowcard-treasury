@@ -1087,12 +1087,27 @@ def test_github_actions_oidc_and_ci_safety():
 
     assert_test(
         "Workflow exports immutable container archives and loads in deploy job without rebuild",
-        "docker save \"flowcard-node-gateway:${COMMIT}\" | gzip > .image-archives/node-gateway.tar.gz" in workflow_text and
-        "docker save \"flowcard-go-runtime:${COMMIT}\" | gzip > .image-archives/go-runtime.tar.gz" in workflow_text and
+        "docker save \"flowcard-node-gateway:${IMAGE_TAG}\" | gzip > .image-archives/node-gateway.tar.gz" in workflow_text and
+        "docker save \"flowcard-go-runtime:${IMAGE_TAG}\" | gzip > .image-archives/go-runtime.tar.gz" in workflow_text and
         "docker load -i .image-archives/node-gateway.tar.gz" in workflow_text and
         "docker load -i .image-archives/go-runtime.tar.gz" in workflow_text and
+        'RELEASE_ID="${COMMIT_SHA}/${RUN_ID}-${RUN_ATTEMPT}"' in workflow_text and
+        'IMAGE_TAG="${COMMIT_SHA}-${RUN_ID}-${RUN_ATTEMPT}"' in workflow_text and
+        'CURRENT_RELEASE_ID="${CURRENT_SHA}/${CURRENT_RUN_ID}-${CURRENT_RUN_ATTEMPT}"' in workflow_text and
+        'docker push "${REGISTRY}/flowcard-node-gateway:${IMAGE_TAG}"' in workflow_text and
+        'docker push "${REGISTRY}/flowcard-go-api:${IMAGE_TAG}"' in workflow_text and
+        'docker push "${REGISTRY}/flowcard-go-worker:${IMAGE_TAG}"' in workflow_text and
+        'docker push "${REGISTRY}/flowcard-migration:${IMAGE_TAG}"' in workflow_text and
+        'FRONTEND_ARTIFACT_NAME="frontend-dist-${IMAGE_TAG}"' in workflow_text and
+        'RECOVERY_ARTIFACT_NAME="release-recovery-${IMAGE_TAG}"' in workflow_text and
+        'name: ${{ steps.meta.outputs.frontend_artifact_name }}' in workflow_text and
+        'name: ${{ steps.meta.outputs.container_artifact_name }}' in workflow_text and
+        'name: ${{ steps.meta.outputs.manifest_artifact_name }}' in workflow_text and
+        'name: ${{ needs.build-and-metadata.outputs.frontend_artifact_name }}' in workflow_text and
+        'name: ${{ needs.build-and-metadata.outputs.container_artifact_name }}' in workflow_text and
+        'name: ${{ needs.build-and-metadata.outputs.manifest_artifact_name }}' in workflow_text and
         "docker build" not in workflow_text.split("deploy-demo:")[1],
-        "Workflow must export container archives and load in deploy job without rebuilding."
+        "Workflow must use run-scoped image tags and matching artifacts without rebuilding in deploy."
     )
 
     assert_test(

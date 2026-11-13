@@ -39,7 +39,8 @@ and resource validation. Task 2 now uses manual dispatch without input fields,
 and removes foundation approval evidence and prior-release bookkeeping from
 the normal workflow. It preserves the develop and repository restrictions,
 artifact checksums, migrations, service health checks, and fixed frontend
-publication paths.
+publication paths. Task 3 now records commit/run/attempt identity, derives
+safe run-specific artifact and image tags, and deploys by exact image digests.
 
 `infra/scripts/deploy-demo.sh` consumes infrastructure references, registers
 task definitions, runs migrations, and updates services. The frontend script
@@ -152,19 +153,21 @@ digests and artifact-integrity checks.
   `infra/scripts/finalize-release.sh` as required for metadata compatibility.
 - Modify `tests/server/github-actions-workflow.test.ts` and
   `tests/server/deploy-scripts.test.ts`.
+- Modify `infra/scripts/verify-offline-safety.py`.
+- Update this plan's current state and Task 3 checklist.
 
-- [ ] Derive the release identity from commit SHA, run ID, and run attempt.
+- [x] Derive the release identity from commit SHA, run ID, and run attempt.
       Include it in summaries, manifests, and retained artifact names.
-- [ ] Keep build/download artifact names consistent across jobs. Preserve
+- [x] Keep build/download artifact names consistent across jobs. Preserve
       narrowly scoped hidden-file uploads and checksum verification.
-- [ ] Record container digests and deployed revisions automatically. Mark
+- [x] Record container digests and deployed revisions automatically. Mark
       success only after service checks and frontend invalidation finish.
-- [ ] Preserve the existing frontend upload order and fixed S3 keys. Do not
+- [x] Preserve the existing frontend upload order and fixed S3 keys. Do not
       add old-object deletion or per-release website directories.
-- [ ] Update existing metadata, frontend-upload, and finalization assertions.
+- [x] Update existing metadata, frontend-upload, and finalization assertions.
       Use at most one new case if necessary to cover distinct rerun identities
       and failures remaining unfinalized.
-- [ ] Run the affected tests and offline safety checks before continuing.
+- [x] Run the affected tests and offline safety checks before continuing.
 
 ### Task 4: Verify the simplified release contract
 
