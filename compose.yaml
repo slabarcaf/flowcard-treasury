@@ -1,0 +1,68 @@
+services:
+  database:
+    image: postgres:17-alpine
+    env_file: .env
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ledger-data:/var/lib/postgresql/data
+      - ./server/src/db/migrations/001_bridge_ledger.sql:/docker-entrypoint-initdb.d/001_bridge_ledger.sql:ro
+      - ./server/src/db/migrations/002_customer_roster.sql:/docker-entrypoint-initdb.d/002_customer_roster.sql:ro
+      - ./server/src/db/migrations/003_salesforce_snapshots.sql:/docker-entrypoint-initdb.d/003_salesforce_snapshots.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowcard -d flowcard_treasury"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  ledger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "8000:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  onboarding-api:
+    build:
+      context: services/company-onboarding
+      dockerfile: Dockerfile
+    command: ["/bin/api", "-port", "8080"]
+    env_file: .env
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  onboarding-worker:
+    build:
+      context: services/company-onboarding
+      dockerfile: Dockerfile
+    command: ["/bin/worker"]
+    env_file: .env
+    depends_on:
+      database:
+        condition: service_healthy
+
+volumes:
+  ledger-data:

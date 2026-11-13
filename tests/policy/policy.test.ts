@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   assignTier,
+  evaluateTier,
   hasNoGo,
   computeCreditLine,
+  starterMultiplier,
   lendable,
   reserveFloor,
   deployable,
@@ -87,6 +89,29 @@ describe('assignTier', () => {
     };
     expect(assignTier(s)).toBe('C');
   });
+
+  it('two red ratings, even without red reliability, means no line', () => {
+    const s: Signals = {
+      inflowReliability: 'green',
+      inflowConcentration: 'red',
+      cashBuffer: 'red',
+      trackRecord: 'green',
+    };
+    expect(evaluateTier(s)).toEqual({
+      tier: 'none',
+      reasonCodes: ['MULTIPLE_RED_SIGNALS'],
+    });
+  });
+
+  it('red reliability takes precedence over other signal ratings', () => {
+    const s: Signals = {
+      inflowReliability: 'red',
+      inflowConcentration: 'red',
+      cashBuffer: 'yellow',
+      trackRecord: 'green',
+    };
+    expect(evaluateTier(s).reasonCodes).toEqual(['RED_INFLOW_RELIABILITY']);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -144,6 +169,49 @@ describe('computeCreditLine', () => {
 
   it('Tier none → $0', () => {
     expect(computeCreditLine('none', 100_000, FACILITY)).toBe(0);
+  });
+
+  it('honors the approved bridge cap in addition to the facility cap', () => {
+    expect(computeCreditLine('A', 40_000, {
+      ...FACILITY,
+      approvedBridgeCap: 3_000,
+    })).toBe(3_000);
+  });
+
+  it('starter borrowers receive 10% when their other ratings are green', () => {
+    expect(starterMultiplier('A', {
+      inflowReliability: 'green',
+      inflowConcentration: 'green',
+      cashBuffer: 'green',
+      trackRecord: 'yellow',
+    }, { fullyRepaidOnTimeBridges: 0 })).toBe(0.10);
+  });
+
+  it('starter borrowers receive 5% when another non-track-record rating is not green', () => {
+    const signals: Signals = {
+      inflowReliability: 'green',
+      inflowConcentration: 'yellow',
+      cashBuffer: 'green',
+      trackRecord: 'yellow',
+    };
+    expect(starterMultiplier('B', signals, {
+      fullyRepaidOnTimeBridges: 2,
+    })).toBe(0.05);
+    expect(computeCreditLine('B', 40_000, FACILITY, signals, {
+      fullyRepaidOnTimeBridges: 2,
+    })).toBe(2_000);
+  });
+
+  it('uses the ordinary tier multiplier after three on-time repayments', () => {
+    const signals: Signals = {
+      inflowReliability: 'green',
+      inflowConcentration: 'yellow',
+      cashBuffer: 'green',
+      trackRecord: 'yellow',
+    };
+    expect(computeCreditLine('B', 40_000, FACILITY, signals, {
+      fullyRepaidOnTimeBridges: 3,
+    })).toBe(8_000);
   });
 });
 
@@ -213,6 +281,16 @@ describe('toBand', () => {
 
   it('10% → less (boundary)', () => {
     expect(toBand(0.10)).toBe('less');
+  });
+
+  it('capital band boundaries match the source-of-truth table', () => {
+    expect(toBand(0.01)).toBe('critical');
+    expect(toBand(0.099999)).toBe('critical');
+    expect(toBand(0.100001)).toBe('less');
+    expect(toBand(0.399999)).toBe('less');
+    expect(toBand(0.400001)).toBe('normal');
+    expect(toBand(0.70)).toBe('normal');
+    expect(toBand(0.700001)).toBe('a_lot');
   });
 });
 

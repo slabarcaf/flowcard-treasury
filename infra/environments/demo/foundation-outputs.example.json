@@ -1,0 +1,44 @@
+{
+  "account_id": "123456789012",
+  "aws_region": "us-west-2",
+  "ecs_cluster_arn": "arn:aws:ecs:us-west-2:123456789012:cluster/flowcard-demo-cluster",
+  "ecs_cluster_name": "flowcard-demo-cluster",
+  "private_subnet_ids": [
+    "subnet-0123456789abcdef0",
+    "subnet-0123456789abcdef1"
+  ],
+  "migration_task_security_group_id": "sg-0123456789abcdef0",
+  "ecr_repository_urls": {
+    "flowcard-node-gateway": "123456789012.dkr.ecr.us-west-2.amazonaws.com/flowcard-node-gateway",
+    "flowcard-go-api": "123456789012.dkr.ecr.us-west-2.amazonaws.com/flowcard-go-api",
+    "flowcard-go-worker": "123456789012.dkr.ecr.us-west-2.amazonaws.com/flowcard-go-worker",
+    "flowcard-migration": "123456789012.dkr.ecr.us-west-2.amazonaws.com/flowcard-migration"
+  },
+  "frontend_bucket_name": "flowcard-demo-frontend-assets",
+  "cloudfront_distribution_id": "E1234567890ABC",
+  "initial_task_definition_arns": {
+    "node_gateway": "arn:aws:ecs:us-west-2:123456789012:task-definition/flowcard-demo-node-gateway:1",
+    "go_api": "arn:aws:ecs:us-west-2:123456789012:task-definition/flowcard-demo-go-api:1",
+    "go_worker": "arn:aws:ecs:us-west-2:123456789012:task-definition/flowcard-demo-go-worker:1",
+    "node_migration": "arn:aws:ecs:us-west-2:123456789012:task-definition/flowcard-demo-node-migration:1",
+    "go_migration": "arn:aws:ecs:us-west-2:123456789012:task-definition/flowcard-demo-go-migration:1",
+    "synthetic_seed": "arn:aws:ecs:us-west-2:123456789012:task-definition/flowcard-demo-synthetic-seed:1"
+  },
+  "foundation_plan_summary": "Manual foundation provisioning pending authorized operator execution",
+  "approval_evidence": {
+    "status": "pending_manual_foundation",
+    "verified_by": null,
+    "approval_gate": "UNVERIFIED",
+    "reviewed_source_commit": null,
+    "review_reference": null,
+    "reviewed_at": null,
+    "foundation_plan_sha256": null,
+    "reviewed_foundation_content_sha256": null,
+    "runtime_configuration": {
+      "approved": false,
+      "approved_by": null,
+      "approval_reference": null,
+      "approved_at": null
+    }
+  }
+}

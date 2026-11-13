@@ -5,12 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server:build": "tsc -p server/tsconfig.json",
+    "server:start": "npm run server:build && node .dev/server/server/src/main.js",
+    "ai-evidence:review": "npm run server:build && node .dev/server/server/src/main.js evidence-review",
+    "policy:approval": "npm run server:build && node .dev/server/server/src/main.js policy-approval",
+    "db:migrate": "npm run server:build && node .dev/server/server/src/db/migrate.js",
+    "db:seed": "npm run server:build && node .dev/server/server/src/db/seed.js",
+    "roster:cli": "npm run server:build && node .dev/server/server/src/roster/cli.js",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bridge:stats": "vitest run tests/features/bridge-capital/customerStats.report.test.ts --reporter=verbose",
+    "test:acceptance": "node scripts/run-policy-acceptance.mjs"
   },
   "dependencies": {
+    "pg": "^8.16.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

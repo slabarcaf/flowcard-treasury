@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+node_modules
+.dev
+dist
+tests
+src
+docs
+public

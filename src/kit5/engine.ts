@@ -2,7 +2,6 @@ import type { Signals, Tier } from '../policy/types.js';
 import type { CustomerDetail, FeedEvent, PipelineStep, PolicyCheck } from '../state/types.js';
 import {
   assignTier,
-  computeCreditLine,
   lendable,
   reserveFloor,
   deployable,
@@ -12,8 +11,9 @@ import {
   hasNoGo,
   bridgeFee,
   BAND_LABELS,
+  evaluateDemoPolicy,
 } from '../policy/index.js';
-import { AGENT_RATIONALES } from '../seed.js';
+import { AGENT_RATIONALES, DEMO_APPROVED_BRIDGE_CAPS, demoPolicyReadiness } from '../seed.js';
 import type {
   DeclineEvent,
   Kit5State,
@@ -22,6 +22,16 @@ import type {
   ScenarioEvent,
   ScenarioInputs,
 } from './types.js';
+import type { DemoPolicyDecision } from '../policy/index.js';
+import type { DemoPolicyReadiness, CustomerProfile, FacilityConfig, Band } from '../policy/types.js';
+
+/** Policy adapter used by the Kit 5 demo engine and shared decision fixtures. */
+export function evaluateKit5CustomerPolicy(input: {
+  profile: CustomerProfile; facility: FacilityConfig; readiness: DemoPolicyReadiness;
+  shortfall: number; outstanding: number; band: Band; deployableCapital: number;
+}): DemoPolicyDecision {
+  return evaluateDemoPolicy(input);
+}
 
 // ---------------------------------------------------------------------------
 // Kit 5 engine: each decline is decided the moment it arrives, against the
@@ -34,13 +44,6 @@ import type {
  * Assumption pending the team's call on collection timing (Source of Truth, Open 1).
  */
 export const DEFAULT_TERM_DAYS = 30;
-
-const SIGNAL_LABELS: { key: keyof Signals; label: string }[] = [
-  { key: 'inflowReliability', label: 'Inflow reliability' },
-  { key: 'inflowConcentration', label: 'Inflow concentration' },
-  { key: 'cashBuffer', label: 'Cash buffer' },
-  { key: 'trackRecord', label: 'Track record' },
-];
 
 function fmt(n: number): string {
   return '$' + n.toLocaleString('en-US');
@@ -157,10 +160,20 @@ interface Evaluation {
   eligible: boolean;
   ineligibleReason?: string;
   failures: string[];
+  status: 'blocked' | 'ineligible' | 'human_review' | 'declined' | 'approved';
+  reasonCodes: import('../policy/types.js').PolicyReasonCode[];
 }
 
 function evaluate(s: Kit5State, c: ScenarioCustomer, signals: Signals, shortfall: number, tierFrom?: Tier): Evaluation {
-  const f = s.inputs.facility;
+  const f = {
+    ...s.inputs.facility,
+    approvedBridgeCap: DEMO_APPROVED_BRIDGE_CAPS[c.id] ?? s.inputs.facility.approvedBridgeCap,
+  };
+  const readiness = c.policyReadiness ?? demoPolicyReadiness(c.id);
+  const policy = evaluateKit5CustomerPolicy({
+    profile: { ...c, signals }, facility: f, readiness, shortfall, outstanding: 0,
+    band: s.band, deployableCapital: s.deployableCapital,
+  });
   const precheck: PipelineStep[] = [];
   const perRequest: PipelineStep[] = [];
   const skip = (why: string): PipelineStep[] => [
@@ -187,7 +200,19 @@ function evaluate(s: Kit5State, c: ScenarioCustomer, signals: Signals, shortfall
       { label: 'Credit line', sublabel: 'Tier multiplier × inflow', status: 'skip', tooltip: why },
     );
     const reason = `No line yet: ${c.historyDays} days of history, ${f.minHistoryDays} required (eligible in ${f.minHistoryDays - c.historyDays} days)`;
-    return { precheck, perRequest: skip('Skipped — customer is ineligible.'), tier: 'none', creditLine: 0, door: 'closed', eligible: false, ineligibleReason: reason, failures: [reason] };
+    return { precheck, perRequest: skip('Skipped — customer is ineligible.'), tier: 'none', creditLine: 0, door: 'closed', eligible: false, ineligibleReason: reason, failures: [reason], status: 'ineligible', reasonCodes: policy.reasonCodes };
+  }
+
+  if (policy.status === 'blocked' || policy.status === 'ineligible') {
+    const reason = policy.reasons.join(' ');
+    const snapshotBlocked = policy.reasonCodes.some((code) => ['SNAPSHOT_MISSING', 'SNAPSHOT_STALE', 'SNAPSHOT_INVALID'].includes(code));
+    const evidenceBlocked = policy.reasonCodes.some((code) => ['EVIDENCE_REVIEW_REQUIRED', 'EVIDENCE_UNMAPPED', 'EVIDENCE_FAILED'].includes(code));
+    precheck.push(
+      { label: 'Salesforce snapshot', sublabel: 'Fixture freshness gate', status: snapshotBlocked ? 'fail' : 'pass', value: snapshotBlocked ? 'Blocked' : 'Ready', tooltip: reason },
+      { label: 'Evidence readiness', sublabel: 'Qualified or valid no-signal', status: evidenceBlocked ? 'fail' : 'pass', value: evidenceBlocked ? 'Blocked' : 'Ready', tooltip: reason },
+    );
+    const reasonCodes = policy.reasonCodes;
+    return { precheck, perRequest: skip('Skipped — customer input gate is blocked.'), tier: 'none', creditLine: 0, door: 'closed', eligible: false, ineligibleReason: reason, failures: policy.reasons, status: policy.status, reasonCodes };
   }
 
   const noGo = hasNoGo(c.noGo);
@@ -199,7 +224,7 @@ function evaluate(s: Kit5State, c: ScenarioCustomer, signals: Signals, shortfall
     tooltip: 'Excluded industry, fraud flag, account frozen, past write-off, or one client above 70% of income. Any one blocks the customer.',
   });
 
-  const tier = noGo ? 'none' : assignTier(signals);
+  const tier = noGo ? 'none' : policy.tier;
   const vals = Object.values(signals);
   const g = vals.filter((v) => v === 'green').length;
   const y = vals.filter((v) => v === 'yellow').length;
@@ -219,7 +244,7 @@ function evaluate(s: Kit5State, c: ScenarioCustomer, signals: Signals, shortfall
     tooltip: 'All green or 1 yellow = A. 2 yellows = B. 3+ yellows or 1 red = C. Red on inflow reliability = no line.',
   });
 
-  const creditLine = computeCreditLine(tier, c.monthlyInflow, f);
+  const creditLine = policy.creditLine;
   precheck.push({
     label: 'Credit line',
     sublabel: 'Tier multiplier × inflow',
@@ -230,7 +255,7 @@ function evaluate(s: Kit5State, c: ScenarioCustomer, signals: Signals, shortfall
 
   if (tier === 'none') {
     const reason = noGo ? 'No line: a no-go rule applies' : 'No line: red on inflow reliability';
-    return { precheck, perRequest: skip('Skipped — customer has no credit line.'), tier, creditLine: 0, door: 'closed', eligible: false, ineligibleReason: reason, failures: [reason] };
+    return { precheck, perRequest: skip('Skipped — customer has no credit line.'), tier, creditLine: 0, door: 'closed', eligible: false, ineligibleReason: reason, failures: [reason], status: 'ineligible', reasonCodes: policy.reasonCodes };
   }
 
   const failures: string[] = [];
@@ -263,7 +288,7 @@ function evaluate(s: Kit5State, c: ScenarioCustomer, signals: Signals, shortfall
     failures.push(`${fmt(shortfall)} exceeds the ${fmt(s.deployableCapital)} left above the floor; no partial bridge`);
   }
 
-  const door = getDoor(s.band, tier);
+  const door = policy.door;
   perRequest.push({
     label: 'Door / Approve',
     sublabel: 'Auto / Human / Closed',
@@ -273,7 +298,7 @@ function evaluate(s: Kit5State, c: ScenarioCustomer, signals: Signals, shortfall
   });
   if (door === 'closed') failures.push(`Tier ${tier} door is Closed at capital level ${bandLabel(s)}`);
 
-  return { precheck, perRequest, tier, creditLine, door, eligible: true, failures };
+  return { precheck, perRequest, tier, creditLine, door, eligible: true, failures: policy.reasons, status: policy.status, reasonCodes: policy.reasonCodes };
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +320,9 @@ function decide(s: Kit5State, ev: DeclineEvent, opts: { signals?: Signals; tierF
     tierChange: opts.tierFrom && opts.tierFrom !== e.tier ? { from: opts.tierFrom, to: e.tier } : undefined,
     door: e.door,
     allocation: 0,
+    creditLine: e.creditLine,
+    reasonCodes: e.reasonCodes,
+    reasonTexts: e.failures,
     status: '',
     rationale: '',
     policyChecks: [],
@@ -311,34 +339,29 @@ function decide(s: Kit5State, ev: DeclineEvent, opts: { signals?: Signals; tierF
   row.door = e.door;
 
   if (!e.eligible) {
-    detail.status = 'Ineligible';
+    detail.status = e.status === 'blocked' ? 'Blocked' : 'Ineligible';
     detail.ineligibleReason = e.ineligibleReason;
-    row.status = 'Ineligible';
+    row.status = detail.status;
     row.eligible = false;
     row.ineligibleReason = e.ineligibleReason;
+    row.reasonCodes = e.reasonCodes;
+    row.reasonTexts = e.failures;
     pushFeed(s, ev.time, `${c.name}: ${e.ineligibleReason}`, 'info');
   } else if (opts.holdForCrm) {
     // Salesforce flow kept from GD: the agent flags a fresh note before the decision.
     detail.status = 'Evaluating';
     detail.rationale = c.rationale ?? '';
     detail.bloomAgentPhase = 'found';
-    detail.precheck = [
-      ...detail.precheck,
-      {
-        label: 'Agent found something in CRM.',
-        sublabel: '',
-        status: 'flag',
-        tooltip: 'A new Salesforce note may change this customer’s signals. Re-evaluate before deciding.',
-      },
-    ];
     row.status = 'Evaluating';
     s.pause = { kind: 'crm', requestId: ev.requestId };
     pushFeed(s, ev.time, `Agent found a new Salesforce note on ${c.name}; decision waits for re-evaluation`, 'info');
-  } else if (e.failures.length > 0) {
+  } else if (e.status === 'declined') {
     detail.status = 'Declined';
     detail.rationale = c.crmSignalsAfter ? AGENT_RATIONALES.bloom_declined : e.failures[0];
     detail.policyChecks = e.failures.map((label) => ({ label: `${c.name}: ${label}`, passed: false }));
     row.status = 'Declined';
+    row.reasonCodes = e.reasonCodes;
+    row.reasonTexts = e.failures;
     pushFeed(s, ev.time, `${c.name}: declined. ${e.failures[0]}`, 'notification');
   } else {
     const checks: PolicyCheck[] = [
@@ -364,6 +387,9 @@ function decide(s: Kit5State, ev: DeclineEvent, opts: { signals?: Signals; tierF
       detail.awaitingApproval = true;
       detail.approvalTerms = {
         amount: shortfall,
+        creditLine: e.creditLine,
+        door: 'human',
+        reviewRequirement: e.reasonCodes.includes('CREDIT_REVIEW_WATCH') ? 'Salesforce credit review is on watch.' : 'A credit officer must approve this exact request.',
         currency: 'USD',
         to: `${c.name} (${c.id})`,
         covers: `Declined card transaction ${ev.requestId}`,
@@ -373,6 +399,8 @@ function decide(s: Kit5State, ev: DeclineEvent, opts: { signals?: Signals; tierF
         capitalImpact: `Deployable ${fmt(s.deployableCapital)} → ${fmt(after)}, ${bandLabel(s) === bandAfter ? `band stays ${bandAfter}` : `band ${bandLabel(s)} → ${bandAfter}`}, floor intact`,
       };
       row.status = 'Pending approval';
+      row.reasonCodes = e.reasonCodes;
+      row.reasonTexts = e.failures;
       s.pause = { kind: 'human', requestId: ev.requestId };
       pushFeed(s, ev.time, `${c.name}: sent to credit officer (Tier ${e.tier}, capital level ${bandLabel(s)})`, 'info');
     }
@@ -495,53 +523,16 @@ export function reEvaluateCrm(prev: Kit5State): Kit5State {
   s.pause = null;
   const tierFrom = assignTier(c.signals);
   const tierTo = assignTier(c.crmSignalsAfter);
-  const f = s.inputs.facility;
   pushFeed(s, ev.time, `AI extracted 3 risk signals from the Salesforce note on ${c.name}`, 'info');
   pushFeed(s, ev.time, `${c.name} re-rated: Tier ${tierFrom} → Tier ${tierTo}`, 'info');
-  const beforeEval = evaluate(s, c, c.signals, Math.max(0, ev.paymentAmount - ev.walletBalance));
-  const before = {
-    line: computeCreditLine(tierFrom, c.monthlyInflow, f),
-    door: getDoor(s.band, tierFrom),
-    band: bandLabel(s),
-    outcome: beforeEval.failures.length > 0
-      ? 'declined' as const
-      : beforeEval.door === 'auto' ? 'approved automatically' as const : 'sent to a credit officer' as const,
-  };
   decide(s, ev, { signals: c.crmSignalsAfter, tierFrom });
-  const detail = s.customerDetails[ev.requestId];
-  detail.bloomAgentPhase = 'done';
-
-  // Hold on the result so the presenter can explain what the note changed. If the new
-  // decision already pauses (credit officer, auto-approval), that pause takes over.
-  if (!s.pause) {
-    const after = c.crmSignalsAfter;
-    s.pause = {
-      kind: 'crm-result',
-      requestId: ev.requestId,
-      change: {
-        customerName: c.name,
-        signals: SIGNAL_LABELS
-          .filter(({ key }) => c.signals[key] !== after[key])
-          .map(({ key, label }) => ({ label, from: c.signals[key], to: after[key] })),
-        tierFrom,
-        tierTo,
-        lineFrom: before.line,
-        lineTo: computeCreditLine(tierTo, c.monthlyInflow, f),
-        doorFrom: before.door,
-        doorTo: detail.door,
-        bandLabel: before.band,
-        outcomeBefore: before.outcome,
-        status: detail.status,
-        reasons: detail.policyChecks.filter((p) => !p.passed).map((p) => p.label.replace(`${c.name}: `, '')),
-      },
-    };
-  }
+  s.customerDetails[ev.requestId].bloomAgentPhase = 'done';
   return s;
 }
 
-/** The presenter has seen the auto-approval or the CRM result; move on to the next request. */
+/** The presenter has seen the auto-approval; move on to the next request. */
 export function acknowledge(prev: Kit5State): Kit5State {
-  if (prev.pause?.kind !== 'ack' && prev.pause?.kind !== 'crm-result') return prev;
+  if (prev.pause?.kind !== 'ack') return prev;
   return { ...prev, pause: null };
 }
 
