@@ -912,13 +912,13 @@ def test_github_actions_oidc_and_ci_safety():
     workflow_text = workflow_path.read_text()
 
     assert_test(
-        "Workflow enforces manual workflow_dispatch with required confirm_approval input",
+        "Workflow uses manual dispatch without user-supplied inputs",
         "workflow_dispatch:" in workflow_text and
-        "confirm_approval:" in workflow_text and
-        "required: true" in workflow_text and
+        not re.search(r"workflow_dispatch:\s*\n\s+inputs:", workflow_text) and
+        "inputs." not in workflow_text and
         "push:" not in workflow_text and
         "pull_request:" not in workflow_text,
-        "Workflow must trigger only via manual workflow_dispatch with required confirm_approval."
+        "Workflow must trigger manually without deployment input fields."
     )
 
     assert_test(
@@ -935,10 +935,11 @@ def test_github_actions_oidc_and_ci_safety():
     )
 
     assert_test(
-        "Workflow enforces top-level read-only permissions, manual develop dispatch, and scoped id-token: write",
+        "Workflow enforces top-level read-only permissions, develop dispatch, and scoped id-token: write",
         "permissions:\n  contents: read" in workflow_text and
         "github.ref == 'refs/heads/develop'" in workflow_text and
-        "inputs.confirm_approval == true" in workflow_text and
+        "github.repository == 'slabarcaf/flowcard-treasury'" in workflow_text and
+        "inputs." not in workflow_text and
         "id-token: write" in workflow_text,
         "Workflow must restrict permissions and scope id-token: write strictly to deploy-demo."
     )
@@ -1013,10 +1014,11 @@ def test_github_actions_oidc_and_ci_safety():
         "rollback-demo.sh must support --oidc flag."
     )
     assert_test(
-        "rollback-release.sh exists and coordinates coupled backend & frontend rollback",
+        "Standalone rollback coordinator remains separate from the workflow",
         (ROOT_DIR / "scripts" / "rollback-release.sh").is_file() and
-        "COUPLED ROLLBACK" in (ROOT_DIR / "scripts" / "rollback-release.sh").read_text(),
-        "rollback-release.sh must exist and coordinate coupled rollback."
+        "COUPLED ROLLBACK" in (ROOT_DIR / "scripts" / "rollback-release.sh").read_text() and
+        "rollback-release.sh" not in workflow_text,
+        "The manual rollback utility may remain, but the deployment workflow must not invoke it."
     )
 
     # 5. Lead Review Additions: Toolchains, Postgres Service, OpenAPI, and Specific IAM RunTask Binding
@@ -1075,31 +1077,46 @@ def test_github_actions_oidc_and_ci_safety():
     )
 
     assert_test(
-        "Workflow enforces fail-closed deterministic activation gate before OIDC assumption",
-        "Verify Activation Preconditions & Governance Gates (Fail Closed)" in workflow_text and
-        'FOUNDATION_STATUS' in workflow_text and
-        'if [[ "${FOUNDATION_STATUS}" != "verified" ]]' in workflow_text and
-        workflow_text.find("Verify Activation Preconditions & Governance Gates (Fail Closed)") < workflow_text.find("Assume AWS Deployer Role via GitHub OIDC"),
-        "Workflow must enforce deterministic fail-closed activation gate before OIDC assumption."
+        "Workflow validates fixed foundation targets before OIDC assumption",
+        "Validate Fixed Foundation Configuration (Fail Closed)" in workflow_text and
+        "FOUNDATION_PATH: infra/environments/demo/foundation-outputs.json" in workflow_text and
+        "Foundation configuration is incomplete" in workflow_text and
+        workflow_text.find("Validate Fixed Foundation Configuration (Fail Closed)") < workflow_text.find("Assume AWS Deployer Role via GitHub OIDC"),
+        "Workflow must validate the pinned foundation configuration before OIDC."
     )
 
     assert_test(
         "Workflow exports immutable container archives and loads in deploy job without rebuild",
-        "docker save \"flowcard-node-gateway:${COMMIT}\" | gzip > .image-archives/node-gateway.tar.gz" in workflow_text and
-        "docker save \"flowcard-go-runtime:${COMMIT}\" | gzip > .image-archives/go-runtime.tar.gz" in workflow_text and
+        "docker save \"flowcard-node-gateway:${IMAGE_TAG}\" | gzip > .image-archives/node-gateway.tar.gz" in workflow_text and
+        "docker save \"flowcard-go-runtime:${IMAGE_TAG}\" | gzip > .image-archives/go-runtime.tar.gz" in workflow_text and
         "docker load -i .image-archives/node-gateway.tar.gz" in workflow_text and
         "docker load -i .image-archives/go-runtime.tar.gz" in workflow_text and
+        'RELEASE_ID="${COMMIT_SHA}/${RUN_ID}-${RUN_ATTEMPT}"' in workflow_text and
+        'IMAGE_TAG="${COMMIT_SHA}-${RUN_ID}-${RUN_ATTEMPT}"' in workflow_text and
+        'CURRENT_RELEASE_ID="${CURRENT_SHA}/${CURRENT_RUN_ID}-${CURRENT_RUN_ATTEMPT}"' in workflow_text and
+        'docker push "${REGISTRY}/flowcard-node-gateway:${IMAGE_TAG}"' in workflow_text and
+        'docker push "${REGISTRY}/flowcard-go-api:${IMAGE_TAG}"' in workflow_text and
+        'docker push "${REGISTRY}/flowcard-go-worker:${IMAGE_TAG}"' in workflow_text and
+        'docker push "${REGISTRY}/flowcard-migration:${IMAGE_TAG}"' in workflow_text and
+        'FRONTEND_ARTIFACT_NAME="frontend-dist-${IMAGE_TAG}"' in workflow_text and
+        'RECOVERY_ARTIFACT_NAME="release-recovery-${IMAGE_TAG}"' in workflow_text and
+        'name: ${{ steps.meta.outputs.frontend_artifact_name }}' in workflow_text and
+        'name: ${{ steps.meta.outputs.container_artifact_name }}' in workflow_text and
+        'name: ${{ steps.meta.outputs.manifest_artifact_name }}' in workflow_text and
+        'name: ${{ needs.build-and-metadata.outputs.frontend_artifact_name }}' in workflow_text and
+        'name: ${{ needs.build-and-metadata.outputs.container_artifact_name }}' in workflow_text and
+        'name: ${{ needs.build-and-metadata.outputs.manifest_artifact_name }}' in workflow_text and
         "docker build" not in workflow_text.split("deploy-demo:")[1],
-        "Workflow must export container archives and load in deploy job without rebuilding."
+        "Workflow must use run-scoped image tags and matching artifacts without rebuilding in deploy."
     )
 
     assert_test(
-        "Workflow passes foundation outputs artifact input and decouples from hardcoded operational claims",
-        'inputs.foundation_outputs_artifact' in workflow_text and
+        "Workflow uses the fixed tracked foundation configuration",
+        "FOUNDATION_PATH: infra/environments/demo/foundation-outputs.json" in workflow_text and
         '--infra-outputs-file' in workflow_text and
         (ROOT_DIR / "environments" / "demo" / "foundation-outputs.example.json").is_file() and
-        not (ROOT_DIR / "environments" / "demo" / "foundation-outputs.json").is_file(),
-        "Workflow must accept trusted foundation outputs input and provide foundation-outputs.example.json template without fake operational claims."
+        (ROOT_DIR / "environments" / "demo" / "foundation-outputs.json").is_file(),
+        "Workflow must use the fixed tracked configuration and keep its example template."
     )
 
     assert_test(

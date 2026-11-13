@@ -1,8 +1,9 @@
 # FlowCard Demo Acceptance
 
-This matrix records acceptance for the FlowCard AWS demonstration. The manual
-rollout checkpoint below is based on Ramil's terminal output and browser reports
-on November 12, 2026. Remaining checks retain their individual pending gates.
+This matrix records acceptance for the FlowCard AWS demonstration. The November
+12, 2026 manual rollout checkpoint is operator-reported historical evidence.
+The simplified GitHub workflow has not had its first live run; that check and
+the remaining acceptance gates are still open.
 
 [TOC]
 
@@ -14,10 +15,11 @@ on November 12, 2026. Remaining checks retain their individual pending gates.
   It does not prove that a live resource or integration works.
 - `PENDING_LIVE`: Requires an authorized live check after prerequisites clear.
 - `BLOCKED_APPROVAL`: Must wait for the listed decision or evidence.
+- `BLOCKED_ENVIRONMENT`: A required local or CI dependency is unavailable.
 
 ## Readiness gates
 
-### Manual rollout checkpoint, November 12, 2026
+### Historical manual rollout checkpoint, November 12, 2026
 
 The frontend and Swagger UI load at
 `https://d2dogzq0d9gxdl.cloudfront.net`. All three ECS services reached one running
@@ -28,25 +30,31 @@ Operator-provided HTTP results verify session creation (`200`), company creation
 (`201`), reads (`200`), update (`200`), and deletion (`204`). The temporary
 company was deleted. An unauthenticated company request returned `401`.
 
-These checks establish the core manual rollout. Airwallex submission, RFI,
+These checks record the earlier manual rollout only. They do not verify the
+simplified GitHub workflow. Airwallex submission, RFI,
 webhooks, document storage permissions, restore, rollback, and alert delivery
 remain unverified. Existing cost alerts are user-reported; Ramil declined a new
-budget resource. The protected GitHub deployment workflow remains pending.
+budget resource. The first run of the simplified GitHub workflow remains
+pending.
 
 ### Original offline and extended acceptance gates
 
-The offline frontend build and route fixtures now pass. The strict Node baseline
-comparator ran 939 tests and found exactly the 23 documented baseline failures,
-with zero unexpected regressions. The PostgreSQL seed regression passes against
-the existing locked test database. These results do not constitute live demo
-acceptance.
+Focused frontend/workflow/deployment checks and builds pass. Earlier evidence
+recorded 939 strict-baseline tests with the 23 documented failures. An initial
+Task 4 run lacked local PostgreSQL and had one additional onboarding E2E
+failure. The later isolated-database rerun passed the strict comparator with
+940 tests, 911 passed, 23 documented failures, 6 skipped, and zero unexpected
+failures. Raw Vitest exits 1 for the 23 known failures; the comparator exits 0.
+Offline results do not constitute live demo acceptance.
 
 | Gate | Status | Required before acceptance |
 | --- | --- | --- |
+| Simplified manual workflow | `PENDING_LIVE` | Dispatch from `develop` with no form inputs; verify OIDC, release identity, deployment phases, and final manifest. |
+| Full Node baseline | `VERIFIED_OFFLINE` | Strict comparison: 940 tests, 911 passed, 23 documented failures, 6 skipped, zero unexpected failures; comparator exit 0. The raw Vitest exit remains 1 for the known baseline failures. |
 | Task 8 deployment and security implementation | `VERIFIED_OFFLINE` | Focused workflow, IAM, release-script, and offline-safety checks. |
 | AWS identity, account, MFA, and routine operator access | `BLOCKED_APPROVAL` | Owner establishes authorized access. Operator verifies STS account and region before any plan or resource action. |
-| Repository deployment configuration | `PENDING_LIVE` | Configure repository Actions variables and apply the trust-only AWS OIDC subject update; read both back before dispatch. |
-| Foundation outputs and infrastructure | `BLOCKED_APPROVAL` | Owner authorizes a reviewed Terraform plan and provisioning. Supply the tracked foundation artifact with its required digest and ancestor-bound review evidence. |
+| Repository deployment configuration | `PENDING_LIVE` | Verify existing Actions variables against the tracked foundation file and confirm the immutable `develop` OIDC subject before the first workflow run. |
+| Foundation outputs and infrastructure | `BLOCKED_APPROVAL` | Separate infrastructure changes still require an authorized, reviewed plan and provisioning approval. The workflow reads the real tracked `infra/environments/demo/foundation-outputs.json`; it has no manual digest or approval-evidence input. |
 | Budget amount and alert email | `BLOCKED_APPROVAL` | Ramil approves an amount and recipient. The current `$150/month` proposal is not approval; `enable_budget` remains false by default. |
 | Runtime integration settings | `VERIFIED_OFFLINE` | Ramil approved the four names; standard loaders and focused checks pass. The November 12 operator checkpoint reports values provisioned and services deployed, but this task did not independently inspect AWS. |
 | Submit and platform contract | `BLOCKED_APPROVAL` | Approve submission revision policy and verify US roles, fields, documents, API version, and platform outcomes. |
@@ -73,18 +81,24 @@ acceptance.
 | Backups and restore | `PENDING_LIVE` | Confirm retention and complete an authorized restore rehearsal into an isolated test target. Never overwrite or clean production/demo data as part of the rehearsal. | Snapshot ID, restore target identifier, timestamps, and validation result. No connection strings. |
 | Logs, alarms, and retention | `PENDING_LIVE` | Verify required log groups, retention, service health alarms, and alert delivery to an approved recipient. | Alarm names, retention values, test notification time, recipient classification. Do not include log payloads. |
 | Budget alert | `BLOCKED_APPROVAL` | Wait for approved amount and notification email, then verify configured alerts. | Approved threshold and redacted recipient; no budget resource is enabled before approval. |
-| Coupled rollback | `PENDING_LIVE` | After a successful release with retained artifacts, rehearse backend and frontend rollback together. Verify both phases or report partial recovery. Do not downgrade migrations or delete persisted data. | Prior manifest status, logical artifact identity, checksums, task-definition ARNs, invalidation ID, phase outcomes. |
+| Separately authorized manual recovery | `PENDING_LIVE` | Recovery is outside normal release dispatch. Review a successful release record and matching frontend artifact, then pass explicit targets. The current manifest does not match the legacy `--manifest` schema. Verify both phases or report partial state. Do not downgrade migrations or delete persisted data. | Prior manifest status, logical artifact identity, checksums, task-definition ARNs, invalidation ID, phase outcomes. |
 | URL, safe reset, rotation, and teardown | `BLOCKED_APPROVAL` | Record access instructions after a real release. No safe application-data reset command is currently verified. Teardown or deletion requires separate explicit authorization and a reviewed retention plan. | Approved run ID, release checksums, resource inventory, backup/state retention decision, and rotation record. |
 
 ## Release metadata acceptance
+
+The workflow records one release identity from the commit SHA, run ID, and run
+attempt. Artifact names and ECR tags include that attempt. A failed-jobs-only
+retry that reuses previous build artifacts fails provenance; choose **Re-run
+all jobs** to rebuild and deploy from the same attempt.
 
 The workflow has two deployment phases in its local release metadata:
 
 1. `deploy-demo.sh` records `backend_verified_frontend_pending` only after
    service health checks pass.
-2. `deploy-frontend.sh` verifies the built frontend checksum, uploads assets,
-   creates an exact-path invalidation, and waits for CloudFront invalidation
-   completion.
+2. `deploy-frontend.sh` verifies the built frontend checksum, uploads hashed
+   assets and other public files at their existing S3 paths, publishes
+   `index.html` last, retains older objects, creates a mutable-path
+   invalidation, and waits for CloudFront invalidation completion.
 3. `finalize-release.sh` records `deployed_and_verified` only after the
    frontend step succeeds and account, region, commit, and checksum match.
 
