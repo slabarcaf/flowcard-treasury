@@ -1094,12 +1094,12 @@ def test_github_actions_oidc_and_ci_safety():
     )
 
     assert_test(
-        "Workflow passes foundation outputs artifact input and decouples from hardcoded operational claims",
+        "Workflow retains the example and captured foundation configuration",
         'inputs.foundation_outputs_artifact' in workflow_text and
         '--infra-outputs-file' in workflow_text and
         (ROOT_DIR / "environments" / "demo" / "foundation-outputs.example.json").is_file() and
-        not (ROOT_DIR / "environments" / "demo" / "foundation-outputs.json").is_file(),
-        "Workflow must accept trusted foundation outputs input and provide foundation-outputs.example.json template without fake operational claims."
+        (ROOT_DIR / "environments" / "demo" / "foundation-outputs.json").is_file(),
+        "Workflow must retain the example template and captured fixed deployment configuration."
     )
 
     assert_test(

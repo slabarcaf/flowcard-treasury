@@ -398,6 +398,8 @@ jobs:
           PREV_ARTIFACT_ID: ${{ inputs.previous_frontend_artifact_id }}
           AUTHORIZED_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
           TARGET_REGION: ${{ vars.AWS_REGION }}
+          TARGET_FRONTEND_BUCKET: ${{ vars.S3_FRONTEND_BUCKET }}
+          TARGET_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
           MANIFEST_FILE=".dev/.release-metadata/release-manifest.json"
 
@@ -444,18 +446,90 @@ jobs:
           fi
           echo "    Foundation artifact SHA-256 verified: ${ACTUAL_SHA}"
 
-          # Validate required foundation outputs and approval evidence schema
+          # Validate the configured deployment target and foundation resource schema.
+          if [[ ! "${AUTHORIZED_ACCOUNT}" =~ ^[0-9]{12}$ || \
+                ! "${TARGET_REGION}" =~ ^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$ || \
+                ! "${TARGET_FRONTEND_BUCKET}" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ || \
+                ! "${TARGET_CLOUDFRONT_DISTRIBUTION_ID}" =~ ^E[A-Z0-9]+$ ]]; then
+            echo "FATAL [ACTIVATION GATE]: Required repository deployment targets are missing or malformed." >&2
+            exit 1
+          fi
+
           FOUNDATION_ACCOUNT="$(jq -r '.account_id // empty' "${FOUNDATION_PATH}")"
           if [[ ! "${AUTHORIZED_ACCOUNT}" =~ ^[0-9]{12}$ || "${FOUNDATION_ACCOUNT}" != "${AUTHORIZED_ACCOUNT}" ]]; then
-            echo "FATAL [ACTIVATION GATE]: Foundation account (${FOUNDATION_ACCOUNT}) does not match authorized account (${AUTHORIZED_ACCOUNT})!" >&2
+            echo "FATAL [ACTIVATION GATE]: Foundation account does not match the configured deployment account." >&2
             exit 1
           fi
 
           FOUNDATION_REGION="$(jq -r '.aws_region // empty' "${FOUNDATION_PATH}")"
           if [[ "${FOUNDATION_REGION}" != "${TARGET_REGION}" ]]; then
-            echo "FATAL [ACTIVATION GATE]: Foundation region (${FOUNDATION_REGION}) does not match target region (${TARGET_REGION})!" >&2
+            echo "FATAL [ACTIVATION GATE]: Foundation region does not match the configured deployment region." >&2
             exit 1
           fi
+
+          if ! jq -e \
+            --arg account "${AUTHORIZED_ACCOUNT}" \
+            --arg region "${TARGET_REGION}" \
+            --arg frontend_bucket "${TARGET_FRONTEND_BUCKET}" \
+            --arg distribution_id "${TARGET_CLOUDFRONT_DISTRIBUTION_ID}" '
+              def real_string:
+                type == "string" and length > 0 and
+                (test("REPLACE_WITH_|placeholder|example"; "i") | not);
+              def task_definition($family):
+                type == "string" and
+                test("^arn:aws:ecs:" + $region + ":" + $account + ":task-definition/" + $family + ":[1-9][0-9]*$");
+              . as $f |
+              ($f.ecs_cluster_name | real_string) and
+              ($f.ecs_cluster_name | test("^[A-Za-z0-9_-]+$")) and
+              ($f.ecs_cluster_arn |
+                type == "string" and
+                test("^arn:aws:ecs:" + $region + ":" + $account + ":cluster/[A-Za-z0-9_-]+$")) and
+              (($f.ecs_cluster_arn | split("/")[-1]) == $f.ecs_cluster_name) and
+              ($f.private_subnet_ids |
+                if type == "array" then
+                  length >= 2 and (unique | length) == length and
+                  all(.[]; type == "string" and test("^subnet-[0-9a-f]+$"))
+                else false end) and
+              ($f.migration_task_security_group_id |
+                type == "string" and test("^sg-[0-9a-f]+$")) and
+              ($f.ecr_repository_urls |
+                type == "object" and
+                (keys == ["flowcard-go-api", "flowcard-go-worker", "flowcard-migration", "flowcard-node-gateway"]) and
+                .["flowcard-node-gateway"] == ($account + ".dkr.ecr." + $region + ".amazonaws.com/flowcard-node-gateway") and
+                .["flowcard-go-api"] == ($account + ".dkr.ecr." + $region + ".amazonaws.com/flowcard-go-api") and
+                .["flowcard-go-worker"] == ($account + ".dkr.ecr." + $region + ".amazonaws.com/flowcard-go-worker") and
+                .["flowcard-migration"] == ($account + ".dkr.ecr." + $region + ".amazonaws.com/flowcard-migration")) and
+              ($f.frontend_bucket_name == $frontend_bucket) and
+              ($f.cloudfront_distribution_id == $distribution_id) and
+              ($f.initial_task_definition_arns |
+                type == "object" and
+                (keys == ["go_api", "go_migration", "go_worker", "node_gateway", "node_migration", "synthetic_seed"]) and
+                (.node_gateway | task_definition("flowcard-demo-node-gateway")) and
+                (.go_api | task_definition("flowcard-demo-go-api")) and
+                (.go_worker | task_definition("flowcard-demo-go-worker")) and
+                (.node_migration | task_definition("flowcard-demo-node-migration")) and
+                (.go_migration | task_definition("flowcard-demo-go-migration")) and
+                (.synthetic_seed | task_definition("flowcard-demo-synthetic-seed"))) and
+              ($f.frontend_bucket_name | real_string) and
+              ($f.cloudfront_distribution_id | type == "string" and test("^E[A-Z0-9]+$")) and
+              ([
+                $f.account_id,
+                $f.aws_region,
+                $f.ecs_cluster_arn,
+                $f.ecs_cluster_name,
+                ($f.private_subnet_ids // [])[]?,
+                $f.migration_task_security_group_id,
+                ($f.ecr_repository_urls // {} | .[]?),
+                $f.frontend_bucket_name,
+                $f.cloudfront_distribution_id,
+                ($f.initial_task_definition_arns // {} | .[]?)
+              ] | all(.[]; type == "string" and (test("REPLACE_WITH_|placeholder|example"; "i") | not)))
+            ' "${FOUNDATION_PATH}" >/dev/null 2>&1; then
+            echo "FATAL [ACTIVATION GATE]: Foundation configuration is incomplete, contains placeholders, or conflicts with repository deployment targets." >&2
+            exit 1
+          fi
+
+          echo "Foundation resource references and repository deployment targets validated."
 
           REVIEW_SOURCE_COMMIT="$(jq -r '.approval_evidence.reviewed_source_commit // empty' "${FOUNDATION_PATH}")"
           ARTIFACT_REVIEW_REF="$(jq -r '.approval_evidence.review_reference // empty' "${FOUNDATION_PATH}")"
@@ -486,18 +560,6 @@ jobs:
           RUNTIME_APPROVED_AT="$(jq -r '.approval_evidence.runtime_configuration.approved_at // empty' "${FOUNDATION_PATH}")"
           if [[ "${RUNTIME_APPROVED}" == "true" && ( -z "${RUNTIME_APPROVER}" || -z "${RUNTIME_APPROVAL_REF}" || -z "${RUNTIME_APPROVED_AT}" ) ]]; then
             echo "FATAL [ACTIVATION GATE]: Runtime approval is missing named approval evidence." >&2
-            exit 1
-          fi
-
-          # Required foundation resource IDs must be present
-          CLUSTER_ARN="$(jq -r '.ecs_cluster_arn // empty' "${FOUNDATION_PATH}")"
-          SUBNETS="$(jq -r '.private_subnet_ids // [] | length' "${FOUNDATION_PATH}")"
-          MIG_SG="$(jq -r '.migration_task_security_group_id // empty' "${FOUNDATION_PATH}")"
-          FRONTEND_BUCKET="$(jq -r '.frontend_bucket_name // empty' "${FOUNDATION_PATH}")"
-          CF_DIST="$(jq -r '.cloudfront_distribution_id // empty' "${FOUNDATION_PATH}")"
-
-          if [[ -z "${CLUSTER_ARN}" || "${SUBNETS}" -eq 0 || -z "${MIG_SG}" || -z "${FRONTEND_BUCKET}" || -z "${CF_DIST}" ]]; then
-            echo "FATAL [ACTIVATION GATE]: Foundation outputs artifact is missing required resource identifiers!" >&2
             exit 1
           fi
 

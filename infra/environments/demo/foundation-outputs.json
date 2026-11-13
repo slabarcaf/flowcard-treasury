@@ -1,0 +1,27 @@
+{
+  "account_id": "968198283143",
+  "aws_region": "us-west-2",
+  "ecs_cluster_arn": "arn:aws:ecs:us-west-2:968198283143:cluster/flowcard-demo-cluster",
+  "ecs_cluster_name": "flowcard-demo-cluster",
+  "private_subnet_ids": [
+    "subnet-03289bc6e40a82f1e",
+    "subnet-0eab2aa2de77f1766"
+  ],
+  "migration_task_security_group_id": "sg-08b381c1028518a0a",
+  "ecr_repository_urls": {
+    "flowcard-node-gateway": "968198283143.dkr.ecr.us-west-2.amazonaws.com/flowcard-node-gateway",
+    "flowcard-go-api": "968198283143.dkr.ecr.us-west-2.amazonaws.com/flowcard-go-api",
+    "flowcard-go-worker": "968198283143.dkr.ecr.us-west-2.amazonaws.com/flowcard-go-worker",
+    "flowcard-migration": "968198283143.dkr.ecr.us-west-2.amazonaws.com/flowcard-migration"
+  },
+  "frontend_bucket_name": "flowcard-frontend-968198283143-us-west-2",
+  "cloudfront_distribution_id": "ETTM257BBLQ3N",
+  "initial_task_definition_arns": {
+    "node_gateway": "arn:aws:ecs:us-west-2:968198283143:task-definition/flowcard-demo-node-gateway:2",
+    "go_api": "arn:aws:ecs:us-west-2:968198283143:task-definition/flowcard-demo-go-api:2",
+    "go_worker": "arn:aws:ecs:us-west-2:968198283143:task-definition/flowcard-demo-go-worker:2",
+    "node_migration": "arn:aws:ecs:us-west-2:968198283143:task-definition/flowcard-demo-node-migration:2",
+    "go_migration": "arn:aws:ecs:us-west-2:968198283143:task-definition/flowcard-demo-go-migration:2",
+    "synthetic_seed": "arn:aws:ecs:us-west-2:968198283143:task-definition/flowcard-demo-synthetic-seed:2"
+  }
+}

@@ -37,6 +37,30 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
   describe("GitHub Actions Workflow Definition (.github/workflows/aws-demo.yml)", () => {
     it("workflow YAML file exists and is readable", () => {
       expect(existsSync(WORKFLOW_PATH)).toBe(true);
+      const examplePath = resolve(WORKTREE_ROOT, "infra/environments/demo/foundation-outputs.example.json");
+      const example = JSON.parse(readFileSync(examplePath, "utf8")) as Record<string, unknown>;
+      const outputsPath = resolve(WORKTREE_ROOT, "infra/environments/demo/foundation-outputs.json");
+      const outputs = JSON.parse(readFileSync(outputsPath, "utf8")) as Record<string, unknown>;
+      const expectedKeys = [
+        "account_id",
+        "aws_region",
+        "cloudfront_distribution_id",
+        "ecr_repository_urls",
+        "ecs_cluster_arn",
+        "ecs_cluster_name",
+        "frontend_bucket_name",
+        "initial_task_definition_arns",
+        "migration_task_security_group_id",
+        "private_subnet_ids",
+      ].sort();
+      expect(Object.keys(example).sort()).toEqual(expectedKeys);
+      expect(Object.keys(outputs).sort()).toEqual(expectedKeys);
+      expect(example).not.toHaveProperty("approval_evidence");
+      expect(JSON.stringify(example)).toContain("REPLACE_WITH_");
+      expect(outputs.account_id).toBe("968198283143");
+      expect(outputs.aws_region).toBe("us-west-2");
+      expect(outputs).not.toHaveProperty("approval_evidence");
+      expect(JSON.stringify(outputs)).not.toContain("REPLACE_WITH_");
     });
 
     it("enforces explicit workflow_dispatch trigger with required confirm_approval input", () => {
@@ -391,10 +415,25 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
           account_id: VALID_ACCOUNT,
           aws_region: "us-west-2",
           ecs_cluster_arn: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:cluster/demo`,
-          private_subnet_ids: ["subnet-a"],
-          migration_task_security_group_id: "sg-migrate",
-          frontend_bucket_name: "demo-frontend",
-          cloudfront_distribution_id: "E1234567890ABC",
+          ecs_cluster_name: "demo",
+          private_subnet_ids: ["subnet-0a00123456789abcd", "subnet-0b00123456789abcd"],
+          migration_task_security_group_id: "sg-0a00123456789abcd",
+          ecr_repository_urls: {
+            "flowcard-node-gateway": `${VALID_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/flowcard-node-gateway`,
+            "flowcard-go-api": `${VALID_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/flowcard-go-api`,
+            "flowcard-go-worker": `${VALID_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/flowcard-go-worker`,
+            "flowcard-migration": `${VALID_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/flowcard-migration`,
+          },
+          frontend_bucket_name: "flowcard-test-frontend",
+          cloudfront_distribution_id: "EABC123",
+          initial_task_definition_arns: {
+            node_gateway: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-node-gateway:1`,
+            go_api: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-go-api:1`,
+            go_worker: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-go-worker:1`,
+            node_migration: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-node-migration:1`,
+            go_migration: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-go-migration:1`,
+            synthetic_seed: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-synthetic-seed:1`,
+          },
         };
         const canonicalContent = spawnSync("jq", ["-cS", "."], { input: JSON.stringify(reviewedOutputs), encoding: "utf8" }).stdout;
         const reviewedContentHash = spawnSync("sha256sum", [], { input: canonicalContent, encoding: "utf8" }).stdout.split(" ")[0];
@@ -424,11 +463,11 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
           account_id: VALID_ACCOUNT,
           region: "us-west-2",
           services: { node_gateway: { revision: 5 }, go_api: { revision: 4 }, go_worker: { revision: 4 } },
-          frontend: { status: "pending", bucket_name: "demo-frontend", distribution_id: "E1234567890ABC", dist_checksum_sha256: releaseAHash },
+          frontend: { status: "pending", bucket_name: "flowcard-test-frontend", distribution_id: "EABC123", dist_checksum_sha256: releaseAHash },
           target_release: { commit_sha: "f".repeat(40), frontend_artifact_id: "release-A", frontend_checksum_sha256: releaseAHash },
         }));
 
-        const runMerge = (priorRelease = false) => {
+        const runMerge = (priorRelease = false, targetOverrides: Record<string, string> = {}) => {
           writeFileSync(manifestPath, initialManifest());
           const artifactHash = spawnSync("sha256sum", [artifact], { encoding: "utf8" }).stdout.split(" ")[0];
           const deploymentCommitResult = spawnSync("git", ["rev-parse", "HEAD"], { cwd: tmpDir, encoding: "utf8" });
@@ -445,7 +484,10 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
               PREV_ARTIFACT_ID: priorRelease ? "release-A" : "",
               AUTHORIZED_ACCOUNT: VALID_ACCOUNT,
               TARGET_REGION: "us-west-2",
+              TARGET_FRONTEND_BUCKET: "flowcard-test-frontend",
+              TARGET_CLOUDFRONT_DISTRIBUTION_ID: "EABC123",
               GITHUB_SHA: deploymentCommitResult.stdout.trim(),
+              ...targetOverrides,
             },
           });
         };
@@ -468,6 +510,33 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
         expect(merged).not.toHaveProperty("activation_preconditions.github_environment_configured");
         expect(merged.foundation_manifest).not.toHaveProperty("github_environment_verification");
         expect(merged.runtime_configuration.approved).toBe(true);
+
+        const mismatchedTarget = runMerge(false, { TARGET_FRONTEND_BUCKET: "other-test-frontend" });
+        expect(mismatchedTarget.status).toBe(1);
+        expect(mismatchedTarget.stderr).toContain("conflicts with repository deployment targets");
+
+        const placeholderArtifact = {
+          ...artifactValue,
+          private_subnet_ids: ["subnet-REPLACE_WITH_PRIVATE_SUBNET_ID"],
+        };
+        writeFileSync(artifact, JSON.stringify(placeholderArtifact));
+        const placeholderResult = runMerge();
+        expect(placeholderResult.status).toBe(1);
+        expect(placeholderResult.stderr).toContain("contains placeholders");
+
+        const missingResourceField = {
+          ...artifactValue,
+          migration_task_security_group_id: undefined,
+        };
+        writeFileSync(artifact, JSON.stringify(missingResourceField));
+        const missingFieldResult = runMerge();
+        expect(missingFieldResult.status).toBe(1);
+        expect(missingFieldResult.stderr).toContain("configuration is incomplete");
+
+        writeFileSync(artifact, JSON.stringify(artifactValue));
+        const restoredValidArtifact = runMerge();
+        expect(restoredValidArtifact.status).toBe(0);
+        merged = JSON.parse(readFileSync(manifestPath, "utf8"));
 
         const gateResult = spawnSync("bash", ["-c", gateBlock], { cwd: tmpDir, encoding: "utf8" });
         expect(gateResult.status).toBe(0);
