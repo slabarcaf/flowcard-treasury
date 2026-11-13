@@ -5,7 +5,8 @@
 #
 # STRICT OPERATIONAL BOUNDARIES:
 # 1. NOT automatically invoked during offline planning or Task 6 execution.
-# 2. Requires explicit human approval confirmation flag (--confirm-approval).
+# 2. Direct CLI use requires --confirm-approval; the workflow passes it only
+#    after a manual dispatch from the protected develop branch.
 # 3. Requires 12-digit AWS account ID (--account-id), --profile, and --region.
 # 4. Verifies AWS caller identity against authorized account ID before any mutation.
 # 5. Validates immutable sha256: image digests for all services (no 'latest'/tags).
@@ -26,12 +27,7 @@ AUTHORIZED_ACCOUNT_ID="${ALLOWED_ACCOUNT_ID:-}"
 CONFIRM_APPROVAL=false
 APPLY_SEED=false
 DESIRED_COUNT=1
-FLAG_PREV_MANIFEST=""
-FLAG_PRIOR_FRONTEND_CHECKSUM=""
-FLAG_PRIOR_FRONTEND_DIR=""
-FLAG_PRIOR_FRONTEND_ARTIFACT_ID=""
 FLAG_FRONTEND_ARTIFACT_ID=""
-FLAG_PREVIOUS_RELEASE_VERIFIED=false
 FLAG_FRONTEND_CHECKSUM=""
 FLAG_BUCKET_NAME=""
 FLAG_DISTRIBUTION_ID=""
@@ -134,24 +130,8 @@ while [[ $# -gt 0 ]]; do
       CONFIRM_APPROVAL=true
       shift
       ;;
-    --prior-frontend-checksum)
-      FLAG_PRIOR_FRONTEND_CHECKSUM="$2"
-      shift 2
-      ;;
-    --prior-frontend-dir)
-      FLAG_PRIOR_FRONTEND_DIR="$2"
-      shift 2
-      ;;
-    --prior-frontend-artifact-id)
-      FLAG_PRIOR_FRONTEND_ARTIFACT_ID="$2"
-      shift 2
-      ;;
     --frontend-artifact-id)
       FLAG_FRONTEND_ARTIFACT_ID="$2"
-      shift 2
-      ;;
-    --previous-manifest)
-      FLAG_PREV_MANIFEST="$2"
       shift 2
       ;;
     --frontend-checksum)
@@ -346,68 +326,8 @@ MIGRATION_IMAGE="${MIGRATION_REPO}@${MIGRATION_DIGEST}"
 
 NETWORK_CONFIG="awsvpcConfiguration={subnets=[${SUBNET_IDS}],securityGroups=[${MIGRATION_SG}],assignPublicIp=DISABLED}"
 
-# 6.5 Capture Pre-Mutation Active State for Rollback Provenance
-echo "Capturing pre-mutation deployment state for rollback provenance..."
+# 6.5 Initialize diagnostic deployment metadata before mutations.
 mkdir -p .dev/.release-metadata
-
-if [[ -n "${FLAG_PREV_MANIFEST}" && -f "${FLAG_PREV_MANIFEST}" ]]; then
-  # Only an explicitly successful prior release may establish rollback provenance.
-  PREV_STATUS="$(jq -r '.status // empty' "${FLAG_PREV_MANIFEST}")"
-  PREV_ACCOUNT="$(jq -r '.account_id // empty' "${FLAG_PREV_MANIFEST}")"
-  PREV_REGION="$(jq -r '.region // empty' "${FLAG_PREV_MANIFEST}")"
-  PREV_FRONTEND_CHECKSUM="$(jq -r '.frontend.dist_checksum_sha256 // empty' "${FLAG_PREV_MANIFEST}")"
-  PREV_FRONTEND_ARTIFACT_ID="$(jq -r '.target_release.frontend_artifact_id // empty' "${FLAG_PREV_MANIFEST}")"
-  if [[ "${PREV_STATUS}" == "deployed_and_verified" && \
-        "${PREV_ACCOUNT}" == "${AUTHORIZED_ACCOUNT_ID}" && \
-        "${PREV_REGION}" == "${REGION}" && \
-        "${PREV_FRONTEND_CHECKSUM}" =~ ^[a-f0-9]{64}$ && \
-        -n "${PREV_FRONTEND_ARTIFACT_ID}" && \
-        "${FLAG_PRIOR_FRONTEND_CHECKSUM}" == "${PREV_FRONTEND_CHECKSUM}" && \
-        "${FLAG_PRIOR_FRONTEND_ARTIFACT_ID}" == "${PREV_FRONTEND_ARTIFACT_ID}" && \
-        -n "${FLAG_PRIOR_FRONTEND_DIR}" ]]; then
-    FLAG_PREVIOUS_RELEASE_VERIFIED=true
-    [[ -z "${FLAG_BUCKET_NAME}" ]] && FLAG_BUCKET_NAME="$(jq -r '.frontend.bucket_name // empty' "${FLAG_PREV_MANIFEST}")"
-    [[ -z "${FLAG_DISTRIBUTION_ID}" ]] && FLAG_DISTRIBUTION_ID="$(jq -r '.frontend.distribution_id // empty' "${FLAG_PREV_MANIFEST}")"
-  else
-    echo "WARNING: Prior release manifest does not prove a successful same-account release with matching frontend provenance; rollback target will remain unavailable." >&2
-    FLAG_PRIOR_FRONTEND_CHECKSUM=""
-    FLAG_PRIOR_FRONTEND_DIR=""
-    FLAG_PRIOR_FRONTEND_ARTIFACT_ID=""
-  fi
-else
-  # Caller-supplied checksum-only values are not evidence of a successful release.
-  if [[ -n "${FLAG_PRIOR_FRONTEND_CHECKSUM}" || -n "${FLAG_PRIOR_FRONTEND_DIR}" || -n "${FLAG_PRIOR_FRONTEND_ARTIFACT_ID}" ]]; then
-    echo "WARNING: Caller-supplied frontend values without a successful prior-release manifest do not establish rollback provenance." >&2
-  fi
-  FLAG_PRIOR_FRONTEND_CHECKSUM=""
-  FLAG_PRIOR_FRONTEND_DIR=""
-  FLAG_PRIOR_FRONTEND_ARTIFACT_ID=""
-fi
-
-CURRENT_NODE_DEF="$("${AWS_CMD[@]}" ecs describe-services --cluster "${CLUSTER_NAME}" --services "flowcard-demo-node-gateway" 2>/dev/null | jq -r '(.services[] | select(.serviceName == "flowcard-demo-node-gateway") | .taskDefinition) // .services[0].taskDefinition // empty' || echo "")"
-CURRENT_API_DEF="$("${AWS_CMD[@]}" ecs describe-services --cluster "${CLUSTER_NAME}" --services "flowcard-demo-go-api" 2>/dev/null | jq -r '(.services[] | select(.serviceName == "flowcard-demo-go-api") | .taskDefinition) // .services[0].taskDefinition // empty' || echo "")"
-CURRENT_WORKER_DEF="$("${AWS_CMD[@]}" ecs describe-services --cluster "${CLUSTER_NAME}" --services "flowcard-demo-go-worker" 2>/dev/null | jq -r '(.services[] | select(.serviceName == "flowcard-demo-go-worker") | .taskDefinition) // .services[0].taskDefinition // empty' || echo "")"
-
-CURRENT_NODE_REV=""
-CURRENT_API_REV=""
-CURRENT_WORKER_REV=""
-[[ -n "${CURRENT_NODE_DEF}" ]] && CURRENT_NODE_REV="$(echo "${CURRENT_NODE_DEF}" | awk -F':' '{print $NF}')"
-[[ -n "${CURRENT_API_DEF}" ]] && CURRENT_API_REV="$(echo "${CURRENT_API_DEF}" | awk -F':' '{print $NF}')"
-[[ -n "${CURRENT_WORKER_DEF}" ]] && CURRENT_WORKER_REV="$(echo "${CURRENT_WORKER_DEF}" | awk -F':' '{print $NF}')"
-
-ROLLBACK_AVAIL=false
-if [[ "${CURRENT_NODE_REV}" =~ ^[1-9][0-9]*$ && \
-      "${CURRENT_API_REV}" =~ ^[1-9][0-9]*$ && \
-      "${CURRENT_WORKER_REV}" =~ ^[1-9][0-9]*$ && \
-      -n "${FLAG_PRIOR_FRONTEND_CHECKSUM}" && \
-      "${FLAG_PRIOR_FRONTEND_CHECKSUM}" =~ ^[a-f0-9]{64}$ && \
-      "${FLAG_PRIOR_FRONTEND_CHECKSUM}" != "0000000000000000000000000000000000000000000000000000000000000000" && \
-      "${FLAG_PREVIOUS_RELEASE_VERIFIED}" == "true" && \
-      -n "${FLAG_PRIOR_FRONTEND_ARTIFACT_ID}" && \
-      -n "${FLAG_BUCKET_NAME}" && \
-      -n "${FLAG_DISTRIBUTION_ID}" ]]; then
-  ROLLBACK_AVAIL=true
-fi
 
 cat <<PRE_EOF > .dev/.release-metadata/deployed-release.json
 {
@@ -417,20 +337,6 @@ cat <<PRE_EOF > .dev/.release-metadata/deployed-release.json
   "region": "${REGION}",
   "cluster_name": "${CLUSTER_NAME}",
   "snapshot_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
-  "previous_release": {
-    "rollback_available": ${ROLLBACK_AVAIL},
-    "node_revision": ${CURRENT_NODE_REV:-null},
-    "api_revision": ${CURRENT_API_REV:-null},
-    "worker_revision": ${CURRENT_WORKER_REV:-null},
-    "node_task_definition_arn": "${CURRENT_NODE_DEF}",
-    "api_task_definition_arn": "${CURRENT_API_DEF}",
-    "worker_task_definition_arn": "${CURRENT_WORKER_DEF}",
-    "frontend_checksum_sha256": "${FLAG_PRIOR_FRONTEND_CHECKSUM}",
-    "frontend_build_dir": "${FLAG_PRIOR_FRONTEND_DIR}",
-    "frontend_artifact_id": "${FLAG_PRIOR_FRONTEND_ARTIFACT_ID}",
-    "bucket_name": "${FLAG_BUCKET_NAME}",
-    "distribution_id": "${FLAG_DISTRIBUTION_ID}"
-  },
   "target_release": {
     "commit_sha": "${GITHUB_SHA:-local-unverified}",
     "node_digest": "${NODE_DIGEST}",
@@ -646,20 +552,6 @@ cat <<FINAL_EOF > .dev/.release-metadata/deployed-release.json
   "cluster_name": "${CLUSTER_NAME}",
   "deployed_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
   "status": "backend_verified_frontend_pending",
-  "previous_release": {
-    "rollback_available": ${ROLLBACK_AVAIL},
-    "node_revision": ${CURRENT_NODE_REV:-null},
-    "api_revision": ${CURRENT_API_REV:-null},
-    "worker_revision": ${CURRENT_WORKER_REV:-null},
-    "node_task_definition_arn": "${CURRENT_NODE_DEF}",
-    "api_task_definition_arn": "${CURRENT_API_DEF}",
-    "worker_task_definition_arn": "${CURRENT_WORKER_DEF}",
-    "frontend_checksum_sha256": "${FLAG_PRIOR_FRONTEND_CHECKSUM}",
-    "frontend_build_dir": "${FLAG_PRIOR_FRONTEND_DIR}",
-    "frontend_artifact_id": "${FLAG_PRIOR_FRONTEND_ARTIFACT_ID}",
-    "bucket_name": "${FLAG_BUCKET_NAME}",
-    "distribution_id": "${FLAG_DISTRIBUTION_ID}"
-  },
   "services": {
     "node_gateway": {
       "service_name": "flowcard-demo-node-gateway",

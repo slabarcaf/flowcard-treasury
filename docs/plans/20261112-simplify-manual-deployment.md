@@ -34,10 +34,12 @@ available; a separate CI-only workflow is outside this change.
 
 ## Current implementation
 
-`.github/workflows/aws-demo.yml` exposes seven inputs. The deployment job uses
-the checkbox, a foundation file and checksum, embedded approval evidence, and
-optional previous-release paths. The real foundation file is still absent;
-only an example exists.
+Task 1 pinned the captured foundation configuration and added pre-OIDC target
+and resource validation. Task 2 now uses manual dispatch without input fields,
+and removes foundation approval evidence and prior-release bookkeeping from
+the normal workflow. It preserves the develop and repository restrictions,
+artifact checksums, migrations, service health checks, and fixed frontend
+publication paths.
 
 `infra/scripts/deploy-demo.sh` consumes infrastructure references, registers
 task definitions, runs migrations, and updates services. The frontend script
@@ -120,25 +122,26 @@ digests and artifact-integrity checks.
 - Modify `tests/server/github-actions-workflow.test.ts` and
   `tests/server/deploy-scripts.test.ts`.
 - Modify `infra/scripts/verify-offline-safety.py`.
+- Update this plan's current state and Task 2 checklist.
 
-- [ ] Remove all dispatch inputs, input expressions, and the checkbox job
+- [x] Remove all dispatch inputs, input expressions, and the checkbox job
       condition. Keep manual dispatch, exact repository/`develop` restrictions,
       release serialization, and deploy-job-only OIDC permission.
-- [ ] Load the hardcoded configuration from the pinned checkout. Remove the
+- [x] Load the hardcoded configuration from the pinned checkout. Remove the
       external foundation checksum, ancestor-bound approval bookkeeping, and
       configuration-approval flags that depended on the old evidence object.
-- [ ] Keep real account/region checks, scoped role/resource validation, runtime
+- [x] Keep real account/region checks, scoped role/resource validation, runtime
       requirements, and artifact-integrity checks before deployment writes.
-- [ ] Remove previous-release input parsing, manifest merging, workflow
+- [x] Remove previous-release input parsing, manifest merging, workflow
       arguments, and automatic coupled-rollback promises. Keep useful failure
       state for diagnosis and stop on errors; never report partial deployment
       as successful. Existing standalone manual recovery tools can remain.
-- [ ] Remove obsolete gate/proposal text from workflow summaries and metadata.
+- [x] Remove obsolete gate/proposal text from workflow summaries and metadata.
       Preserve migration ordering, private service wiring, and health waits.
-- [ ] Update existing workflow, script, and safety-check expectations. Use at
+- [x] Update existing workflow, script, and safety-check expectations. Use at
       most one new stubbed execution case for successful no-input deployment
       and pre-mutation rejection of invalid targets.
-- [ ] Run affected workflow/deploy tests and all offline safety checks.
+- [x] Run affected workflow/deploy tests and all offline safety checks.
 
 ### Task 3: Record release identity automatically
 

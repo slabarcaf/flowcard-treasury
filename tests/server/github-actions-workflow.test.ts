@@ -63,11 +63,11 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(JSON.stringify(outputs)).not.toContain("REPLACE_WITH_");
     });
 
-    it("enforces explicit workflow_dispatch trigger with required confirm_approval input", () => {
+    it("uses workflow_dispatch without manual input fields", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       expect(content).toContain("workflow_dispatch:");
-      expect(content).toContain("confirm_approval:");
-      expect(content).toContain("required: true");
+      expect(content).not.toMatch(/workflow_dispatch:\s+inputs:/);
+      expect(content).not.toMatch(/\$\{\{\s*inputs\./);
       expect(content).not.toContain("push:");
       expect(content).not.toContain("pull_request:");
       expect(content.match(/include-hidden-files: true/g)).toHaveLength(4);
@@ -81,7 +81,7 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
     it("enforces develop branch and repository restriction guards on jobs", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       expect(content).toContain("if: github.ref == 'refs/heads/develop' && github.repository == 'slabarcaf/flowcard-treasury'");
-      expect(content).toContain("inputs.confirm_approval == true");
+      expect(content).not.toContain("inputs.");
       expect(content).toContain("workflow_dispatch:");
       expect(content).not.toContain("pull_request:");
     });
@@ -178,13 +178,16 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(content).toContain("sha256sum");
     });
 
-    it("publishes release manifest and displays step summary with activation preconditions before deployment approval", () => {
+    it("publishes a pending release manifest and build summary without approval gates", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       expect(content).toContain("release-manifest.json");
       expect(content).toContain("$GITHUB_STEP_SUMMARY");
-      expect(content).toContain("manual_dispatch_confirmed");
-      expect(content).toContain("activation_preconditions");
-      expect(content).toContain("pending_manual_foundation");
+      expect(content).toContain('"status": "build_ready_pending_deployment"');
+      expect(content).not.toContain("activation_preconditions");
+      expect(content).not.toContain("pending_manual_foundation");
+      expect(content).not.toContain("approval_evidence");
+      expect(content).not.toContain("previous_release");
+      expect(content).not.toContain("rollback_available");
     });
 
     it("saves container archives with sha256 checksums in unprivileged job and loads without rebuild in deploy job", () => {
@@ -204,50 +207,45 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(deploySection).not.toContain("docker build");
     });
 
-    it("enforces deterministic fail-closed activation gate before OIDC role assumption", () => {
+    it("validates the pinned foundation and repository targets before OIDC", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       const deploySection = content.split("deploy-demo:")[1] || "";
 
-      // Gate step must appear BEFORE OIDC assumption step
-      const gateIdx = deploySection.indexOf("Verify Activation Preconditions & Governance Gates (Fail Closed)");
+      const configIdx = deploySection.indexOf("name: Validate Fixed Foundation Configuration (Fail Closed)");
       const oidcIdx = deploySection.indexOf("Assume AWS Deployer Role via GitHub OIDC");
-      expect(gateIdx).toBeGreaterThan(0);
-      expect(oidcIdx).toBeGreaterThan(gateIdx);
+      expect(configIdx).toBeGreaterThan(0);
+      expect(oidcIdx).toBeGreaterThan(configIdx);
       const variablesIdx = deploySection.indexOf("Validate Repository Deployment Variables");
-      expect(variablesIdx).toBeGreaterThan(gateIdx);
+      expect(variablesIdx).toBeGreaterThan(configIdx);
       expect(variablesIdx).toBeLessThan(oidcIdx);
       expect(deploySection).toContain('AWS_ACCOUNT_ID}" == "968198283143"');
       expect(deploySection).toContain('AWS_REGION}" == "us-west-2"');
-
-      // Gate checks foundation review and runtime approval
-      expect(deploySection).toContain("FOUNDATION_STATUS");
-      expect(deploySection).toContain('if [[ "${FOUNDATION_STATUS}" != "verified" ]]');
-      expect(deploySection).toContain('if [[ "${FOUNDATION_REVIEWED}" != "true" ]]');
-      expect(deploySection).toContain('if [[ "${CONFIG_APPROVED}" != "true" ]]');
+      expect(deploySection).toContain("FOUNDATION_PATH: infra/environments/demo/foundation-outputs.json");
+      expect(deploySection).toContain("TARGET_FRONTEND_BUCKET: ${{ vars.S3_FRONTEND_BUCKET }}");
+      expect(deploySection).toContain("TARGET_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}");
+      expect(deploySection).not.toContain("approval_evidence");
+      expect(deploySection).not.toContain("inputs.");
     });
 
-    it("passes trusted foundation release outputs artifact to deploy-demo.sh and uploads recovery metadata on failure", () => {
+    it("passes the pinned foundation config to deploy-demo.sh and preserves failure metadata", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       const deploySection = content.split("deploy-demo:")[1] || "";
       expect(deploySection).toContain("--infra-outputs-file");
-      expect(deploySection).toContain("foundation_outputs_artifact");
+      expect(deploySection).toContain("infra/environments/demo/foundation-outputs.json");
       expect(deploySection).toContain("Upload Release Recovery Metadata");
       expect(deploySection).toContain("if: always()");
       expect(deploySection).toContain("name: release-recovery-metadata");
     });
 
-    it("downloads, validates, and merges foundation outputs artifact before the activation gate", () => {
+    it("validates the pinned foundation configuration before deployment", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       const deploySection = content.split("deploy-demo:")[1] || "";
 
-      const downloadStepIdx = deploySection.indexOf("Download, Validate & Merge Foundation Outputs Artifact (Fail Closed)");
-      const gateIdx = deploySection.indexOf("Verify Activation Preconditions & Governance Gates (Fail Closed)");
-      expect(downloadStepIdx).toBeGreaterThan(0);
-      expect(gateIdx).toBeGreaterThan(downloadStepIdx);
-
-      expect(deploySection).toContain("No foundation outputs artifact provided via inputs.foundation_outputs_artifact");
-      expect(deploySection).toContain("Example fixture template");
-      expect(deploySection).toContain("Foundation artifact checksum mismatch");
+      expect(deploySection).toContain("FOUNDATION_PATH: infra/environments/demo/foundation-outputs.json");
+      expect(deploySection).toContain("Foundation configuration must be tracked in the pinned checkout");
+      expect(deploySection).toContain("Foundation configuration is incomplete");
+      expect(deploySection).not.toContain("FOUNDATION_SHA");
+      expect(deploySection).not.toContain("inputs.");
     });
 
     it("finalizes whole-release status only after frontend upload and invalidation complete", () => {
@@ -264,9 +262,10 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(readFileSync(DEPLOY_FRONTEND_SCRIPT, "utf8")).toContain("wait invalidation-completed");
     });
 
-    it("passes all user inputs through step env blocks, never raw expressions in run text", () => {
+    it("has no workflow input references in deploy environment or run blocks", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       const deploySection = content.split("deploy-demo:")[1] || "";
+      expect(deploySection).not.toContain("inputs.");
 
       // Find all run: blocks in deploy section and verify no inputs.* expressions inside
       const runBlocks: string[] = [];
@@ -296,290 +295,121 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(runText).not.toMatch(/format\([^)]*inputs\./);
     });
 
-    it("merges runtime_configuration.approved from trusted foundation artifact evidence", () => {
+    it("does not carry approval or prior-release bookkeeping in the workflow", () => {
+      const content = readFileSync(WORKFLOW_PATH, "utf8");
+      expect(content).not.toContain("approval_evidence");
+      expect(content).not.toContain("foundation_manifest");
+      expect(content).not.toContain("runtime_configuration.approved");
+      expect(content).not.toContain("PREV_MANIFEST");
+      expect(content).not.toContain("previous_release");
+      expect(content).not.toContain("rollback_available");
+    });
+
+    it("uses tracked pinned foundation configuration without an external checksum", () => {
+      const content = readFileSync(WORKFLOW_PATH, "utf8");
+      expect(content).toContain("Foundation configuration must be tracked in the pinned checkout");
+      expect(content).not.toContain("FOUNDATION_SHA");
+      expect(content).not.toContain("foundation_outputs_sha256");
+    });
+
+    it("pins the foundation path in the checked out workflow", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       const deploySection = content.split("deploy-demo:")[1] || "";
-      expect(deploySection).toContain("runtime_configuration.approved");
-      expect(deploySection).toContain("approval_evidence.runtime_configuration.approved");
+      expect(deploySection).toContain("FOUNDATION_PATH: infra/environments/demo/foundation-outputs.json");
+      expect(deploySection).not.toContain("inputs.foundation_outputs_artifact");
     });
 
-    it("restricts the foundation artifact to the tracked repository path", () => {
+    it("rejects a missing fixed foundation configuration", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
-      expect(content).toContain('FOUNDATION_PATH}" != "infra/environments/demo/foundation-outputs.json"');
-      expect(content).toContain("Foundation outputs must be tracked in the reviewed repository commit");
-    });
-
-    it("requires a valid 64-hex SHA-256 for foundation artifact checksum", () => {
-      const content = readFileSync(WORKFLOW_PATH, "utf8");
-      expect(content).toContain("Foundation artifact SHA-256 checksum is required");
-      expect(content).toContain("Foundation artifact SHA-256 must be a valid 64-hex digest");
-    });
-
-    it("executes foundation validation with hostile path input as literal data", () => {
-      const content = readFileSync(WORKFLOW_PATH, "utf8");
-      const runBlock = workflowStepRunBlock(content, "Download, Validate & Merge Foundation Outputs Artifact (Fail Closed)");
-      const tmpDir = mkdtempSync(join(tmpdir(), "foundation-shell-input-"));
-      const marker = join(tmpDir, "injected");
-      try {
-        mkdirSync(join(tmpDir, ".dev", ".release-metadata"), { recursive: true });
-        writeFileSync(join(tmpDir, ".dev", ".release-metadata", "release-manifest.json"), "{}\n");
-        const hostilePath = `$(touch ${marker})`;
-        const result = spawnSync("bash", ["-c", runBlock], {
-          cwd: tmpDir,
-          encoding: "utf8",
-          env: {
-            ...process.env,
-            FOUNDATION_PATH: hostilePath,
-            FOUNDATION_SHA: "",
-            PREV_MANIFEST: "",
-            PREV_CHECKSUM: "",
-            PREV_DIR: "",
-            PREV_ARTIFACT_ID: "",
-            AUTHORIZED_ACCOUNT: "",
-            TARGET_REGION: "us-west-2",
-            GITHUB_SHA: "a".repeat(40),
-          },
-        });
-        expect(result.status).toBe(1);
-        expect(existsSync(marker)).toBe(false);
-        expect(result.stderr).toContain("trusted repository path");
-      } finally {
-        rmSync(tmpDir, { recursive: true, force: true });
-      }
-    });
-
-    it("rejects a missing foundation payload and a missing mandatory checksum", () => {
-      const content = readFileSync(WORKFLOW_PATH, "utf8");
-      const runBlock = workflowStepRunBlock(content, "Download, Validate & Merge Foundation Outputs Artifact (Fail Closed)");
+      const runBlock = workflowStepRunBlock(content, "Validate Fixed Foundation Configuration (Fail Closed)");
       const tmpDir = mkdtempSync(join(tmpdir(), "foundation-required-inputs-"));
       try {
-        mkdirSync(join(tmpDir, ".dev", ".release-metadata"), { recursive: true });
-        writeFileSync(join(tmpDir, ".dev", ".release-metadata", "release-manifest.json"), "{}\n");
         const baseEnv = {
           ...process.env,
           FOUNDATION_PATH: "infra/environments/demo/foundation-outputs.json",
-          FOUNDATION_SHA: "",
-          PREV_MANIFEST: "",
-          PREV_CHECKSUM: "",
-          PREV_DIR: "",
-          PREV_ARTIFACT_ID: "",
-          AUTHORIZED_ACCOUNT: "",
+          AUTHORIZED_ACCOUNT: "968198283143",
           TARGET_REGION: "us-west-2",
-          GITHUB_SHA: "a".repeat(40),
+          TARGET_FRONTEND_BUCKET: "flowcard-frontend-968198283143-us-west-2",
+          TARGET_CLOUDFRONT_DISTRIBUTION_ID: "ETTM257BBLQ3N",
         };
         const missingPayload = spawnSync("bash", ["-c", runBlock], { cwd: tmpDir, encoding: "utf8", env: baseEnv });
         expect(missingPayload.status).toBe(1);
-        expect(missingPayload.stderr).toContain("file does not exist");
-
-        mkdirSync(join(tmpDir, "infra", "environments", "demo"), { recursive: true });
-        writeFileSync(join(tmpDir, "infra", "environments", "demo", "foundation-outputs.json"), "{}\n");
-        const missingChecksum = spawnSync("bash", ["-c", runBlock], { cwd: tmpDir, encoding: "utf8", env: baseEnv });
-        expect(missingChecksum.status).toBe(1);
-        expect(missingChecksum.stderr).toContain("SHA-256 checksum is required");
+        expect(missingPayload.stderr).toContain("Fixed foundation configuration is missing");
       } finally {
         rmSync(tmpDir, { recursive: true, force: true });
       }
     });
 
-    it("accepts ancestor-bound foundation evidence without obsolete environment attestation", () => {
+    it("validates fixed foundation config without approval evidence and rejects mismatches", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
-      const runBlock = workflowStepRunBlock(content, "Download, Validate & Merge Foundation Outputs Artifact (Fail Closed)");
-      const gateBlock = workflowStepRunBlock(content, "Verify Activation Preconditions & Governance Gates (Fail Closed)");
-      const tmpDir = mkdtempSync(join(tmpdir(), "foundation-evidence-"));
-      const manifestPath = join(tmpDir, ".dev", ".release-metadata", "release-manifest.json");
+      const validationBlock = workflowStepRunBlock(content, "Validate Fixed Foundation Configuration (Fail Closed)");
+      const tmpDir = mkdtempSync(join(tmpdir(), "fixed-foundation-validation-"));
       const foundationDir = join(tmpDir, "infra", "environments", "demo");
       const artifact = join(foundationDir, "foundation-outputs.json");
-      const initialManifest = () => JSON.stringify({
-        foundation_manifest: { status: "pending_manual_foundation" },
-        activation_preconditions: { develop_branch_dispatch: false, manual_dispatch_confirmed: false, foundation_manifest_reviewed: false },
-        runtime_configuration: { approved: false },
-      });
+      const outputs = JSON.parse(readFileSync(
+        resolve(WORKTREE_ROOT, "infra/environments/demo/foundation-outputs.json"),
+        "utf8",
+      )) as Record<string, any>;
+
       try {
         mkdirSync(foundationDir, { recursive: true });
-        mkdirSync(join(tmpDir, ".dev", ".release-metadata"), { recursive: true });
-        const foundationPlan = join(foundationDir, "foundation-plan-review.md");
-        writeFileSync(foundationPlan, "offline-reviewed-plan\n");
-        const planHash = spawnSync("sha256sum", [foundationPlan], { encoding: "utf8" }).stdout.split(" ")[0];
-        const initResult = spawnSync("git", ["init", "--quiet"], { cwd: tmpDir, encoding: "utf8" });
-        expect(initResult.status).toBe(0);
+        writeFileSync(artifact, JSON.stringify(outputs));
+        expect(spawnSync("git", ["init", "--quiet"], { cwd: tmpDir }).status).toBe(0);
         expect(spawnSync("git", ["config", "user.email", "offline-test@example.invalid"], { cwd: tmpDir }).status).toBe(0);
         expect(spawnSync("git", ["config", "user.name", "Offline Test"], { cwd: tmpDir }).status).toBe(0);
-        writeFileSync(manifestPath, initialManifest());
-        const addSourceResult = spawnSync("git", ["add", "-f", "infra/environments/demo/foundation-plan-review.md", ".dev/.release-metadata/release-manifest.json"], { cwd: tmpDir, encoding: "utf8" });
-        expect(addSourceResult.status).toBe(0);
-        const sourceCommitResult = spawnSync("git", ["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "review foundation plan"], { cwd: tmpDir, encoding: "utf8" });
-        expect(sourceCommitResult.status, sourceCommitResult.stderr).toBe(0);
-        const sourceCommit = spawnSync("git", ["rev-parse", "HEAD"], { cwd: tmpDir, encoding: "utf8" }).stdout.trim();
+        expect(spawnSync("git", ["add", "infra/environments/demo/foundation-outputs.json"], { cwd: tmpDir }).status).toBe(0);
+        const commit = spawnSync("git", ["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "capture foundation fixture"], { cwd: tmpDir, encoding: "utf8" });
+        expect(commit.status, commit.stderr).toBe(0);
 
-        const reviewedOutputs = {
-          account_id: VALID_ACCOUNT,
-          aws_region: "us-west-2",
-          ecs_cluster_arn: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:cluster/demo`,
-          ecs_cluster_name: "demo",
-          private_subnet_ids: ["subnet-0a00123456789abcd", "subnet-0b00123456789abcd"],
-          migration_task_security_group_id: "sg-0a00123456789abcd",
-          ecr_repository_urls: {
-            "flowcard-node-gateway": `${VALID_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/flowcard-node-gateway`,
-            "flowcard-go-api": `${VALID_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/flowcard-go-api`,
-            "flowcard-go-worker": `${VALID_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/flowcard-go-worker`,
-            "flowcard-migration": `${VALID_ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/flowcard-migration`,
-          },
-          frontend_bucket_name: "flowcard-test-frontend",
-          cloudfront_distribution_id: "EABC123",
-          initial_task_definition_arns: {
-            node_gateway: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-node-gateway:1`,
-            go_api: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-go-api:1`,
-            go_worker: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-go-worker:1`,
-            node_migration: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-node-migration:1`,
-            go_migration: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-go-migration:1`,
-            synthetic_seed: `arn:aws:ecs:us-west-2:${VALID_ACCOUNT}:task-definition/flowcard-demo-synthetic-seed:1`,
-          },
-        };
-        const canonicalContent = spawnSync("jq", ["-cS", "."], { input: JSON.stringify(reviewedOutputs), encoding: "utf8" }).stdout;
-        const reviewedContentHash = spawnSync("sha256sum", [], { input: canonicalContent, encoding: "utf8" }).stdout.split(" ")[0];
-        const artifactValue = {
-          ...reviewedOutputs,
-          approval_evidence: {
-            status: "verified",
-            verified_by: "alewkinr",
-            reviewed_source_commit: sourceCommit,
-            review_reference: "https://github.com/slabarcaf/flowcard-treasury/pull/17",
-            reviewed_at: "2026-11-11T12:00:00Z",
-            foundation_plan_sha256: planHash,
-            reviewed_foundation_content_sha256: reviewedContentHash,
-            runtime_configuration: {
-              approved: true,
-              approved_by: "owner@example.invalid",
-              approval_reference: "decision-42",
-              approved_at: "2026-11-11T12:00:00Z",
-            },
-          },
-        };
-
-        const releaseAHash = "e".repeat(64);
-        const priorManifestPath = join(tmpDir, "prior-release.json");
-        writeFileSync(priorManifestPath, JSON.stringify({
-          status: "backend_verified_frontend_pending",
-          account_id: VALID_ACCOUNT,
-          region: "us-west-2",
-          services: { node_gateway: { revision: 5 }, go_api: { revision: 4 }, go_worker: { revision: 4 } },
-          frontend: { status: "pending", bucket_name: "flowcard-test-frontend", distribution_id: "EABC123", dist_checksum_sha256: releaseAHash },
-          target_release: { commit_sha: "f".repeat(40), frontend_artifact_id: "release-A", frontend_checksum_sha256: releaseAHash },
-        }));
-
-        const runMerge = (priorRelease = false, targetOverrides: Record<string, string> = {}) => {
-          writeFileSync(manifestPath, initialManifest());
-          const artifactHash = spawnSync("sha256sum", [artifact], { encoding: "utf8" }).stdout.split(" ")[0];
-          const deploymentCommitResult = spawnSync("git", ["rev-parse", "HEAD"], { cwd: tmpDir, encoding: "utf8" });
-          return spawnSync("bash", ["-c", runBlock], {
+        const runValidation = (
+          fixture: Record<string, any>,
+          overrides: Record<string, string> = {},
+        ) => {
+          writeFileSync(artifact, JSON.stringify(fixture));
+          return spawnSync("bash", ["-c", validationBlock], {
             cwd: tmpDir,
             encoding: "utf8",
             env: {
               ...process.env,
               FOUNDATION_PATH: "infra/environments/demo/foundation-outputs.json",
-              FOUNDATION_SHA: artifactHash,
-              PREV_MANIFEST: priorRelease ? priorManifestPath : "",
-              PREV_CHECKSUM: priorRelease ? releaseAHash : "",
-              PREV_DIR: priorRelease ? "prior-frontend-build" : "",
-              PREV_ARTIFACT_ID: priorRelease ? "release-A" : "",
-              AUTHORIZED_ACCOUNT: VALID_ACCOUNT,
-              TARGET_REGION: "us-west-2",
-              TARGET_FRONTEND_BUCKET: "flowcard-test-frontend",
-              TARGET_CLOUDFRONT_DISTRIBUTION_ID: "EABC123",
-              GITHUB_SHA: deploymentCommitResult.stdout.trim(),
-              ...targetOverrides,
+              AUTHORIZED_ACCOUNT: String(outputs.account_id),
+              TARGET_REGION: String(outputs.aws_region),
+              TARGET_FRONTEND_BUCKET: String(outputs.frontend_bucket_name),
+              TARGET_CLOUDFRONT_DISTRIBUTION_ID: String(outputs.cloudfront_distribution_id),
+              ...overrides,
             },
           });
         };
 
-        const commitArtifact = (message: string) => {
-          writeFileSync(artifact, JSON.stringify(artifactValue));
-          spawnSync("git", ["add", "infra/environments/demo/foundation-outputs.json"], { cwd: tmpDir });
-          const commitResult = spawnSync("git", ["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", message], { cwd: tmpDir, encoding: "utf8" });
-          expect(commitResult.status).toBe(0);
-        };
+        const valid = runValidation(outputs);
+        expect(valid.status, valid.stderr).toBe(0);
+        expect(outputs).not.toHaveProperty("approval_evidence");
 
-        commitArtifact("add foundation output and runtime approval");
-        const result = runMerge();
-        expect(result.status).toBe(0);
-        let merged = JSON.parse(readFileSync(manifestPath, "utf8"));
-        expect(merged.foundation_manifest.status).toBe("verified");
-        expect(merged.activation_preconditions.foundation_manifest_reviewed).toBe(true);
-        expect(merged.activation_preconditions.develop_branch_dispatch).toBe(true);
-        expect(merged.activation_preconditions.manual_dispatch_confirmed).toBe(true);
-        expect(merged).not.toHaveProperty("activation_preconditions.github_environment_configured");
-        expect(merged.foundation_manifest).not.toHaveProperty("github_environment_verification");
-        expect(merged.runtime_configuration.approved).toBe(true);
-
-        const mismatchedTarget = runMerge(false, { TARGET_FRONTEND_BUCKET: "other-test-frontend" });
+        const mismatchedTarget = runValidation(outputs, {
+          TARGET_FRONTEND_BUCKET: "different-frontend-bucket",
+        });
         expect(mismatchedTarget.status).toBe(1);
         expect(mismatchedTarget.stderr).toContain("conflicts with repository deployment targets");
 
-        const placeholderArtifact = {
-          ...artifactValue,
+        const placeholder = runValidation({
+          ...outputs,
           private_subnet_ids: ["subnet-REPLACE_WITH_PRIVATE_SUBNET_ID"],
-        };
-        writeFileSync(artifact, JSON.stringify(placeholderArtifact));
-        const placeholderResult = runMerge();
-        expect(placeholderResult.status).toBe(1);
-        expect(placeholderResult.stderr).toContain("contains placeholders");
+        });
+        expect(placeholder.status).toBe(1);
+        expect(placeholder.stderr).toContain("contains placeholders");
 
-        const missingResourceField = {
-          ...artifactValue,
+        const missingField = runValidation({
+          ...outputs,
           migration_task_security_group_id: undefined,
-        };
-        writeFileSync(artifact, JSON.stringify(missingResourceField));
-        const missingFieldResult = runMerge();
-        expect(missingFieldResult.status).toBe(1);
-        expect(missingFieldResult.stderr).toContain("configuration is incomplete");
-
-        writeFileSync(artifact, JSON.stringify(artifactValue));
-        const restoredValidArtifact = runMerge();
-        expect(restoredValidArtifact.status).toBe(0);
-        merged = JSON.parse(readFileSync(manifestPath, "utf8"));
-
-        const gateResult = spawnSync("bash", ["-c", gateBlock], { cwd: tmpDir, encoding: "utf8" });
-        expect(gateResult.status).toBe(0);
-
-        // Backend success without frontend completion must not make A a rollback target.
-        const pendingMerge = runMerge(true);
-        expect(pendingMerge.status).toBe(0);
-        merged = JSON.parse(readFileSync(manifestPath, "utf8"));
-        expect(merged.previous_release.rollback_available).toBe(false);
-        expect(merged.previous_release.provenance_manifest_status).toBe("backend_verified_frontend_pending");
-
-        const finalizeResult = spawnSync("bash", [FINALIZE_RELEASE_SCRIPT,
-          "--manifest", priorManifestPath,
-          "--account-id", VALID_ACCOUNT,
-          "--region", "us-west-2",
-          "--commit-sha", "f".repeat(40),
-          "--frontend-checksum", releaseAHash,
-        ], { cwd: tmpDir, encoding: "utf8" });
-        expect(finalizeResult.status).toBe(0);
-        const finalizedPrior = JSON.parse(readFileSync(priorManifestPath, "utf8"));
-        expect(finalizedPrior.status).toBe("deployed_and_verified");
-        expect(finalizedPrior.frontend.status).toBe("published_and_invalidation_completed");
-
-        const finalizedMerge = runMerge(true);
-        expect(finalizedMerge.status).toBe(0);
-        merged = JSON.parse(readFileSync(manifestPath, "utf8"));
-        expect(merged.previous_release.rollback_available).toBe(true);
-        expect(merged.previous_release.frontend_checksum_sha256).toBe(releaseAHash);
-
-        writeFileSync(manifestPath, JSON.stringify({
-          foundation_manifest: { status: "verified" },
-          activation_preconditions: { foundation_manifest_reviewed: true },
-          runtime_configuration: { approved: false },
-        }));
-        const blockedGate = spawnSync("bash", ["-c", gateBlock], { cwd: tmpDir, encoding: "utf8" });
-        expect(blockedGate.status).toBe(1);
-        expect(blockedGate.stderr).toContain("Runtime configuration is not approved");
+        });
+        expect(missingField.status).toBe(1);
+        expect(missingField.stderr).toContain("configuration is incomplete");
       } finally {
         rmSync(tmpDir, { recursive: true, force: true });
       }
     });
 
-    it("passes hostile workflow inputs as literal deploy-demo arguments", () => {
+    it("passes the fixed foundation path as literal deploy-demo arguments", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       const runBlock = workflowStepRunBlock(content, "Execute Backend Deployment (deploy-demo.sh with OIDC)");
       const tmpDir = mkdtempSync(join(tmpdir(), "deploy-input-arguments-"));
@@ -597,11 +427,6 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
           env: {
             ...process.env,
             CAPTURE_ARGS: capture,
-            FOUNDATION_PATH: hostile,
-            PREV_MANIFEST: hostile,
-            PREV_CHECKSUM: hostile,
-            PREV_DIR: hostile,
-            PREV_ARTIFACT_ID: hostile,
             AWS_ACCOUNT_ID: VALID_ACCOUNT,
             AWS_REGION: "us-west-2",
             FRONTEND_BUCKET: "demo-frontend",
@@ -618,39 +443,32 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
         expect(result.status).toBe(0);
         expect(existsSync(marker)).toBe(false);
         const args = readFileSync(capture, "utf8");
-        expect(args).toContain(`--prior-frontend-dir\n${hostile}\n`);
-        expect(args).toContain(`--previous-manifest\n${hostile}\n`);
-        expect(args).toContain(`--prior-frontend-checksum\n${hostile}\n`);
-        expect(args).toContain(`--prior-frontend-artifact-id\n${hostile}\n`);
+        expect(args).toContain("--infra-outputs-file\ninfra/environments/demo/foundation-outputs.json\n");
+        expect(args).not.toContain(hostile);
+        expect(args).not.toContain("--previous-manifest");
+        expect(args).not.toContain("--prior-frontend-");
       } finally {
         rmSync(tmpDir, { recursive: true, force: true });
       }
     });
 
-    it("reads prior release provenance from deployed state (services/frontend), not previous_release of prior manifest", () => {
+    it("does not carry prior-release or coupled-rollback state in the normal workflow", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
-      const deploySection = content.split("deploy-demo:")[1] || "";
-      const mergeBlock = deploySection.split("Merging previous release manifest provenance")[1]?.split("elif")[0] || "";
-      // Must read from services.node_gateway.revision, not previous_release.node_revision first
-      expect(mergeBlock).toContain("$pm[0].services.node_gateway.revision");
-      expect(mergeBlock).toContain("$pm[0].services.go_api.revision");
-      expect(mergeBlock).toContain("$pm[0].services.go_worker.revision");
-      // Previous release's own target is .frontend; never its previous_release target.
-      expect(mergeBlock).toContain("$pm[0].frontend.dist_checksum_sha256");
-      expect(mergeBlock).toContain('$pm[0].status == "deployed_and_verified"');
-      expect(mergeBlock).toContain("target_release.frontend_artifact_id");
-      expect(deploySection).toContain("PREV_MANIFEST_CHECKSUM");
-      // Must NOT prefer previous_release for revisions
-      expect(mergeBlock).not.toContain("$pm[0].previous_release.node_revision //");
+      expect(content).not.toContain("PREV_MANIFEST");
+      expect(content).not.toContain("previous_release");
+      expect(content).not.toContain("rollback_available");
+      expect(content).not.toContain("rollback-release.sh");
+      expect(readFileSync(DEPLOY_SCRIPT, "utf8")).toContain("backend_verified_frontend_pending");
+      expect(content).toContain("Upload Release Recovery Metadata");
     });
 
-    it("uses jq --arg for shell variable interpolation instead of string embedding", () => {
+    it("uses jq --arg for target validation instead of string embedding", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       const deploySection = content.split("deploy-demo:")[1] || "";
-      // The foundation path merge should use --arg fpath
-      expect(deploySection).toContain("--arg fpath");
-      expect(deploySection).toContain("--arg chk");
-      expect(deploySection).toContain("--arg dir");
+      expect(deploySection).toContain('--arg account "${AUTHORIZED_ACCOUNT}"');
+      expect(deploySection).toContain('--arg region "${TARGET_REGION}"');
+      expect(deploySection).toContain('--arg frontend_bucket "${TARGET_FRONTEND_BUCKET}"');
+      expect(deploySection).toContain('--arg distribution_id "${TARGET_CLOUDFRONT_DISTRIBUTION_ID}"');
     });
   });
 
