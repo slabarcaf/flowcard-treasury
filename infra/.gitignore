@@ -1,0 +1,7 @@
+# OpenTofu / Terraform local directories and state files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tflock
+backend-*.hcl

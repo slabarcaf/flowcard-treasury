@@ -13,10 +13,19 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
+RUN apk add --no-cache ca-certificates && \
+    wget -qO /etc/ssl/certs/rds-global-bundle.pem \
+      https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
+    test -s /etc/ssl/certs/rds-global-bundle.pem
+
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
-COPY --from=build /app/dist/server ./dist/server
-COPY --from=build /app/dist/shared ./dist/shared
+COPY --from=build /app/.dev/server/server ./dist/server
+COPY --from=build /app/.dev/server/shared ./dist/shared
+COPY server/src/db/migrations ./server/src/db/migrations
+COPY server/src/db/seeds ./server/src/db/seeds
+
+USER node
 
 EXPOSE 3000
 

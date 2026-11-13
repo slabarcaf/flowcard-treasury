@@ -5,7 +5,7 @@
     "moduleResolution": "NodeNext",
     "resolveJsonModule": true,
     "rootDir": "..",
-    "outDir": "../dist",
+    "outDir": "../.dev/server",
     "strict": true,
     "skipLibCheck": true,
     "types": ["node"]

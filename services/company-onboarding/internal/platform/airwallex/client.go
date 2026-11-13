@@ -62,12 +62,13 @@ type PlatformClient interface {
 
 // ClientConfig holds explicit injected configuration parameters for the Airwallex client.
 type ClientConfig struct {
-	BaseURL    string
-	FilesURL   string
-	ClientID   string
-	APIKey     string
-	APIVersion string // e.g. "2026-08-21"
-	HTTPClient *http.Client
+	BaseURL             string
+	FilesURL            string
+	ClientID            string
+	APIKey              string
+	APIVersion          string // e.g. "2026-08-21"
+	HTTPClient          *http.Client
+	PlatformEnvironment string // "sandbox" (default/demo) or "production"; separated from application runtime execution mode
 }
 
 // Client implements PlatformClient against the Airwallex native REST APIs.
@@ -99,6 +100,18 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 		return nil, fmt.Errorf("%w: strict HTTPS required for remote Airwallex base endpoint", ErrUnconfigured)
 	}
 
+	platformEnv := strings.ToLower(strings.TrimSpace(cfg.PlatformEnvironment))
+	if platformEnv == "production" {
+		if !isLocal && parsedBase.Hostname() != "api.airwallex.com" {
+			return nil, fmt.Errorf("%w: production Airwallex endpoint must target api.airwallex.com, got %q", ErrUnconfigured, parsedBase.Hostname())
+		}
+	} else {
+		// Default sandbox platform boundary (used for demo and development runtimes)
+		if !isLocal && parsedBase.Hostname() != "api.sandbox.airwallex.com" {
+			return nil, fmt.Errorf("%w: demo runtime Airwallex endpoint must target sandbox (api.sandbox.airwallex.com), got %q", ErrUnconfigured, parsedBase.Hostname())
+		}
+	}
+
 	filesURL := strings.TrimSpace(cfg.FilesURL)
 	if filesURL != "" {
 		parsedFiles, err := url.Parse(filesURL)
@@ -108,6 +121,15 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 		isFilesLocal := parsedFiles.Hostname() == "127.0.0.1" || parsedFiles.Hostname() == "localhost"
 		if parsedFiles.Scheme != "https" && !isFilesLocal {
 			return nil, fmt.Errorf("%w: strict HTTPS required for remote Airwallex files endpoint", ErrUnconfigured)
+		}
+		if platformEnv == "production" {
+			if !isFilesLocal && parsedFiles.Hostname() != "api.airwallex.com" {
+				return nil, fmt.Errorf("%w: production Airwallex files endpoint must target api.airwallex.com, got %q", ErrUnconfigured, parsedFiles.Hostname())
+			}
+		} else {
+			if !isFilesLocal && parsedFiles.Hostname() != "api.sandbox.airwallex.com" {
+				return nil, fmt.Errorf("%w: demo runtime Airwallex files endpoint must target sandbox (api.sandbox.airwallex.com), got %q", ErrUnconfigured, parsedFiles.Hostname())
+			}
 		}
 	} else {
 		filesURL = baseURL

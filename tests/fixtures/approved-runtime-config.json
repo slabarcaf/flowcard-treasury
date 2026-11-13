@@ -1,0 +1,6 @@
+{
+  "onboarding_service_url": "https://onboarding-api.flowcard.internal:8080/",
+  "onboarding_service_secret": "fixture-only-shared-service-auth-secret-32-bytes-minimum",
+  "s3_bucket_documents": "fixture-documents-bucket",
+  "s3_kms_key_id": "arn:aws:kms:us-west-2:000000000000:key/fixture-only"
+}

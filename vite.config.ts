@@ -4,6 +4,7 @@ import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: { outDir: '.dev/dist' },
   server: {
     allowedHosts: ['unsoulful-observantly-ahmed.ngrok-free.dev'],
     proxy: {

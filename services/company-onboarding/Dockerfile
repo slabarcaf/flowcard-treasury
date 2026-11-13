@@ -19,6 +19,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /bin/api ./c
 FROM alpine:3.21 AS runtime
 
 RUN apk add --no-cache ca-certificates && \
+    wget -qO /etc/ssl/certs/rds-global-bundle.pem \
+      https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
+    test -s /etc/ssl/certs/rds-global-bundle.pem && \
     addgroup -S -g 10001 app && \
     adduser -S -u 10001 -G app -s /sbin/nologin app
 
