@@ -5,3 +5,11 @@
 *.tfplan
 *.tflock
 backend-*.hcl
+
+# Track container definitions even when a global rule ignores secrets directories.
+!modules/secrets/
+modules/secrets/*
+!modules/secrets/main.tf
+!modules/secrets/outputs.tf
+!modules/secrets/variables.tf
+!modules/secrets/versions.tf
