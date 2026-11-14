@@ -1,7 +1,5 @@
 # Onboarding frontend integration
 
-For the consolidated handoff, see [Ramil onboarding/dashboard handoff](ramil-onboarding-dashboard-handoff.md).
-
 Based on team `develop` commit `439d84d`; delivered on feature branch `feature/onboarding-api-fields`.
 
 ## Intake form rules
