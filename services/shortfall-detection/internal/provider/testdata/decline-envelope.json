@@ -1,0 +1,6 @@
+{
+  "id": "fixture-webhook-1",
+  "name": "issuing.card_transaction.declined",
+  "version": "fixture-only-unverified",
+  "data": {}
+}

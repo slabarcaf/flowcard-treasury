@@ -1,0 +1,29 @@
+# Standalone opt-in project. Does not create, stop, or change the existing stack.
+services:
+  shortfall-api:
+    profiles: [shortfall]
+    build:
+      context: services/shortfall-detection
+    env_file:
+      - "${SHORTFALL_ENV_FILE:-.env}"
+    environment:
+      DATABASE_URL: "${SHORTFALL_DATABASE_URL:?set a dedicated restricted shortfall DB URL}"
+      SHORTFALL_HTTP_ADDR: "0.0.0.0:8082"
+    ports:
+      - "127.0.0.1:8082:8082"
+    stop_grace_period: 10s
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:8082/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+  shortfall-worker:
+    profiles: [shortfall]
+    build:
+      context: services/shortfall-detection
+    command: [/bin/worker]
+    env_file:
+      - "${SHORTFALL_ENV_FILE:-.env}"
+    environment:
+      DATABASE_URL: "${SHORTFALL_DATABASE_URL:?set a dedicated restricted shortfall DB URL}"
+    stop_grace_period: 10s
