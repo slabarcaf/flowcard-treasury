@@ -37,7 +37,7 @@ const SCREEN_TITLE: Record<View['screen'], string> = {
 export function BackOffice({
   adapter,
   onExit,
-  exitLabel = '← Back to Kit 5 dashboard',
+  exitLabel = '← Back to Dashboard',
 }: {
   adapter?: DataAdapter;
   onExit?: () => void;
