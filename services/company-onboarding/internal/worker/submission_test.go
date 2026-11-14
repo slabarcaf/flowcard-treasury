@@ -2121,11 +2121,14 @@ func TestWorker_DistinctApplications_SameCompany_CreationCoordinated(t *testing.
 	store := storage.NewMemoryStore()
 	comp, app1, sub1 := createTestCompanyAndApp(t, repo, store)
 
-	// In the real system, only one open application exists per company/platform at a time.
-	// Mark app1 REJECTED in DB so app2 can be created as a subsequent application for the same company.
-	_, err := pool.Exec(context.Background(), `UPDATE onboarding.applications SET status = 'REJECTED' WHERE id = $1`, app1.ID())
-	if err != nil {
-		t.Fatalf("failed to update app1 to terminal status: %v", err)
+	// app1 is terminalized after its initial submission is queued, releasing the
+	// partial unique index so app2 can be created. This domain transition marks
+	// sub1 FAILED but leaves its outbox row for the repository lease exercise.
+	if err := app1.RecordSubmissionFailed(sub1.ID, true); err != nil {
+		t.Fatalf("failed to reject app1 through the domain transition: %v", err)
+	}
+	if err := repo.UpdateApplication(context.Background(), app1, app1.Revision()-1); err != nil {
+		t.Fatalf("failed to persist rejected app1: %v", err)
 	}
 
 	// Create a second distinct application for the exact SAME company
@@ -2185,7 +2188,8 @@ func TestWorker_DistinctApplications_SameCompany_CreationCoordinated(t *testing.
 		t.Fatalf("InitiateSubmission 2 failed: %v", err)
 	}
 
-	// Worker 1 claims Job 1 for App 1 and sets coordinator to DISPATCHING
+	// Manually claim app1's outbox lease and repository coordinator. This is not
+	// a full Job1 worker dispatch with a pending submission.
 	msg1, err := repo.ClaimOutboxMessage(context.Background(), 10*time.Second)
 	if err != nil || msg1 == nil {
 		t.Fatalf("ClaimOutboxMessage 1 failed: %v", err)
@@ -2207,7 +2211,7 @@ func TestWorker_DistinctApplications_SameCompany_CreationCoordinated(t *testing.
 		t.Fatalf("expected coordinator 1 DISPATCHING, got %s", coord1.State)
 	}
 
-	// Now Job 2 for App 2 runs while Job 1 is dispatching
+	// Process app2's worker while app1's coordinator remains DISPATCHING.
 	var createCallsApp2 atomic.Int32
 	mockPlatform := &mockPlatformClient{
 		createAccountFunc: func(ctx context.Context, req airwallex.AccountCreateRequest) (*airwallex.AccountCreateResponse, error) {
