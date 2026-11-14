@@ -1,5 +1,4 @@
 /** Every customer, with tier, limit, outstanding and worst delinquency stage. */
-import { OnboardingCustomers } from '../components/OnboardingCustomers.js';
 import type { Bridge } from '../../types.js';
 import { applyDelinquency } from '../../policy/delinquency.js';
 import { computeTier, customerLimit, outstandingBalance } from '../../policy/tiers.js';
@@ -34,8 +33,6 @@ export function CustomersScreen({ office }: { office: BackOffice }) {
   if (data === null) return <Empty>Loading…</Empty>;
 
   return (
-    <div style={{ display: 'grid', gap: space['2xl'] }}>
-    <OnboardingCustomers />
     <Card padded={false}>
       <div style={{ padding: `${space['2xl']} ${space['2xl']} 0` }}>
         <CardHeader title="Demo portfolio" meta={`${data.customers.length} demo customers`} />
@@ -91,6 +88,5 @@ export function CustomersScreen({ office }: { office: BackOffice }) {
         </tbody>
       </Table>
     </Card>
-    </div>
   );
 }

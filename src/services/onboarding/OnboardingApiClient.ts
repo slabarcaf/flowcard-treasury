@@ -80,12 +80,11 @@ export class OnboardingApiClient {
         (page.next_cursor !== undefined && typeof page.next_cursor !== 'string')) throw new OnboardingApiError(0, 'INVALID_RESPONSE');
     return page;
   }
-  async listApplications(companyId: string, cursor?: string): Promise<ApplicationPage> {
-    const query = new URLSearchParams({ company_id: companyId, limit: '100', ...(cursor ? { cursor } : {}) });
-    const page = await this.request<ApplicationPage>(`/api/onboarding-applications?${query}`);
-    if (!page || !Array.isArray(page.applications) || page.applications.some(item => !item || item.company_id !== companyId || typeof item.status !== 'string') ||
-        (page.next_cursor !== undefined && typeof page.next_cursor !== 'string')) throw new OnboardingApiError(0, 'INVALID_RESPONSE');
-    return page;
+  async listApplications(companyId?: string, cursor?: string): Promise<ApplicationPage> {
+    const query = new URLSearchParams({ limit: '25' });
+    if (companyId !== undefined) query.set('company_id', companyId);
+    if (cursor !== undefined) query.set('cursor', cursor);
+    return this.request<ApplicationPage>(`/api/onboarding-applications?${query}`);
   }
   async createCompany(input: CreateCompanyRequest): Promise<CompanyRecord> {
     return this.record(await this.request<CompanyRecord>('/api/companies', 'POST', input));

@@ -17,9 +17,12 @@ import { BridgeDetailScreen } from './screens/BridgeDetailScreen.js';
 import { CustomersScreen } from './screens/CustomersScreen.js';
 import { RulesScreen } from './screens/RulesScreen.js';
 import { AdminScreen } from './screens/AdminScreen.js';
+import { ApplicationsScreen } from './screens/ApplicationsScreen.js';
+import { ApplicationDetailScreen } from './screens/ApplicationDetailScreen.js';
 
 const NAV: Array<{ label: string; view: View }> = [
   { label: 'Overview', view: { screen: 'overview' } },
+  { label: 'Applications', view: { screen: 'applications', listState: { previousCursors: [] } } },
   { label: 'Customers', view: { screen: 'customers' } },
   { label: 'Rules', view: { screen: 'rules' } },
   { label: 'Admin', view: { screen: 'admin' } },
@@ -27,6 +30,8 @@ const NAV: Array<{ label: string; view: View }> = [
 
 const SCREEN_TITLE: Record<View['screen'], string> = {
   overview: 'Bridge Capital',
+  applications: 'Applications',
+  application: 'Application',
   customers: 'Customers',
   rules: 'Rules and thresholds',
   admin: 'Admin — demo controls',
@@ -77,7 +82,8 @@ export function BackOffice({
 
         <nav style={{ padding: `0 ${space.md}`, display: 'grid', gap: '2px', alignContent: 'start', flex: 1 }}>
           {NAV.map((item) => {
-            const active = item.view.screen === view.screen;
+            const active = item.view.screen === view.screen ||
+              (item.view.screen === 'applications' && view.screen === 'application');
             return (
               <button
                 key={item.label}
@@ -151,6 +157,14 @@ export function BackOffice({
 
         <main style={{ flex: 1, minWidth: 0, padding: `${space.lg} ${space['3xl']} ${space['4xl']}`, overflowY: 'auto' }}>
           {view.screen === 'overview' && <OverviewScreen office={office} />}
+          {view.screen === 'applications' && <ApplicationsScreen listState={view.listState} go={go} />}
+          {view.screen === 'application' && (
+            <ApplicationDetailScreen
+              applicationId={view.applicationId}
+              listState={view.listState}
+              go={go}
+            />
+          )}
           {view.screen === 'customers' && <CustomersScreen office={office} />}
           {view.screen === 'rules' && <RulesScreen office={office} />}
           {view.screen === 'admin' && <AdminScreen office={office} />}
