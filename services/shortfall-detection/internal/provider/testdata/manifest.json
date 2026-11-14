@@ -1,0 +1,40 @@
+{
+  "provenance": "synthetic fixture, never recorded provider evidence",
+  "live_parser_supported": false,
+  "candidate_issuing_api_version": "2026-08-21",
+  "verified_subscription_version": null,
+  "envelope_file": "decline-envelope.json",
+  "event_response_file": "authorization-event.json",
+  "balance_response_file": "usd-cash-balance.json",
+  "resolver_test_double_input": {
+    "webhook_id": "fixture-webhook-1",
+    "account_id": "fixture-connected-account",
+    "card_id": "00000000-0000-4000-8000-000000000001",
+    "card_transaction_id": "00000000-0000-4000-8000-000000000002",
+    "version": "fixture-only-unverified",
+    "provenance": "test harness supplies trusted references, not webhook JSON paths"
+  },
+  "contract_evidence_test_double": {
+    "funding_model": "USD_WALLET",
+    "amount_convention": "positive_currency_units",
+    "provenance": "synthetic configuration for the fixture mapped card and fixture-only version, not recorded provider evidence"
+  },
+  "list_response_recipe": {
+    "first_page": {
+      "items": [],
+      "page_after": "fixture-page-2",
+      "page_before": null
+    },
+    "second_page_items_files": ["authorization-event.json"],
+    "second_page_after": null,
+    "request_cursor_parameter": "page"
+  },
+  "expected": {
+    "canonical_event_id": "00000000-0000-4000-8000-000000000003",
+    "attempted_amount_cents": 900000,
+    "available_balance_cents": 200000,
+    "shortfall_cents": 700000,
+    "outcome": "SHORTFALL_DETECTED",
+    "duplicate_balance_recalculations": 0
+  }
+}

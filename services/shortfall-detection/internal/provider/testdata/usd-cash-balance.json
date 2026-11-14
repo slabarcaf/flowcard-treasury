@@ -1,0 +1,10 @@
+[
+  {
+    "account_type": "cash",
+    "currency": "USD",
+    "available_amount": 2000.00,
+    "pending_amount": 100.00,
+    "reserved_amount": 500.00,
+    "total_amount": 2600.00
+  }
+]
