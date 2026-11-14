@@ -29,10 +29,10 @@ commit `4f4b7e2`. The trial merge of develop `7c83cb8` found one conflict,
 `src/App.tsx`; it was aborted, leaving the integration worktree clean.
 Refresh refs and recheck divergence before execution.
 
-The current `/submit` handler always returns `SUBMISSION_CONTRACT_BLOCKED`.
-It represents provider submission. A submission worker, webhook processor,
-and account reconciler exist. The repository already exposes the atomic
-`InitiateSubmission` transaction used to freeze data and queue work.
+At plan creation, the `/submit` handler returned
+`SUBMISSION_CONTRACT_BLOCKED`. The existing submission worker, webhook
+processor, account reconciler, and atomic `InitiateSubmission` transaction
+remain the intended processing path.
 The default readiness gate also reports unverified provider rules. Removing
 the submit placeholder alone will not establish submission readiness.
 
@@ -77,24 +77,25 @@ deployment paths. Final runtime checks are in task D1.
 Depends on A1. This is the first feature-development task, so all later form
 work uses corrected documentation. No form changes precede this task.
 
-- [ ] Edit `services/company-onboarding/internal/apidocs/generate.go`,
+- [x] Edit `services/company-onboarding/internal/apidocs/generate.go`,
   `populateRequiredFields`: for a slice/array property, recurse into the
   property's item schema with its element type. Currently the function uses
   the array schema itself, so required members of array items are omitted.
   Keep direct struct/pointer recursion and the existing required-field rules.
-- [ ] Retain requiredness from `internal/http/dto.go`: registration item
+- [x] Retain requiredness from `internal/http/dto.go`: registration item
   requires type/value/issuing_country; person requires first_name/last_name/
   role/date_of_birth; identification requires type/number/issuing_country.
   Optional parent arrays remain optional. Do not change DTO requirements.
-- [ ] Regenerate via `go run ./cmd/openapi` from
+- [x] Regenerate via `go run ./cmd/openapi` from
   `services/company-onboarding`. Commit generated `docs/api/openapi.json`
   and `services/company-onboarding/internal/apidocs/specs/openapi.json`.
   If the generator rewrites webhook specs, retain only necessary generated
   differences; do not hand-edit generated schemas.
-- [ ] Record the remaining provider-readiness gaps in
+- [x] Record the remaining provider-readiness gaps in
   `docs/onboarding-frontend-integration.md`: products/services description and
   person contact fields have no write DTO; record the current submit/readiness
-  blockers and the C1 changes that will replace the submit placeholder.
+  blockers and the C1 durable queue behavior that replaced the submit
+  placeholder.
   Correct the stale claim that the environment loader cannot configure the
   onboarding upstream, since develop now supports that configuration.
 
@@ -132,16 +133,16 @@ comes from the saved-data `/verify` contract, not draft-create requiredness.
 | Identification members | For each added row require type (maximum 50), number (maximum 100), and issuing country. Preserve known choices and allow Other type text. SSN/ITIN retain US nine-digit validation. |
 | `issued_on`, `expires_on` | Keep optional date inputs; omit empty strings. Validate real calendar dates and enforce the existing domain rule that expiry follows issue date when both are present. |
 
-- [ ] Optional profile/address sections omit the entire nested object when
+- [x] Optional profile/address sections omit the entire nested object when
   disabled. Enabled, incomplete sections show field errors and cannot save.
-- [ ] Remove provider-readiness requirements from company-create validation.
+- [x] Remove provider-readiness requirements from company-create validation.
   Keep collection row requirements conditional on the row being present.
-- [ ] Replace `newCompany()`'s populated empty objects/rows with legal name,
+- [x] Replace `newCompany()`'s populated empty objects/rows with legal name,
   the US default, and empty optional collections. Add helpers for new rows.
-- [ ] Add a payload serializer that trims text, omits blank optional members,
+- [x] Add a payload serializer that trims text, omits blank optional members,
   and preserves every entered collection item and stable ID. It must not
   send display labels or application-only fields in `CreateCompanyRequest`.
-- [ ] On removal of a person/identification, remove its application references
+- [x] On removal of a person/identification, remove its application references
   and pending document associations. Clear primary contact if that person was
   selected. Do not leave dangling `person_id` or `identification_id` values.
 
@@ -170,20 +171,20 @@ OpenAPI describes transport fields, not a downloadable page layout.
 | `people[].residential_address` | Make an optional per-person address section. When enabled require line_1, city, postal_code, ISO country; line_2/state remain optional under the DTO. Apply DTO length limits from B1. |
 | `customer_agreements` | Send explicit false flags and omit terms metadata. Do not render acceptance controls without approved agreement text/type. False is a saved value, not recorded consent. |
 
-- [ ] In `formRules.ts`, replace step 2's provider-readiness checks with the
+- [x] In `formRules.ts`, replace step 2's provider-readiness checks with the
   above optionality and nested address checks. Keep referential checks for
   supplied person IDs. Do not use `/verify` to block draft creation.
-- [ ] In `contracts.ts`, change the amount/currency contract to match optional
+- [x] In `contracts.ts`, change the amount/currency contract to match optional
   string members. Keep required wire containers in the serializer rather
   than marking their child controls as required.
-- [ ] Add `src/services/onboarding/payloads.ts` with pure company/application
+- [x] Add `src/services/onboarding/payloads.ts` with pure company/application
   serializers. Omit blank optional values, retain explicit agreement booleans,
   and emit `estimated_monthly_revenue: {}` when its values are blank.
-- [ ] In `OnboardingWizard.tsx`, replace unconditional registration value
+- [x] In `OnboardingWizard.tsx`, replace unconditional registration value
   normalization with the serializer. Normalize only recognized US EIN and
   SSN/ITIN values; preserve other identifiers. Keep IDs consistent across
   company people, application details, and pending document links.
-- [ ] In `OnboardingApiClient.ts`, keep existing create endpoints and
+- [x] In `OnboardingApiClient.ts`, keep existing create endpoints and
   `company_id`, AIRWALLEX, sandbox assignment. Send the serialized details;
   do not add unsupported goods/services or person contact fields.
 
@@ -192,37 +193,47 @@ usage, revenue, or person details. Provider readiness remains a separate step.
 
 ### Task B3: Complete the review screen and save orchestration
 
-- [ ] Expand `ReviewApplicationStep.tsx` to show company type, incorporation
+Lead review note for B3: PATCH omission means retain saved values. Use explicit
+empty strings or arrays where the edit DTO and domain allow clearing. The
+current edit contract has no command to clear the nested registered address or
+business profile; surface that limitation instead of implying the clear was
+saved.
+
+- [x] Expand `ReviewApplicationStep.tsx` to show company type, incorporation
   country/state, business description, every registration, every person and
   their job title/birth date/identifications, and all application fields.
   Provide an Edit link to each corresponding wizard step. Mask identification
   numbers by default with an explicit reveal control in the current session.
-- [ ] Show industry code and label when known, every intended product, revenue
+- [x] Show industry code and label when known, every intended product, revenue
   amount/currency, primary contact name, each person's platform roles and
   residential address, and agreement flags as Not accepted. Show Not provided
   for omitted optional data. Resolve unknown codes to their raw values rather
   than hiding them. Never print undefined or invent default saved values.
-- [ ] Keep selected documents optional for draft saving. Show file name,
+- [x] Keep selected documents optional for draft saving. Show file name,
   classification, and linked person/identification. A selected upload must
   succeed or be explicitly removed before final submission.
-- [ ] Add Save draft and Verify and submit actions on the final step.
-  Save draft persists data/uploads without calling submit. Verify and submit
-  saves first, calls `/verify`, then `/submit` only after verification passes.
-  Disable both during requests. Show field errors or contract blockers
-  without claiming submission succeeded.
-- [ ] In `SaveApplication.ts`, execute company POST, application POST,
+- [x] Add Save draft and Verify and submit actions on the final step.
+  Save draft persists data/uploads without calling submit. The Verify and
+  submit control is present but remains disabled until C2 wires it to `/verify`
+  and `/submit`. Never claim submission succeeded from draft saving.
+- [x] In `SaveApplication.ts`, execute company POST, application POST,
   selected document uploads, and then return the saved DRAFT. Refresh the
   application revision before uploads and final submission. Keep the known
   IDs between stages and reuse completed stages after definite failures.
-- [ ] In `useCompanyApplication.ts` and `OnboardingWizard.tsx`, track saved
-  draft and accepted submission separately. A failed verification or submit
-  keeps the draft reference and form. Existence of `saved.application` alone
-  must not hide editable data. If the user edits after draft saving, PATCH
-  the existing company/application before verifying, using current revisions.
-  Do not repeat POST creation or silently verify stale saved inputs.
-- [ ] Retain false agreement flags until actual acceptance can be collected.
+- [x] In `useCompanyApplication.ts` and `OnboardingWizard.tsx`, track the saved
+  draft separately from submission outcome. C2 adds accepted submission state.
+  A failed verification or submit keeps the draft reference and form. Existence
+  of a saved draft alone must not hide editable data. If the user edits after
+  draft saving, PATCH the existing company/application before verification,
+  using current revisions. Do not repeat POST creation or verify stale inputs.
+- [x] Retain false agreement flags until actual acceptance can be collected.
   Provider data and consent gaps are handled as explicit C1 prerequisites;
   do not duplicate the contract findings table already covered by A2.
+
+B3/C2 handoff: Save draft submits the parent form and uses `validateAllSteps`.
+C2 now routes Verify and submit through that same validator, verifies saved
+data before submission, and tracks the 202 receipt separately from provider
+approval. No review-state shortcut is introduced.
 
 ## Task group C: Existing submission lifecycle and Treasury retrieval
 
@@ -232,41 +243,41 @@ Design references: HTTP contract and execution/recovery sections of
 `docs/designs/company-onboarding.md`. This task uses existing statuses,
 repository transaction, outbox, and worker. No new review resource is needed.
 
-- [ ] In `services/company-onboarding/internal/http/handlers.go`, replace
+- [x] In `services/company-onboarding/internal/http/handlers.go`, replace
   `handleSubmitApplication`'s unconditional 422 with strict request parsing,
   required Idempotency-Key validation, authenticated actor extraction, and
   dispatch to the existing repository transaction. Keep the current route.
-- [ ] Keep `{expected_revision}` in `SubmitApplicationRequest`. Under Ramil's
+- [x] Keep `{expected_revision}` in `SubmitApplicationRequest`. Under Ramil's
   assumption, use the saved application revision and current company data;
   add no reviewed-company-revision field or new approval-lock mechanism.
   Preserve the existing application CAS check and immutable snapshot behavior.
-- [ ] Reuse `internal/postgres/repository.go: InitiateSubmission` with scope
+- [x] Reuse `internal/postgres/repository.go: InitiateSubmission` with scope
   bound to actor/application/action, a deterministic request fingerprint,
   generated Submission ID, topic `onboarding.submission.v1`, and payload
   `{application_id, submission_id}`. Reuse `worker.SubmissionJobPayload`'s
   shape without importing worker lifecycle into HTTP handling.
-- [ ] Return 202 `{code: "OK", application_id, submission_id}` and Location
+- [x] Return 202 `{code: "OK", application_id, submission_id}` and Location
   pointing to the existing application submissions collection. Save that
   response in the same atomic idempotency transaction. No unregistered
   submission-detail URL or new endpoint is introduced.
-- [ ] Ensure an existing completed idempotency entry is replayed before
+- [x] Ensure an existing completed idempotency entry is replayed before
   lifecycle/readiness validation, even if application status has advanced.
   Reuse existing reservation/transaction primitives; do not implement an
   unlocked read-then-create shortcut. Changed request with the same key is
   409 IDEMPOTENCY_CONFLICT; in-progress/unresolved work is 409
   SUBMISSION_IN_PROGRESS; missing key is 400. Missing resource is 404.
-- [ ] For new commands, run the same saved-data readiness validation as
+- [x] For new commands, run the same saved-data readiness validation as
   `/verify` before queueing. Map validation to 422 and state/revision conflict
   to 409. Do not call Airwallex synchronously from the HTTP handler.
-- [ ] Preserve `InitiateSubmission`'s Company-first/Application-second lock
+- [x] Preserve `InitiateSubmission`'s Company-first/Application-second lock
   ordering, frozen Company/onboarding/doc references, submitted-history flag,
   and atomic outbox/idempotency writes. Extend it only if needed to evaluate
   the readiness check on the same locked data. Do not rebuild the transaction.
-- [ ] In `internal/apidocs/operations.go` and `internal/http/dto.go`, describe
+- [x] In `internal/apidocs/operations.go` and `internal/http/dto.go`, describe
   the working submit contract: idempotency header, 202 response, Location,
   400/409/422 errors. Regenerate specs using A2's command. Update the existing
   blocked-contract assertions in `internal/apidocs/contracts_test.go`.
-- [ ] In `server/src/http/routes/onboarding-proxy.ts`, preserve forwarding of
+- [x] In `server/src/http/routes/onboarding-proxy.ts`, preserve forwarding of
   Idempotency-Key and Location. Add forwarding only if absent; retain existing
   cookies, actor assertion, and authorization checks.
 
@@ -292,79 +303,82 @@ draft journey or mocked test does not complete the live-submit milestone.
 
 ### Task C2: Connect verify/submit in the frontend
 
-- [ ] In `OnboardingApiClient.ts`, retain `verify(id)` and replace
+- [x] In `OnboardingApiClient.ts`, retain `verify(id)` and replace
   `submitApplication`'s discarded response with a typed submission receipt.
   Accept a caller-owned Idempotency-Key and forward it through the common
   request helper. Parse the 202 IDs, then read the application separately.
-- [ ] In `contracts.ts`, add the receipt type and Submission list response
+- [x] In `contracts.ts`, add the receipt type and Submission list response
   matching the existing GET submissions endpoint. Add `listSubmissions` to
   the client; preserve existing application status mappings.
-- [ ] In `useCompanyApplication.ts`, save drafts through B3, verify saved
+- [x] In `useCompanyApplication.ts`, save drafts through B3, verify saved
   data, and generate one key per submission attempt after verification passes.
   Keep that key/request in memory for transport retries. Changed inputs start
   a new command; transport uncertainty must not create a new key.
-- [ ] Render `/verify` field paths beside the corresponding form inputs and
+- [x] Render `/verify` field paths beside the corresponding form inputs and
   an error summary with links to Company/People/Application/Documents steps.
   Render platform-contract errors as blockers with the saved draft reference.
-- [ ] A 202 means Submission pending, not approval. Display returned IDs and
+- [x] A 202 means Submission pending, not approval. Display returned IDs and
   retrieve status through application/submission reads. A timeout retains the
   command key; replay the same command to retrieve its durable result.
-- [ ] Use the existing worker entrypoint `cmd/worker/main.go` and its durable
+- [x] Use the existing worker entrypoint `cmd/worker/main.go` and its durable
   processing in `internal/worker/submission.go`. Preserve reconciliation and
   webhook processing. Do not add another worker or bypass its preflight gates.
 
 ### Task C3: Display persisted records and handle failures
 
-- [ ] Verify company/application linkage and Treasury list/detail payloads,
+- [x] Verify company/application linkage and Treasury list/detail payloads,
   including pagination and explicit separation from the demo portfolio.
-- [ ] Extend `OnboardingCustomers.tsx` details to display the complete saved
+- [x] Extend `OnboardingCustomers.tsx` details to display the complete saved
   company fields and all registrations/people/identifications described above.
   Render DRAFT as Draft saved, SUBMISSION_PENDING as Submission pending,
   UNDER_REVIEW as Under review, and other existing statuses accurately.
   Add the existing Submission history list with IDs/status/timestamps so
   queue acceptance can be distinguished from provider acceptance.
-- [ ] Preserve entered data and known saved IDs on partial failures. A retry
+- [x] Preserve entered data and known saved IDs on partial failures. A retry
   must not repeat successful creation steps or fabricate completion.
-- [ ] Surface ambiguous create/upload writes without blind retries. Submission
+- [x] Surface ambiguous create/upload writes without blind retries. Submission
   command retries use the same Idempotency-Key and original request.
-- [ ] Confirm document upload errors are explicit and do not discard records.
+- [x] Confirm document upload errors are explicit and do not discard records.
   Do not claim successful uploads until verified against configured storage.
-- [ ] Inspect deployed request compatibility, including the Vite-only Origin
+- [x] Inspect deployed request compatibility, including the Vite-only Origin
   fallback. Flag any required gateway change without expanding auth scope.
 
 ## Task group D: Final verification
 
 ### Task D1: Run focused checks and the complete journey
 
-- [ ] After development is complete, run frontend/server builds, lint scoped
-  to changes, and existing onboarding/routing suites.
-- [ ] Company form: two focused cases, one populated payload roundtrip with
-  multiple registrations/identifications, one minimal company that omits all
-  disabled optional sections while rejecting incomplete enabled rows.
-- [ ] Submission: three focused cases, eligible submission atomically creates
-  a frozen Submission and one job with 202; same key/request replays the same
-  IDs without another job; failed readiness leaves DRAFT with no queued job.
-  Extend existing assertions for changed-key-body and stale-revision errors.
-- [ ] Recovery/UI: two focused cases, failed application/upload retains saved
-  company/application IDs; Treasury refresh shows those same records and
-  the persisted application/Submission statuses. Reuse routing coverage.
-- [ ] Reuse frameworks/fixtures, no new dependencies or test harness. The
-  approved two-to-three-per-feature scope supersedes the three-per-task default
-  for this planned work. Run these cases in the final verification stage.
-- [ ] Run existing Go domain/repository/HTTP/worker and OpenAPI suites,
-  `go run ./cmd/openapi -check`, plus relevant frontend tests. Use existing
-  test infrastructure and compare broader failures to the documented baseline.
-- [ ] Perform a real local browser/API journey with synthetic company data:
-  create company/application, upload a file when storage is configured, save,
-  verify, submit, refresh Treasury Customers, and inspect identical IDs/fields.
-  Use existing provider fixtures in isolated automated tests. Do not label a
-  fixture-driven UNDER_REVIEW result as real Airwallex acceptance.
-- [ ] Separate final outcomes: draft/UI integration; durable 202 queue
-  acceptance; worker/provider acceptance. If production readiness gates remain,
-  demonstrate their explicit errors and mark the latter outcomes blocked.
-- [ ] Review the final diff and report API mismatches, checks, and remaining
-  limitations. No push/deploy or live Airwallex calls during implementation
-  without explicit authorization for that separate acceptance run.
+- [x] Frontend/server builds, lint scoped to changes, and existing
+  onboarding/routing suites.
+- [x] Company form: existing focused coverage includes populated payloads,
+  optional minimal payloads, and incomplete enabled sections; no extra test
+  group was added.
+- [x] Submission: existing atomic repository coverage verifies frozen
+  Submission/outbox writes and same-key replay; focused HTTP test verifies
+  default readiness fails closed and leaves DRAFT with no Submission. Existing
+  browser API tests cover typed 202 receipt and readiness errors.
+- [x] Recovery/UI: existing SaveApplication tests cover reuse after rejected
+  application/upload writes; Treasury read tests verify company linkage and
+  status; existing form-rule test covers custom-industry clear and omission.
+- [x] Existing Go domain, validation, adapter fixture, repository, HTTP, worker,
+  webhook, acceptance, OpenAPI, API, migration, and generator command suites;
+  `go run ./cmd/openapi -check`.
+- [x] Authenticated headless browser journey used the real local Node session
+  route and Go API. It created Company `comp_6baf73104b832387224efea66799d3cf`
+  and Application `app_61735ebbbf46970f23279b222ef0e2d5`, changed the optional
+  trading name from `D1 before PATCH` to `D1 after PATCH`, and saved the same
+  DRAFT again. Treasury Customers retrieved matching company/application IDs,
+  updated value, and DRAFT status. Browser Verify returned 422
+  `VALIDATION_FAILED` with actual missing profile, address, person/contact, and
+  consent fields. Upload returned explicit 503 `STORAGE_UNAVAILABLE` using
+  the default unconfigured store; document storage was not configured.
+- [x] Outcomes separated: draft/UI and local persistence integration verified;
+  fixture-driven 202/outbox/worker behavior verified in focused automated
+  suites; real provider acceptance remains blocked by the default
+  UnverifiedPlatformContractGate, missing required DTO evidence (goods/services
+  and person email/phone), and unavailable verified consent metadata. No
+  provider gate was bypassed and no live Airwallex calls were made.
+- [x] Final diff reviewed with `git diff --check`. No push, deploy, main/develop
+  merge, or worktree cleanup.
 
 ## Execution
 

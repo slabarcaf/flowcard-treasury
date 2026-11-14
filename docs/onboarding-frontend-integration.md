@@ -6,21 +6,29 @@ Based on team `develop` commit `439d84d`; delivered on feature branch `feature/o
 
 ## Intake form rules
 
-The UI now collects a complete application, rather than exposing the minimum
-requirements for creating a company draft. Required company fields follow the
-server's `VerifyOnboardingReadiness` plus the current US account mapper:
+The Company step follows `POST /api/companies`: only `legal_name` is required
+for company creation. Business profile, registered address, registrations and
+people are optional; fields become required only within an enabled section or
+an added row. The People step applies the current person/identification DTO
+requirements only to rows the customer adds. Application details are optional
+under `CreateApplicationRequest`; saved-data `/verify` readiness remains a
+separate provider gate.
 
 | Page | Required | Optional |
 | --- | --- | --- |
-| Company | Legal name, company type, US incorporation country, website, business description, US registered address including state/ZIP, EIN | Trading name, incorporation state, address line 2 |
-| People | At least one person; name, job title, past birth date, identification type/number/issuing country | Identification issue/expiry dates under the current request contract |
-| Application | Industry selection, intended use, monthly revenue and currency, primary contact, relationships and residential address for each person | Address line 2; non-US state/province where not required by the current local contract |
+| Company | Legal name, 2–200 characters | Trading name, company type, US incorporation country/state, business profile, registered address, registration identifiers, people |
+| Enabled business profile | Valid HTTP(S) website and description | Registered address |
+| Enabled registered address | Street, city, US ZIP, country | State, address line 2 |
+| Added registration/person/identification | Registration type/value/country; person name/job title/past birth date; identification type/number/country | All registration, person and identification collections; identification issue/expiry dates |
+| Application | Client-supplied company ID and AIRWALLEX platform | Sandbox environment, industry code, products, revenue amount/currency, primary contact, per-person roles and residential address |
+| Enabled residential address | Street, city, postal code, ISO country | State, address line 2 |
 | Review | Confirm earlier pages and choose file classifications for selected files | Supporting files until country/person-specific file rules are verified |
 
-The application page also gathers industry, usage, revenue, regulated roles and
-residential addresses needed by the documented US account flow. Those are more
-complete than the minimal create-application DTO. Do not describe them as
-mandatory to *create a draft*; they are required by this complete-intake UI.
+Application selections are API codes, not display labels. Industry and product
+codes accept additional user-entered values because the request schema has no
+enum. Per-person application details are sent only when a relationship code or
+residential address is supplied. A residential address requires street, city,
+postal code and ISO country; state and line 2 are optional.
 
 Country/state/currency/identifier/document/relationship/product values are
 selected rather than entered as internal codes. US EIN and tax IDs receive
@@ -43,12 +51,18 @@ Source: https://www.airwallex.com/docs/api/supporting_services/reference_data/in
 
 ## Persistence and status
 
-The write sequence is company creation, application creation, then optional
-multipart uploads. Files use the latest expected application revision. Completed
-company/application IDs and uploaded-file keys are retained in memory so a later
-definite failure does not repeat successful steps. After an ambiguous write
-result, automatic retry stops because no verified client idempotency contract
-exists. No personal information is persisted in browser storage or logged.
+Save draft creates the Company and DRAFT application on first save. Later edits
+PATCH the known records using refreshed revisions; successful stages and
+uploaded-file keys stay in memory so a definite failure does not repeat POSTs.
+Selected documents are optional for draft saving and use the latest application
+revision. After an ambiguous write result, automatic retries pause for
+reconciliation. No personal information is persisted in browser storage or
+logged.
+
+Draft edits use refreshed revisions and PATCH the existing records. Empty
+values and arrays clear fields or collections where the edit DTO supports it.
+The current API cannot remove a saved business profile or registered address;
+those removal controls stay disabled after save and the limitation is shown.
 
 A refused connection to the local Node gateway is different: Vite explicitly
 returns `503 ONBOARDING_GATEWAY_UNREACHABLE` only on `ECONNREFUSED`, before the
@@ -56,34 +70,45 @@ request reaches the backend. The client explains that it was not submitted and
 allows retry while retaining the form. It does not apply this guarantee to a
 network timeout or disconnect after a write.
 
-The result page reflects the backend application status. After the confirmed one-shot save succeeds, the customer acknowledgement says
-Pending review and explains that information is saved with FlowCard, not yet sent
-to Airwallex. The backend DRAFT status is unchanged and is shown explicitly in the
-treasury detail; no new persisted internal-review transition is claimed. No customer-side `/submit` call, funding rule or customer-to-admin navigation is introduced. The internal review menu calls the existing blocked submit endpoint only after explicit confirmation.
+After Save draft succeeds, the form stays editable and shows the backend
+application status and ID. DRAFT remains DRAFT; no internal-review transition
+is created. Verify and submit first saves the current draft, calls `/verify`,
+and calls `/submit` only after `VALIDATION_PASSED`. The server requires
+`Idempotency-Key`, checks readiness under the submission transaction, and
+returns a 202 receipt when queued. The UI keeps the receipt separate from
+application status and provider approval; uncertain retries reuse the same key
+and request revision. It does not call Airwallex synchronously. Current
+provider-data and consent gaps still prevent this form from passing readiness.
+No funding rule or customer-to-admin navigation is introduced.
 
 ## Remaining backend contracts
 
-The agreed target remains: customer supplies all data, FlowCard receives it for
-internal review, then submits to Airwallex, requests information or rejects.
+The agreed target remains: customer supplies data into a saved draft, FlowCard
+verifies it, and the existing application lifecycle records provider submission
+and outcomes. Any operator review happens without adding an application status
+or internal-review API.
 
 This is not yet fully supported by the existing backend:
 
 - Customer-scoped identity, ownership, intake submission, status reads and resume
   are missing. Existing gateway writes require an internal operator session.
-- Product/service description, person email and phone are required by readiness
-  checks but not accepted by the write DTOs. Do not collect and silently discard
-  them or send unsupported JSON keys. These writes remain unchanged pending
-  agreement on who will add the fields.
+- Provider readiness still requires product/service description and person
+  email and phone, but the current write DTOs do not accept those fields. The
+  frontend must not collect and silently discard them or send unsupported JSON
+  keys. These write DTOs remain unchanged in this integration.
 - Correct terms/data-use text and agreement type must be supplied before explicit
   acceptance can be recorded. Current flags remain false; no consent/timestamp is
   fabricated, and no consent acceptance flow is implemented.
-- Internal review, request-information and intake rejection actions/states need
-  contracts. Cancellation is not a replacement for rejection.
-- `/submit` returns `SUBMISSION_CONTRACT_BLOCKED`; `/verify` retains the unverified
-  external platform gate. US regulated-role and document requirement policies
-  need confirmation before claiming an application is ready for Airwallex.
-- Node onboarding upstream configuration is constructor-injected and not populated
-  by the existing environment loader. A configured running backend is needed.
+- The existing application status model remains authoritative. This integration
+  adds no internal-review endpoint, `PENDING_REVIEW` status, or review migration.
+- `/submit` requires `Idempotency-Key` and atomically queues the frozen
+  submission, idempotency response, and worker job after saved-data readiness
+  passes. The default `/verify` and submit readiness gate still fails closed
+  while the provider contract, US regulated-role rules, document requirements,
+  and required consent remain unverified.
+- The Node environment loader supports `ONBOARDING_SERVICE_URL` and
+  `ONBOARDING_SERVICE_SECRET` together. A configured, running backend is still
+  needed to exercise the proxy.
 - Treasury Customers now reads live companies and their applications through the
   existing GET APIs. Mock customers remain separately labeled Demo portfolio.
   Saving a real company does not invent a credit tier, line or funding permission.
@@ -160,18 +185,20 @@ if a write or upload fails.
   62 leaf values matched after fresh GET reads, including two people, identification
   dates, different registered/residential addresses, primary contact, two products,
   industry ICCV3_0001XX and USD revenue 12345.67. SQL independently confirmed the
-  stored industry. Submission returned SUBMISSION_CONTRACT_BLOCKED and did not
-  alter revision or DRAFT status.
+  stored industry. At the time, submission returned SUBMISSION_CONTRACT_BLOCKED
+  and did not alter revision or DRAFT status; C1 has since replaced that
+  unconditional placeholder with the durable idempotent queue.
 - Treasury now includes registration identifiers, primary contact, birth dates
   and masked identification summaries. Full personal identification numbers are
   not displayed in the review summary.
 - Review actions use an accessible disclosure menu and native modal dialogs.
-  Submit calls the existing revision-aware endpoint and refreshes from GET only
-  after an accepted response. Missing information-request/rejection integrations
-  produce explicit feedback and retain input; no status is simulated. Cancellation
-  is deliberately not used as a replacement for internal rejection.
-- Backend DRAFT is presented as Pending Review in the internal review header;
-  this is a frontend label, not a persisted internal review transition.
+  Verify and submit verifies saved data before sending the revision and stable
+  idempotency key. A 202 receipt is shown as queued processing, not provider
+  approval. Missing information-request/rejection integrations produce explicit
+  feedback and retain input; no status is simulated. Cancellation is not used
+  as a replacement for internal rejection.
+- Backend DRAFT is shown as Draft saved. No internal review status or transition
+  is persisted.
 - Browser automation host is unavailable in this session. Automated API/database
   acceptance is complete; browser interaction acceptance must be checked manually.
 - Changed-file lint and focused onboarding tests pass. Full lint is blocked by
@@ -200,6 +227,8 @@ file storage. The frontend now distinguishes the explicit STORAGE_UNAVAILABLE
 pre-write failure from ambiguous network/server outcomes. A read-only recovery
 button fetches the known saved application and, on explicit user choice, abandons
 pending local uploads without deleting stored files or repeating POSTs. Yidi
-confirmed the recovered page reaches Pending review. Focused tests now total 25
-passing, including storage-failure classification and no-duplicate retry coverage.
+confirmed the then-current recovered page reached Pending review. That was a
+frontend label at the time; current UI reports Draft saved from the persisted
+status. Focused tests then totaled 25, including storage-failure classification
+and no-duplicate retry coverage.
 Yidi subsequently reported no apparent issue in the manual UI review; this was not an automated browser acceptance run.
