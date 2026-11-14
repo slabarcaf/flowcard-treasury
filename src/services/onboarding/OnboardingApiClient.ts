@@ -1,13 +1,16 @@
-import type { ApplicationPage, ApplicationRecord, CompanyInput, CompanyPage, CompanyRecord, DocumentUpload, FieldIssue, OnboardingDetailsInput, ReadinessResult } from './contracts.js';
+import type { ApplicationPage, ApplicationRecord, CompanyInput, CreateApplicationRequest, CreateCompanyRequest, CompanyPage, CompanyRecord, DocumentUpload, FieldIssue, OnboardingDetailsInput, ReadinessResult, SubmissionListResponse, SubmissionReceipt, SubmissionRecord } from './contracts.js';
+import { serializeApplicationDetails, serializeCompanyUpdateRequest, unsupportedCompanyClearIssues } from './payloads.js';
 
 export class OnboardingApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly issues: FieldIssue[];
+  readonly responseMessage?: string;
   constructor(
     status: number,
     code: string,
     issues: FieldIssue[] = [],
+    responseMessage?: string,
   ) {
     const messages: Record<number, string> = {
       401: 'Your information has not been submitted. Please sign in to an authorized session, then try again.',
@@ -26,6 +29,7 @@ export class OnboardingApiError extends Error {
     this.status = status;
     this.code = code;
     this.issues = issues;
+    this.responseMessage = responseMessage;
   }
 }
 
@@ -33,14 +37,14 @@ export class OnboardingApiClient {
   private readonly fetchImpl: typeof fetch;
   constructor(fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis)) { this.fetchImpl = fetchImpl; }
 
-  private async request<T>(path: string, method = 'GET', payload?: unknown): Promise<T> {
+  private async request<T>(path: string, method = 'GET', payload?: unknown, extraHeaders: Record<string, string> = {}, expectedStatus?: number): Promise<T> {
     let response: Response;
     try {
       response = await this.fetchImpl(path, {
         method,
         credentials: 'include',
         signal: AbortSignal.timeout(30_000),
-        headers: { accept: 'application/json', ...(payload === undefined || payload instanceof FormData ? {} : { 'content-type': 'application/json' }) },
+        headers: { accept: 'application/json', ...(payload === undefined || payload instanceof FormData ? {} : { 'content-type': 'application/json' }), ...extraHeaders },
         ...(payload === undefined ? {} : { body: payload instanceof FormData ? payload : JSON.stringify(payload) }),
       });
     } catch {
@@ -53,7 +57,15 @@ export class OnboardingApiClient {
       const issues = Array.isArray(body.errors) ? body.errors.filter((issue): issue is FieldIssue =>
         typeof issue === 'object' && issue !== null && typeof issue.field === 'string' &&
         typeof issue.code === 'string' && typeof issue.message === 'string') : [];
-      throw new OnboardingApiError(response.status, String(body.code ?? body.error ?? 'REQUEST_FAILED'), issues);
+      throw new OnboardingApiError(
+        response.status,
+        String(body.code ?? body.error ?? 'REQUEST_FAILED'),
+        issues,
+        typeof body.message === 'string' ? body.message : undefined,
+      );
+    }
+    if (expectedStatus !== undefined && response.status !== expectedStatus) {
+      throw new OnboardingApiError(response.status, 'INVALID_RESPONSE');
     }
     return value as T;
   }
@@ -75,43 +87,62 @@ export class OnboardingApiClient {
         (page.next_cursor !== undefined && typeof page.next_cursor !== 'string')) throw new OnboardingApiError(0, 'INVALID_RESPONSE');
     return page;
   }
-  async createCompany(input: CompanyInput): Promise<CompanyRecord> {
+  async createCompany(input: CreateCompanyRequest): Promise<CompanyRecord> {
     return this.record(await this.request<CompanyRecord>('/api/companies', 'POST', input));
   }
-  async updateCompany(company: CompanyRecord, input: CompanyInput): Promise<CompanyRecord> {
-    return this.record(await this.request<CompanyRecord>(`/api/companies/${encodeURIComponent(company.id)}`, 'PATCH', {
-      ...input, expected_revision: company.revision,
-    }));
+  async updateCompany(company: CompanyRecord, input: CompanyInput, previous: CompanyInput): Promise<CompanyRecord> {
+    const clearIssues = unsupportedCompanyClearIssues(previous, input);
+    if (clearIssues.length) throw new OnboardingApiError(422, 'UNSUPPORTED_CLEAR', clearIssues);
+    const payload = serializeCompanyUpdateRequest(input, company.revision);
+    return this.record(await this.request<CompanyRecord>(`/api/companies/${encodeURIComponent(company.id)}`, 'PATCH', payload));
   }
   async createApplication(companyId: string, details: OnboardingDetailsInput): Promise<ApplicationRecord> {
-    return this.application(await this.request<ApplicationRecord>('/api/onboarding-applications', 'POST', {
-      company_id: companyId, platform_name: 'AIRWALLEX', environment: 'sandbox', onboarding_details: details,
-    }));
+    const payload: CreateApplicationRequest = {
+      company_id: companyId,
+      platform_name: 'AIRWALLEX',
+      environment: 'sandbox',
+      onboarding_details: serializeApplicationDetails(details),
+    };
+    return this.application(await this.request<ApplicationRecord>('/api/onboarding-applications', 'POST', payload));
   }
   async updateApplication(application: ApplicationRecord, details: OnboardingDetailsInput): Promise<ApplicationRecord> {
     return this.application(await this.request<ApplicationRecord>(`/api/onboarding-applications/${encodeURIComponent(application.id)}`, 'PATCH', {
-      expected_revision: application.revision, onboarding_details: details,
+      expected_revision: application.revision, onboarding_details: serializeApplicationDetails(details),
     }));
   }
   async getApplication(id: string): Promise<ApplicationRecord> {
     return this.application(await this.request<ApplicationRecord>(`/api/onboarding-applications/${encodeURIComponent(id)}`));
   }
+  async listSubmissions(applicationId: string): Promise<SubmissionListResponse> {
+    const submissions = await this.request<unknown>(`/api/onboarding-applications/${encodeURIComponent(applicationId)}/submissions`);
+    if (!Array.isArray(submissions) || submissions.some(item => !isSubmissionRecord(item))) {
+      throw new OnboardingApiError(0, 'INVALID_RESPONSE');
+    }
+    return submissions as SubmissionRecord[];
+  }
   async getCompany(id: string): Promise<CompanyRecord> {
     return this.record(await this.request<CompanyRecord>(`/api/companies/${encodeURIComponent(id)}`));
   }
-  async submitApplication(application: ApplicationRecord): Promise<ApplicationRecord> {
-    // Current server returns SUBMISSION_CONTRACT_BLOCKED. Do not infer success.
-    await this.request(`/api/onboarding-applications/${encodeURIComponent(application.id)}/submit`, 'POST', {
-      expected_revision: application.revision,
-    });
-    return this.getApplication(application.id);
+  async submitApplication(applicationId: string, expectedRevision: number, idempotencyKey: string): Promise<SubmissionReceipt> {
+    const receipt = await this.request<SubmissionReceipt>(
+      `/api/onboarding-applications/${encodeURIComponent(applicationId)}/submit`,
+      'POST',
+      { expected_revision: expectedRevision },
+      { 'Idempotency-Key': idempotencyKey },
+      202,
+    );
+    if (receipt.code !== 'OK' || receipt.application_id !== applicationId ||
+        typeof receipt.submission_id !== 'string' || !receipt.submission_id) {
+      throw new OnboardingApiError(202, 'INVALID_RESPONSE');
+    }
+    return receipt;
   }
   async verify(id: string): Promise<ReadinessResult> {
     // 422 is a validation result, not a successful submission or an approval.
     try { return await this.request<ReadinessResult>(`/api/onboarding-applications/${encodeURIComponent(id)}/verify`, 'POST'); }
     catch (error) {
       if (error instanceof OnboardingApiError && error.status === 422) {
-        return { code: error.code, errors: error.issues };
+        return { code: error.code, message: error.responseMessage, errors: error.issues };
       }
       throw error;
     }
@@ -142,6 +173,16 @@ export class OnboardingApiClient {
     }
     return value;
   }
+}
+
+function isSubmissionRecord(value: unknown): value is SubmissionRecord {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  const company = record.company;
+  if (!company || typeof company !== 'object') return false;
+  const companyRecord = company as Record<string, unknown>;
+  return typeof record.submission_id === 'string' && typeof record.type === 'string' &&
+    typeof record.status === 'string' && typeof record.created_at === 'string' && typeof companyRecord.id === 'string';
 }
 
 /** Only explicit pre-write failures can be retried without reconciling an unknown write. */

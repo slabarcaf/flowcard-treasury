@@ -50,7 +50,7 @@ describe('onboarding browser integration', () => {
     const api = new OnboardingApiClient(vi.fn<typeof fetch>().mockResolvedValue(response({ code: 'PLATFORM_CONTRACT_INCOMPLETE' }, 422)));
     expect(await api.verify(application.id)).toEqual({ code: 'PLATFORM_CONTRACT_INCOMPLETE', errors: [] });
     expect(applicationStatus('ACTIVE')).toBe('Status unavailable');
-    expect(applicationStatus('DRAFT')).toBe('Application saved');
+    expect(applicationStatus('DRAFT')).toBe('Draft saved');
   });
   it('marks network failures and malformed creation responses as unknown results', async () => {
     const failing = new OnboardingApiClient(vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline')));
@@ -118,19 +118,22 @@ describe('treasury onboarding read integration', () => {
 
 
 describe('internal review submission contract', () => {
-  it('keeps the blocked submit response as an error and never reads a fabricated new status', async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ code: 'SUBMISSION_CONTRACT_BLOCKED' }, 422));
-    await expect(new OnboardingApiClient(fetcher).submitApplication(application)).rejects.toMatchObject({ code: 'SUBMISSION_CONTRACT_BLOCKED', status: 422 });
+  it('keeps readiness errors as errors and sends the stable command key and revision', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ code: 'VALIDATION_FAILED', errors: [] }, 422));
+    await expect(new OnboardingApiClient(fetcher).submitApplication(application.id, application.revision, 'submit-key'))
+      .rejects.toMatchObject({ code: 'VALIDATION_FAILED', status: 422 });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0][0]).toBe('/api/onboarding-applications/app_test/submit');
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ expected_revision: 2 });
+    expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({ 'Idempotency-Key': 'submit-key' });
     expect(application.status).toBe('DRAFT');
   });
-  it('uses the refreshed backend status after an accepted action instead of inferring approval', async () => {
-    const updated = { ...application, revision: 3, status: 'SUBMISSION_PENDING' };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(response({})).mockResolvedValueOnce(response(updated));
-    expect(await new OnboardingApiClient(fetcher).submitApplication(application)).toEqual(updated);
-    expect(fetcher.mock.calls[1][1]?.method).toBe('GET');
+  it('parses the 202 receipt separately from application status', async () => {
+    const receipt = { code: 'OK', application_id: application.id, submission_id: 'sub_test' };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(receipt, 202));
+    expect(await new OnboardingApiClient(fetcher).submitApplication(application.id, application.revision, 'submit-key'))
+      .toEqual(receipt);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
 

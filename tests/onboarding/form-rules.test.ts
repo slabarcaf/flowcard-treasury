@@ -1,29 +1,32 @@
 import { describe, expect, it, vi } from 'vitest';
-import { newCompany, normalizeTaxId, stepIssues, validEin } from '../../src/services/onboarding/formRules.js';
+import { clearIndustryCategoryCode, newCompany, normalizeTaxId, stepIssues, validEin } from '../../src/services/onboarding/formRules.js';
 import { industryOptions } from '../../src/services/onboarding/industryReference.js';
 import { OnboardingApiClient, OnboardingApiError } from '../../src/services/onboarding/OnboardingApiClient.js';
+import { serializeApplicationDetails } from '../../src/services/onboarding/payloads.js';
 import type { OnboardingDetailsInput } from '../../src/services/onboarding/contracts.js';
 
 const details = (): OnboardingDetailsInput => ({ estimated_monthly_revenue: {}, customer_agreements: { agreed_to_data_usage: false, agreed_to_terms_and_conditions: false } });
 
 describe('complete application intake', () => {
-  it('requires final-review company information, not just the create-company minimum', () => {
+  it('requires only legal name at create and validates enabled optional sections', () => {
     const input = newCompany();
+    expect(stepIssues(0, input, details())).toContain('Enter a legal company name between 2 and 200 characters.');
     input.legal_name = 'Example LLC';
-    expect(stepIssues(0, input, details())).toHaveLength(4);
-    input.entity_type = 'LLC';
-    input.business_profile = { website: 'https://example.com', description: 'Business software', registered_address: { line_1: '1 Main Street', city: 'New York', country: 'US', state: 'NY', postal_code: '10001' } };
-    input.registration_identifiers![0].value = '12-3456789';
     expect(stepIssues(0, input, details())).toEqual([]);
-    input.business_profile.registered_address!.state = '';
-    expect(stepIssues(0, input, details())).toContain('Complete the US registered address, including the state and ZIP code.');
+    input.business_profile = { website: '', description: '', registered_address: { line_1: '', city: '', country: 'US', postal_code: '' } };
+    expect(stepIssues(0, input, details()).join(' ')).toContain('http or https');
+    expect(stepIssues(0, input, details()).join(' ')).toContain('business description');
+    input.business_profile = { website: 'https://example.com', description: 'Business software', registered_address: { line_1: '1 Main Street', city: 'New York', country: 'US', postal_code: '10001' } };
+    expect(stepIssues(0, input, details())).toEqual([]);
   });
-  it('does not let missing people or missing identification slip through', () => {
+  it('keeps people and identification collections optional while requiring complete added rows', () => {
     const input = newCompany();
     input.people = [];
-    expect(stepIssues(1, input, details())).toHaveLength(1);
+    expect(stepIssues(1, input, details())).toEqual([]);
     input.people = [{ id: 'test', first_name: 'Example', last_name: 'Person', role: 'Director', date_of_birth: '1990-01-01' }];
-    expect(stepIssues(1, input, details())).toEqual(['Add identification for person 1.']);
+    expect(stepIssues(1, input, details())).toEqual([]);
+    input.people[0].identifications = [{ id: 'ident', type: '', number: '', issuing_country: '' }];
+    expect(stepIssues(1, input, details()).join(' ')).toContain('identification type');
   });
   it('checks tax identification format and US issuing country', () => {
     const input = newCompany();
@@ -35,12 +38,18 @@ describe('complete application intake', () => {
     expect(validEin('123456789')).toBe(true);
     expect(validEin('abc')).toBe(false);
   });
-  it('requires use, revenue, a real primary contact, roles and residential addresses', () => {
+  it('keeps application details optional and validates supplied references and addresses', () => {
     const input = newCompany();
     const app = details();
-    expect(stepIssues(2, input, app)).toHaveLength(6);
-    const person = input.people![0];
-    Object.assign(app, { industry_category_code: 'ICCV3_TEST', intended_products: ['CREATE_CARDS'], estimated_monthly_revenue: { amount: '0', currency: 'USD' }, primary_contact_person_id: person.id, people: [{ person_id: person.id, platform_roles: ['BENEFICIAL_OWNER'], residential_address: { line_1: '1 Main Street', city: 'New York', state: 'NY', country: 'US', postal_code: '10001' } }] });
+    expect(stepIssues(2, input, app)).toEqual([]);
+    const person = { id: 'person', first_name: 'Example', last_name: 'Person', role: 'Director', date_of_birth: '1990-01-01' };
+    input.people = [person];
+    app.primary_contact_person_id = 'missing-person';
+    expect(stepIssues(2, input, app).join(' ')).toContain('Primary contact must be one of the people');
+    app.primary_contact_person_id = person.id;
+    app.people = [{ person_id: person.id, residential_address: { line_1: '', city: '', country: '', postal_code: '' } }];
+    expect(stepIssues(2, input, app).join(' ')).toContain('Enter street address');
+    app.people = [{ person_id: person.id, platform_roles: ['CUSTOM_ROLE'], residential_address: { line_1: '1 Main Street', city: 'New York', country: 'US', postal_code: '10001' } }];
     expect(stepIssues(2, input, app)).toEqual([]);
   });
   it('turns verified reference trees into labels while preserving question answers and wire codes', () => {
@@ -50,6 +59,10 @@ describe('complete application intake', () => {
     ]);
     expect(() => industryOptions([{ type: 'CODE', name: 'Unknown', value: '<string>' }])).toThrow();
     expect(() => industryOptions([])).toThrow();
+    const selected = { ...details(), industry_category_code: 'CUSTOM_CODE' };
+    const cleared = clearIndustryCategoryCode(selected);
+    expect(cleared.industry_category_code).toBeUndefined();
+    expect(serializeApplicationDetails(cleared)).not.toHaveProperty('industry_category_code');
   });
   it('explains a refused gateway connection as not submitted, rather than an ambiguous saved request', async () => {
     const api = new OnboardingApiClient(vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ code: 'ONBOARDING_GATEWAY_UNREACHABLE' }), { status: 503 })));
