@@ -1,5 +1,6 @@
 /**
- * Bridge Capital policy engine, against docs/bridge-capital-spec.md §3–§7.
+ * Bridge Capital policy engine follows §§3–7 of
+ * docs/designs/bridge-capital-policy-spec.md.
  *
  * Customers here are built by hand so each test pins the one statistic it is
  * about; the generator has its own coverage in customerStats.report.test.ts.

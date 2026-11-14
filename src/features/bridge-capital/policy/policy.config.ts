@@ -1,5 +1,6 @@
 /**
- * Every Bridge Capital threshold, mirroring docs/bridge-capital-spec.md.
+ * Every Bridge Capital threshold mirrors the design spec:
+ * docs/designs/bridge-capital-policy-spec.md.
  *
  * The spec calls its numbers placeholders, so they live here and nowhere else:
  * no policy function hard-codes a threshold.
@@ -222,7 +223,7 @@ export interface RuleSpec {
   label: string;
   /** What the rule actually checks, for the rules reference. */
   checks: string;
-  /** Where it comes from in docs/bridge-capital-spec.md. */
+  /** The corresponding policy section in docs/designs/bridge-capital-policy-spec.md. */
   source: string;
 }
 

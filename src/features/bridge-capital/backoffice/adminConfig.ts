@@ -210,7 +210,7 @@ export function modifiedCount(): number {
   return CONFIG_FIELDS.filter(isModified).length;
 }
 
-/** Put every threshold back to the value in docs/bridge-capital-spec.md. */
+/** Restore thresholds from docs/designs/bridge-capital-policy-spec.md. */
 export function resetPolicyConfig(): void {
   for (const field of CONFIG_FIELDS) field.set(SPEC_DEFAULTS[field.id]);
 }

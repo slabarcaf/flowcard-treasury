@@ -31,17 +31,18 @@ that customer while existing bridge servicing continues.
 
 ## Context from discovery
 
-- The repository is currently a React, TypeScript, and Vite frontend. The
-  server and PostgreSQL foundation are planned in the [Airwallex bridge ledger
-  plan](/docs/plans/20261021-airwallex-bridge-ledger-implementation-plan.md).
+- The repository has a TypeScript server and PostgreSQL foundation under
+  `server/src/` and `server/src/db/migrations/`; see the
+  [backend development guidance](/AGENTS.md#backend-development).
 - The current CRM interface in src/services/types.ts only returns account
   notes. Its mock returns the seeded Bloom note; the UI still uses demo seed
   data directly.
 - src/seed.ts contains the demo customer profiles and synthetic CRM content.
   There is no persistent customer roster or server-side Salesforce snapshot.
-- The authoritative requirements are the [Kit 5 source of truth](/docs/requirements/Airwallex%20Hackathon_req_1.md),
-  the [Salesforce Context Integration Spec](/docs/requirements/Airwallex%20Hackathon.md#salesforce-context-integration-spec),
-  and the [gap analysis](/docs/requirements/Airwallex%20Hackathon_req_2.md).
+- The authoritative requirements are summarized in the consolidated
+  [underwriting policy](/docs/requirements/README.md#underwriting-and-capital-policy),
+  [customer data requirements](/docs/requirements/README.md#customer-data-and-evidence),
+  and [open requirements](/docs/requirements/README.md#open-requirements).
 - The requirements call Salesforce field API names and picklist values
   provisional. The production mapping must be checked against the connected
   Salesforce org before live sync is enabled.
@@ -568,12 +569,12 @@ production-readiness approval.
 
 ## 11. Related specifications
 
-- [Kit 5 source of truth](/docs/requirements/Airwallex%20Hackathon_req_1.md)
-- [Salesforce Context Integration Spec](/docs/requirements/Airwallex%20Hackathon.md#salesforce-context-integration-spec)
-- [Salesforce and AI gap analysis](/docs/requirements/Airwallex%20Hackathon_req_2.md)
-- [Airwallex bridge ledger plan](/docs/plans/20261021-airwallex-bridge-ledger-implementation-plan.md)
+- [Consolidated underwriting policy](/docs/requirements/README.md#underwriting-and-capital-policy)
+- [Customer data and evidence](/docs/requirements/README.md#customer-data-and-evidence)
+- [Open requirements](/docs/requirements/README.md#open-requirements)
+- [Backend development guidance](/AGENTS.md#backend-development)
 - [Current README](/README.md)
-- [Editing guide](/docs/EDITING.md)
+- [Frontend development instructions](/AGENTS.md#frontend-development)
 - [Airwallex list connected accounts API](https://www.airwallex.com/docs/api/scale/accounts/list)
 
 ## Post-completion
