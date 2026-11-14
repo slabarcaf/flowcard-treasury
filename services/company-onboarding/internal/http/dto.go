@@ -157,6 +157,12 @@ type SubmitApplicationRequest struct {
 	ExpectedRevision int `json:"expected_revision" validate:"required,min=1"`
 }
 
+type SubmitApplicationResponse struct {
+	Code          string `json:"code"`
+	ApplicationID string `json:"application_id"`
+	SubmissionID  string `json:"submission_id"`
+}
+
 // --- Response DTOs ---
 
 type CompanyResponse struct {

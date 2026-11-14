@@ -277,21 +277,29 @@ func populateRequiredFields(t reflect.Type, schema *openapi3.Schema) {
 			}
 		}
 
-		// Recurse into nested struct fields
+		// Recurse into nested struct fields and array items. The collection's
+		// requiredness is controlled by its own validate/json tags above; required
+		// fields inside each item belong on the item's schema.
 		ft := f.Type
 		for ft.Kind() == reflect.Pointer {
 			ft = ft.Elem()
 		}
+		var nestedSchema *openapi3.Schema
 		if ft.Kind() == reflect.Slice || ft.Kind() == reflect.Array {
 			ft = ft.Elem()
 			for ft.Kind() == reflect.Pointer {
 				ft = ft.Elem()
 			}
+			if prop := schema.Properties[fieldName]; prop != nil && prop.Value != nil &&
+				prop.Value.Items != nil && prop.Value.Items.Value != nil {
+				nestedSchema = prop.Value.Items.Value
+			}
+		} else if prop := schema.Properties[fieldName]; prop != nil && prop.Value != nil {
+			nestedSchema = prop.Value
 		}
 		if ft.Kind() == reflect.Struct && ft != reflect.TypeOf(time.Time{}) && ft != reflect.TypeOf(domain.Date("")) {
-			prop := schema.Properties[fieldName]
-			if prop != nil && prop.Value != nil {
-				populateRequiredFields(ft, prop.Value)
+			if nestedSchema != nil {
+				populateRequiredFields(ft, nestedSchema)
 			}
 		}
 	}
@@ -421,24 +429,25 @@ func GenerateOperatorSpec() (*openapi3.T, error) {
 	schemas := make(openapi3.Schemas)
 
 	dtoMap := map[string]any{
-		"CompanyResponse":          internalHttp.CompanyResponse{},
-		"CreateCompanyRequest":     internalHttp.CreateCompanyRequest{},
-		"EditCompanyRequest":       internalHttp.EditCompanyRequest{},
-		"ArchiveCompanyRequest":    internalHttp.ArchiveCompanyRequest{},
-		"CompanyListResponse":      internalHttp.CompanyListResponse{},
-		"ApplicationResponse":      internalHttp.ApplicationResponse{},
-		"CreateApplicationRequest": internalHttp.CreateApplicationRequest{},
-		"EditApplicationRequest":   internalHttp.EditApplicationRequest{},
-		"CancelApplicationRequest": internalHttp.CancelApplicationRequest{},
-		"SubmitApplicationRequest": internalHttp.SubmitApplicationRequest{},
-		"ApplicationListResponse":  internalHttp.ApplicationListResponse{},
-		"PlatformAccountResponse":  internalHttp.PlatformAccountResponse{},
-		"SubmissionResponse":       internalHttp.SubmissionResponse{},
-		"DocumentResponse":         internalHttp.DocumentResponse{},
-		"ActionResponse":           internalHttp.ActionResponse{},
-		"ErrorResponse":            internalHttp.ErrorResponse{},
-		"FieldError":               validation.FieldError{},
-		"ValidationResult":         validation.ValidationResult{},
+		"CompanyResponse":           internalHttp.CompanyResponse{},
+		"CreateCompanyRequest":      internalHttp.CreateCompanyRequest{},
+		"EditCompanyRequest":        internalHttp.EditCompanyRequest{},
+		"ArchiveCompanyRequest":     internalHttp.ArchiveCompanyRequest{},
+		"CompanyListResponse":       internalHttp.CompanyListResponse{},
+		"ApplicationResponse":       internalHttp.ApplicationResponse{},
+		"CreateApplicationRequest":  internalHttp.CreateApplicationRequest{},
+		"EditApplicationRequest":    internalHttp.EditApplicationRequest{},
+		"CancelApplicationRequest":  internalHttp.CancelApplicationRequest{},
+		"SubmitApplicationRequest":  internalHttp.SubmitApplicationRequest{},
+		"SubmitApplicationResponse": internalHttp.SubmitApplicationResponse{},
+		"ApplicationListResponse":   internalHttp.ApplicationListResponse{},
+		"PlatformAccountResponse":   internalHttp.PlatformAccountResponse{},
+		"SubmissionResponse":        internalHttp.SubmissionResponse{},
+		"DocumentResponse":          internalHttp.DocumentResponse{},
+		"ActionResponse":            internalHttp.ActionResponse{},
+		"ErrorResponse":             internalHttp.ErrorResponse{},
+		"FieldError":                validation.FieldError{},
+		"ValidationResult":          validation.ValidationResult{},
 	}
 
 	schemaNames := make([]string, 0, len(dtoMap))
@@ -829,7 +838,9 @@ func attachOperation(doc *openapi3.T, op OperationDefinition) {
 		// Content Types and Schemas
 		for _, ct := range respDef.ContentTypes {
 			var sRef *openapi3.SchemaRef
-			if respDef.IsBinary {
+			if respDef.SchemaBuilder != nil {
+				sRef = respDef.SchemaBuilder()
+			} else if respDef.IsBinary {
 				sRef = &openapi3.SchemaRef{
 					Value: &openapi3.Schema{
 						Type:   &openapi3.Types{"string"},

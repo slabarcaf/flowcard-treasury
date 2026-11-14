@@ -2,6 +2,8 @@ export type AppScreen = 'landing' | 'login' | 'onboarding' | 'dashboard' | 'port
 
 const SCREEN_BY_HASH: Record<string, AppScreen> = {
   '#bridge-capital': 'dashboard',
+  '#login': 'login',
+  '#onboarding': 'onboarding',
   '#portal': 'portal',
 };
 
