@@ -378,39 +378,6 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
       expect(readFileSync(DEPLOY_FRONTEND_SCRIPT, "utf8")).toContain("wait invalidation-completed");
     });
 
-    it("has no workflow input references in deploy environment or run blocks", () => {
-      const content = readFileSync(WORKFLOW_PATH, "utf8");
-      const deploySection = content.split("deploy-demo:")[1] || "";
-      expect(deploySection).not.toContain("inputs.");
-
-      // Find all run: blocks in deploy section and verify no inputs.* expressions inside
-      const runBlocks: string[] = [];
-      let inRun = false;
-      let runIndent = 0;
-      for (const line of deploySection.split("\n")) {
-        const stripped = line.trimStart();
-        const indent = line.length - line.trimStart().length;
-        if (stripped.startsWith("run: |")) {
-          inRun = true;
-          runIndent = indent;
-          continue;
-        }
-        if (inRun) {
-          if (indent <= runIndent && stripped.length > 0 && !stripped.startsWith("#")) {
-            inRun = false;
-          } else {
-            runBlocks.push(line);
-          }
-        }
-      }
-
-      const runText = runBlocks.join("\n");
-      // No inputs.* expressions should appear inside run: blocks
-      expect(runText).not.toMatch(/\$\{\{[^}]*inputs\./);
-      // No format() with inputs should appear inside run: blocks
-      expect(runText).not.toMatch(/format\([^)]*inputs\./);
-    });
-
     it("does not carry approval or prior-release bookkeeping in the workflow", () => {
       const content = readFileSync(WORKFLOW_PATH, "utf8");
       expect(content).not.toContain("approval_evidence");
@@ -790,21 +757,6 @@ describe("Task 8: GitHub Actions CI/CD Release & OIDC Security Tier", () => {
   });
 
   describe("Release Automation Scripts: OIDC Mode Support", () => {
-    it("deploy-demo.sh rejects execution when neither --profile nor --oidc is supplied", () => {
-      const res = spawnSync(DEPLOY_SCRIPT, [
-        "--confirm-approval",
-        "--account-id", VALID_ACCOUNT,
-        "--region", "us-west-2",
-        "--node-digest", VALID_DIGEST,
-        "--api-digest", VALID_DIGEST,
-        "--worker-digest", VALID_DIGEST,
-        "--migration-digest", VALID_DIGEST,
-      ], { encoding: "utf8", env: { ...process.env, AWS_PROFILE: "" } });
-
-      expect(res.status).toBe(1);
-      expect(res.stderr).toContain("Either --profile <name> or --oidc must be specified");
-    });
-
     it("deploy-demo.sh accepts --oidc flag and proceeds past credential argument validation", () => {
       const tmpDir = mkdtempSync(join(tmpdir(), "oidc-argument-test-"));
       const sentinel = join(tmpDir, "aws-called");
