@@ -827,6 +827,7 @@ exit 42
           "--migration-digest", VALID_DIGEST,
         ], {
           encoding: "utf8",
+          timeout: 3000,
           env: {
             ...process.env,
             PATH: `${tmpDir}:${process.env.PATH ?? ""}`,
@@ -871,17 +872,54 @@ exit 42
     });
 
     it("deploy-frontend.sh accepts --oidc flag and proceeds past credential argument validation", () => {
-      const res = spawnSync(DEPLOY_FRONTEND_SCRIPT, [
-        "--confirm-approval",
-        "--oidc",
-        "--account-id", VALID_ACCOUNT,
-        "--region", "us-west-2",
-        "--bucket", "flowcard-demo-frontend-assets",
-        "--distribution-id", "E1234567890",
-      ], { encoding: "utf8" });
+      const tmpDir = mkdtempSync(join(tmpdir(), "oidc-frontend-argument-test-"));
+      const sentinel = join(tmpDir, "aws-called");
+      try {
+        const mockAws = join(tmpDir, "aws");
+        writeFileSync(mockAws, `#!/usr/bin/env bash
+printf '%s\\n' "$*" > "$AWS_CALL_SENTINEL"
+exit 42
+`);
+        chmodSync(mockAws, 0o755);
 
-      expect(res.stderr).not.toContain("--profile is required");
-      expect(res.stderr).not.toContain("Unknown option");
+        const res = spawnSync(DEPLOY_FRONTEND_SCRIPT, [
+          "--confirm-approval",
+          "--oidc",
+          "--account-id", VALID_ACCOUNT,
+          "--region", "us-west-2",
+          "--bucket", "flowcard-demo-frontend-assets",
+          "--distribution-id", "E1234567890",
+        ], {
+          encoding: "utf8",
+          timeout: 3000,
+          env: {
+            ...process.env,
+            PATH: `${tmpDir}:/usr/bin:/bin`,
+            AWS_PROFILE: "",
+            AWS_DEFAULT_PROFILE: "",
+            AWS_ACCESS_KEY_ID: "",
+            AWS_SECRET_ACCESS_KEY: "",
+            AWS_SESSION_TOKEN: "",
+            AWS_SECURITY_TOKEN: "",
+            AWS_WEB_IDENTITY_TOKEN_FILE: "",
+            AWS_ROLE_ARN: "",
+            AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "",
+            AWS_CONTAINER_CREDENTIALS_FULL_URI: "",
+            AWS_EC2_METADATA_DISABLED: "true",
+            AWS_CONFIG_FILE: join(tmpDir, "config"),
+            AWS_SHARED_CREDENTIALS_FILE: join(tmpDir, "credentials"),
+            AWS_CALL_SENTINEL: sentinel,
+          },
+        });
+
+        expect(res.error).toBeUndefined();
+        expect(res.status).toBe(42);
+        expect(res.stderr).not.toContain("--profile is required");
+        expect(res.stderr).not.toContain("Unknown option");
+        expect(readFileSync(sentinel, "utf8").trim()).toBe("sts get-caller-identity --output json");
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
     });
 
     it("rollback-demo.sh rejects execution when neither --profile nor --oidc is supplied", () => {
@@ -899,18 +937,55 @@ exit 42
     });
 
     it("rollback-demo.sh accepts --oidc flag and proceeds past credential argument validation", () => {
-      const res = spawnSync(ROLLBACK_SCRIPT, [
-        "--confirm-approval",
-        "--oidc",
-        "--account-id", VALID_ACCOUNT,
-        "--region", "us-west-2",
-        "--node-revision", "5",
-        "--api-revision", "4",
-        "--worker-revision", "4",
-      ], { encoding: "utf8" });
+      const tmpDir = mkdtempSync(join(tmpdir(), "oidc-rollback-argument-test-"));
+      const sentinel = join(tmpDir, "aws-called");
+      try {
+        const mockAws = join(tmpDir, "aws");
+        writeFileSync(mockAws, `#!/usr/bin/env bash
+printf '%s\\n' "$*" > "$AWS_CALL_SENTINEL"
+exit 42
+`);
+        chmodSync(mockAws, 0o755);
 
-      expect(res.stderr).not.toContain("Either --profile <name> or --oidc must be specified");
-      expect(res.stderr).not.toContain("Unknown option");
+        const res = spawnSync(ROLLBACK_SCRIPT, [
+          "--confirm-approval",
+          "--oidc",
+          "--account-id", VALID_ACCOUNT,
+          "--region", "us-west-2",
+          "--node-revision", "5",
+          "--api-revision", "4",
+          "--worker-revision", "4",
+        ], {
+          encoding: "utf8",
+          timeout: 3000,
+          env: {
+            ...process.env,
+            PATH: `${tmpDir}:/usr/bin:/bin`,
+            AWS_PROFILE: "",
+            AWS_DEFAULT_PROFILE: "",
+            AWS_ACCESS_KEY_ID: "",
+            AWS_SECRET_ACCESS_KEY: "",
+            AWS_SESSION_TOKEN: "",
+            AWS_SECURITY_TOKEN: "",
+            AWS_WEB_IDENTITY_TOKEN_FILE: "",
+            AWS_ROLE_ARN: "",
+            AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "",
+            AWS_CONTAINER_CREDENTIALS_FULL_URI: "",
+            AWS_EC2_METADATA_DISABLED: "true",
+            AWS_CONFIG_FILE: join(tmpDir, "config"),
+            AWS_SHARED_CREDENTIALS_FILE: join(tmpDir, "credentials"),
+            AWS_CALL_SENTINEL: sentinel,
+          },
+        });
+
+        expect(res.error).toBeUndefined();
+        expect(res.status).toBe(42);
+        expect(res.stderr).not.toContain("Either --profile <name> or --oidc must be specified");
+        expect(res.stderr).not.toContain("Unknown option");
+        expect(readFileSync(sentinel, "utf8").trim()).toBe("sts get-caller-identity --output json");
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
     });
 
     it("deploy-demo.sh resolves infrastructure without Terraform in PATH when --infra-outputs-file is provided", () => {
