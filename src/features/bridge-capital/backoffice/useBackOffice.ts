@@ -14,11 +14,18 @@ import { buildOffer } from '../policy/pricing.js';
 
 export type View =
   | { screen: 'overview' }
+  | { screen: 'applications'; listState: ApplicationsListState }
+  | { screen: 'application'; applicationId: string; listState: ApplicationsListState }
   | { screen: 'customers' }
   | { screen: 'rules' }
   | { screen: 'admin' }
   | { screen: 'request'; requestId: string }
   | { screen: 'bridge'; bridgeId: string };
+
+export interface ApplicationsListState {
+  cursor?: string;
+  previousCursors: Array<string | undefined>;
+}
 
 export type RequestOutcome = 'APPROVED' | 'DECLINED' | 'ESCALATED';
 

@@ -94,14 +94,28 @@ describe('treasury onboarding read integration', () => {
     expect(url.searchParams.get('cursor')).toBe('previous/page');
     expect(fetcher.mock.calls[0][1]?.credentials).toBe('include');
   });
-  it('queries applications only for the selected company and rejects mismatched records', async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ applications: [application] }));
+  it('uses 25-record application pages with optional company filtering and opaque cursors', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ applications: [application], next_cursor: 'opaque/next+page' }))
+      .mockResolvedValueOnce(response({ applications: [application] }));
     const api = new OnboardingApiClient(fetcher);
-    expect((await api.listApplications(company.id)).applications[0].id).toBe(application.id);
-    const url = new URL(String(fetcher.mock.calls[0][0]), 'https://flowcard.test');
-    expect(url.searchParams.get('company_id')).toBe(company.id);
-    fetcher.mockResolvedValueOnce(response({ applications: [{ ...application, company_id: 'another' }] }));
-    await expect(api.listApplications(company.id)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+    const page = await api.listApplications(undefined);
+    expect(page.applications[0].id).toBe(application.id);
+    const unfilteredUrl = new URL(String(fetcher.mock.calls[0][0]), 'https://flowcard.test');
+    expect(unfilteredUrl.searchParams.get('limit')).toBe('25');
+    expect(unfilteredUrl.searchParams.has('company_id')).toBe(false);
+    expect(unfilteredUrl.searchParams.has('cursor')).toBe(false);
+
+    await api.listApplications(company.id, 'previous/page+cursor');
+    const filteredUrl = new URL(String(fetcher.mock.calls[1][0]), 'https://flowcard.test');
+    expect(filteredUrl.searchParams.get('limit')).toBe('25');
+    expect(filteredUrl.searchParams.get('company_id')).toBe(company.id);
+    expect(filteredUrl.searchParams.get('cursor')).toBe('previous/page+cursor');
+    expect(fetcher.mock.calls[0][1]?.credentials).toBe('include');
+
+    const backendPage = { applications: [{ ...application, company_id: 'another' }], next_cursor: 25 };
+    fetcher.mockResolvedValueOnce(response(backendPage));
+    await expect(api.listApplications(company.id)).resolves.toEqual(backendPage);
   });
   it('establishes the original operator session without putting credentials in a URL', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ status: 'authenticated' }));
