@@ -746,10 +746,13 @@ func (r *Repository) GetApplication(ctx context.Context, id string) (*domain.Onb
 		paid = *platformAccountID
 	}
 
-	// Load live company from onboarding.companies to provide live reference context for documents attached post-draft
+	// Drafts need current company context for person-reference validation. Submitted
+	// applications retain their persisted snapshot if a live-company read fails.
 	var liveCompany *domain.Company
 	if liveComp, lErr := r.GetCompany(ctx, companyID); lErr == nil {
 		liveCompany = liveComp
+	} else if domain.ApplicationStatus(status) == domain.ApplicationStatusDraft {
+		return nil, fmt.Errorf("failed to load live company for draft application: %w", lErr)
 	}
 
 	reconApp, err := domain.ReconstituteOnboardingApplication(domain.ReconstituteApplicationParams{
@@ -4006,7 +4009,13 @@ func (r *Repository) ListApplications(ctx context.Context, filter ListApplicatio
 		}
 		var liveComp *domain.Company
 		if ar.companyID != "" {
-			liveComp, _ = r.GetCompany(ctx, ar.companyID)
+			liveComp, err = r.GetCompany(ctx, ar.companyID)
+			if err != nil && domain.ApplicationStatus(ar.status) == domain.ApplicationStatusDraft {
+				return nil, fmt.Errorf("failed to load live company for draft application %q: %w", ar.appID, err)
+			}
+			if err != nil {
+				liveComp = nil
+			}
 		}
 		app, err := reconstituteScannedApplication(ar, subs, liveComp)
 		if err != nil {

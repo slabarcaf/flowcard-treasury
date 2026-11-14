@@ -61,9 +61,11 @@ const (
 
 // Domain sentinel errors for Onboarding Application.
 var (
-	ErrEmptyApplicationID                = errors.New("application ID must not be empty")
-	ErrEmptyPlatformAccountID            = errors.New("platform account ID must not be empty")
-	ErrEmptyCompanyReference             = errors.New("company reference must not be empty")
+	ErrEmptyApplicationID     = errors.New("application ID must not be empty")
+	ErrEmptyPlatformAccountID = errors.New("platform account ID must not be empty")
+	ErrEmptyCompanyReference  = errors.New("company reference must not be empty")
+	// ErrLiveCompanyUnavailable prevents draft edits from validating against a stale snapshot.
+	ErrLiveCompanyUnavailable            = errors.New("live company is required to edit a DRAFT application")
 	ErrInvalidApplicationStatus          = errors.New("invalid application status")
 	ErrInvalidSubmissionStatus           = errors.New("invalid submission status")
 	ErrInvalidInformationRequestStatus   = errors.New("invalid information request status")
@@ -345,6 +347,7 @@ func (p ApplicationPlatform) Clone() ApplicationPlatform {
 type OnboardingApplication struct {
 	id                    string
 	company               *Company
+	liveCompany           *Company
 	platform              ApplicationPlatform
 	status                ApplicationStatus
 	documents             []Document
@@ -370,8 +373,9 @@ func NewDraftApplication(id string, company *Company, creator string) (*Onboardi
 
 	now := time.Now().UTC()
 	return &OnboardingApplication{
-		id:      cleanID,
-		company: company.DeepCopy(),
+		id:          cleanID,
+		company:     company.DeepCopy(),
+		liveCompany: company.DeepCopy(),
 		platform: ApplicationPlatform{
 			Name:        "AIRWALLEX",
 			Environment: "sandbox",
@@ -391,7 +395,7 @@ func NewDraftApplication(id string, company *Company, creator string) (*Onboardi
 type ReconstituteApplicationParams struct {
 	ID                    string
 	Company               *Company
-	LiveCompany           *Company // Optional live company context for validating documents attached post-draft
+	LiveCompany           *Company // Optional current-company context for draft edits and post-draft documents.
 	Platform              ApplicationPlatform
 	Status                ApplicationStatus
 	Documents             []Document
@@ -620,9 +624,15 @@ func ReconstituteOnboardingApplication(params ReconstituteApplicationParams) (*O
 		}
 	}
 
+	var liveCompany *Company
+	if params.LiveCompany != nil {
+		liveCompany = params.LiveCompany.DeepCopy()
+	}
+
 	app := &OnboardingApplication{
 		id:                    cleanID,
 		company:               params.Company.DeepCopy(),
+		liveCompany:           liveCompany,
 		platform:              params.Platform.Clone(),
 		status:                params.Status,
 		creator:               params.Creator,
@@ -651,6 +661,9 @@ func (a *OnboardingApplication) ID() string {
 // Company returns a deep copy of the embedded Company.
 // While DRAFT, reflects current details. When submitted, reflects frozen snapshot.
 func (a *OnboardingApplication) Company() *Company {
+	if a.status == ApplicationStatusDraft && a.liveCompany != nil {
+		return a.liveCompany.DeepCopy()
+	}
 	return a.company.DeepCopy()
 }
 
@@ -730,6 +743,7 @@ func (a *OnboardingApplication) UpdateDraftCompany(company *Company) error {
 		return ErrEmptyCompanyReference
 	}
 	a.company = company.DeepCopy()
+	a.liveCompany = company.DeepCopy()
 	a.touch()
 	return nil
 }
@@ -743,14 +757,22 @@ func (a *OnboardingApplication) UpdateOnboardingDetails(details PlatformOnboardi
 		return errors.New("onboarding details can only be edited in DRAFT or INFORMATION_REQUIRED status")
 	}
 
-	// Validate person references against embedded company
+	companyForReferences := a.company
+	if a.status == ApplicationStatusDraft {
+		if a.liveCompany == nil {
+			return ErrLiveCompanyUnavailable
+		}
+		companyForReferences = a.liveCompany
+	}
+
+	// DRAFT references use the current Company; information requests use the frozen snapshot.
 	if details.PrimaryContactPersonID != "" {
-		if _, ok := a.company.Person(details.PrimaryContactPersonID); !ok {
+		if _, ok := companyForReferences.Person(details.PrimaryContactPersonID); !ok {
 			return fmt.Errorf("primary contact person %q does not exist in company", details.PrimaryContactPersonID)
 		}
 	}
 	for _, pd := range details.People {
-		if _, ok := a.company.Person(pd.PersonID); !ok {
+		if _, ok := companyForReferences.Person(pd.PersonID); !ok {
 			return fmt.Errorf("platform details person %q does not exist in company", pd.PersonID)
 		}
 	}

@@ -476,6 +476,92 @@ func TestCompanyCRUDAndPartialEdits(t *testing.T) {
 	}
 }
 
+func TestDraftApplicationPatchUsesPersonAddedToLiveCompany(t *testing.T) {
+	_, handler := setupTestServer(t)
+
+	createCompany := internalhttp.CreateCompanyRequest{LegalName: "Live Person Test LLC"}
+	req := newAuthRequest("POST", "/api/companies", createCompany)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /api/companies status = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	var company internalhttp.CompanyResponse
+	if err := json.NewDecoder(rec.Body).Decode(&company); err != nil {
+		t.Fatalf("decode created company: %v", err)
+	}
+
+	createApplication := internalhttp.CreateApplicationRequest{
+		CompanyID:    company.ID,
+		PlatformName: "AIRWALLEX",
+		Environment:  "sandbox",
+	}
+	req = newAuthRequest("POST", "/api/onboarding-applications", createApplication)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /api/onboarding-applications status = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	var application internalhttp.ApplicationResponse
+	if err := json.NewDecoder(rec.Body).Decode(&application); err != nil {
+		t.Fatalf("decode created application: %v", err)
+	}
+
+	const personID = "person_added_after_draft"
+	people := []internalhttp.PersonDTO{{
+		ID:          personID,
+		FirstName:   "Ada",
+		LastName:    "Lovelace",
+		Role:        "Director",
+		DateOfBirth: "1985-01-01",
+	}}
+	addPerson := internalhttp.EditCompanyRequest{
+		ExpectedRevision: company.Revision,
+		People:           &people,
+	}
+	req = newAuthRequest("PATCH", "/api/companies/"+company.ID, addPerson)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/companies status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var updatedCompany internalhttp.CompanyResponse
+	if err := json.NewDecoder(rec.Body).Decode(&updatedCompany); err != nil {
+		t.Fatalf("decode updated company: %v", err)
+	}
+	if len(updatedCompany.People) != 1 || updatedCompany.People[0].ID != personID {
+		t.Fatalf("PATCH /api/companies person ID = %v, want persisted ID %q", updatedCompany.People, personID)
+	}
+
+	editApplication := internalhttp.EditApplicationRequest{
+		ExpectedRevision: application.Revision,
+		OnboardingDetails: internalhttp.PlatformOnboardingDetailsDTO{
+			People: []internalhttp.PersonPlatformDetailsDTO{{
+				PersonID:      updatedCompany.People[0].ID,
+				PlatformRoles: []string{"BENEFICIAL_OWNER"},
+			}},
+		},
+	}
+	req = newAuthRequest("PATCH", "/api/onboarding-applications/"+application.ID, editApplication)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/onboarding-applications status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var updatedApplication internalhttp.ApplicationResponse
+	if err := json.NewDecoder(rec.Body).Decode(&updatedApplication); err != nil {
+		t.Fatalf("decode updated application: %v", err)
+	}
+	if got := updatedApplication.Platform.OnboardingDetails.People; len(got) != 1 || got[0].PersonID != updatedCompany.People[0].ID {
+		t.Fatalf("application person IDs = %v, want persisted Company person ID %q", got, updatedCompany.People[0].ID)
+	}
+	if len(updatedApplication.Company.People) != 1 || updatedApplication.Company.People[0].ID != updatedCompany.People[0].ID {
+		t.Fatalf("updated application Company people = %v, want live person ID %q", updatedApplication.Company.People, updatedCompany.People[0].ID)
+	}
+	t.Logf("synthetic local journey company_id=%s application_id=%s person_id=%s status=%s",
+		company.ID, application.ID, updatedCompany.People[0].ID, updatedApplication.Status)
+}
+
 // 4. Application Live vs. Frozen Company Resolution
 func TestApplicationLiveVsFrozenCompanyResolution(t *testing.T) {
 	repo, handler := setupTestServer(t)
