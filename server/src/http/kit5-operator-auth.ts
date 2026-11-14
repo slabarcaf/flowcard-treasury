@@ -10,6 +10,11 @@ export interface Kit5OperatorAuthConfig {
   allowedOrigins?: readonly string[];
 }
 
+export interface Kit5OperatorRequestOptions {
+  /** Permit same-origin Fetch Metadata fallback for read-only API requests only. */
+  allowSameOriginReadWithoutOrigin?: boolean;
+}
+
 export function handleKit5Session(
   request: IncomingMessage,
   response: ServerResponse,
@@ -40,12 +45,16 @@ export function authorizeKit5OperatorRequest(
   request: IncomingMessage,
   response: ServerResponse,
   config: Kit5OperatorAuthConfig,
+  options: Kit5OperatorRequestOptions = {},
 ): boolean {
   if (!config.operatorToken || config.operatorToken.length < 32 || !config.allowedOrigins?.length) {
     send(response, 503, { error: "kit5_operator_auth_unconfigured" });
     return false;
   }
-  if (!allowOrigin(request, response, config.allowedOrigins)) {
+  const hasAllowedOrigin = request.headers.origin !== undefined
+    ? allowOrigin(request, response, config.allowedOrigins)
+    : options.allowSameOriginReadWithoutOrigin === true && allowSameOriginRead(request, response, config.allowedOrigins);
+  if (!hasAllowedOrigin) {
     send(response, 403, { error: "origin_forbidden" });
     return false;
   }
@@ -129,6 +138,29 @@ function allowOrigin(request: IncomingMessage, response: ServerResponse, allowed
   response.setHeader("Access-Control-Allow-Origin", origin);
   response.setHeader("Access-Control-Allow-Credentials", "true");
   response.setHeader("Vary", "Origin");
+  return true;
+}
+
+/** Authorize browser same-origin GET/HEAD when the browser omits Origin. */
+function allowSameOriginRead(
+  request: IncomingMessage,
+  response: ServerResponse,
+  allowedOrigins: readonly string[],
+): boolean {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  if (request.headers["sec-fetch-site"] !== "same-origin") return false;
+
+  const referer = request.headers.referer;
+  if (!referer) return false;
+  try {
+    const refererUrl = new URL(referer);
+    if ((refererUrl.protocol !== "http:" && refererUrl.protocol !== "https:") ||
+        refererUrl.username || refererUrl.password || !allowedOrigins.includes(refererUrl.origin)) return false;
+  } catch {
+    return false;
+  }
+
+  response.setHeader("Vary", "Origin, Referer, Sec-Fetch-Site");
   return true;
 }
 

@@ -306,6 +306,7 @@ describe("Onboarding Node Proxy Route (End-to-End)", () => {
 
         res.writeHead(200, {
           "content-type": "application/json",
+          "cache-control": "no-store",
           "x-custom-go-header": "test-value",
           "x-internal-secret-header": "must-be-stripped",
         });
@@ -326,6 +327,124 @@ describe("Onboarding Node Proxy Route (End-to-End)", () => {
   });
 
   const validSessionCookie = createOperatorSessionCookie(operatorToken, Date.now(), operatorId);
+
+  function createProxyHandler(allowedOrigins: readonly string[]) {
+    return createRequestHandler({
+      port: 0,
+      databaseUrl: "fixture",
+      airwallexClientId: "fixture",
+      airwallexApiKey: "fixture",
+      airwallexWebhookSecret: "fixture",
+      kit5OperatorToken: operatorToken,
+      kit5OperatorId: operatorId,
+      kit5AllowedOrigins: allowedOrigins,
+      onboardingServiceUrl: `http://127.0.0.1:${mockGoPort}`,
+      onboardingServiceSecret: serviceSecret,
+    });
+  }
+
+  it("serves authenticated same-origin reads without Origin through a local Node listener", async () => {
+    let proxyHandler: ReturnType<typeof createRequestHandler> | undefined;
+    let browserGetHeaders: IncomingMessage["headers"] | undefined;
+    const localServer = createServer((request, response) => {
+      if (!proxyHandler) {
+        response.writeHead(503);
+        response.end();
+        return;
+      }
+      if (request.method === "GET" && request.url === "/api/companies") {
+        browserGetHeaders = request.headers;
+      }
+      proxyHandler(request, response);
+    });
+
+    await new Promise<void>((resolve) => localServer.listen(0, "127.0.0.1", () => resolve()));
+    const address = localServer.address() as AddressInfo;
+    const localOrigin = `http://127.0.0.1:${address.port}`;
+    proxyHandler = createProxyHandler([localOrigin]);
+
+    try {
+      for (const method of ["GET", "HEAD"] as const) {
+        const result = await fetch(`${localOrigin}/api/companies`, {
+          method,
+          headers: {
+            cookie: `kit5_operator_session=${validSessionCookie}`,
+            referer: `${localOrigin}/#/onboarding`,
+            "sec-fetch-site": "same-origin",
+          },
+        });
+        expect(result.status).toBe(200);
+        expect(result.headers.get("vary")).toContain("Referer");
+        expect(result.headers.get("cache-control")).toBe("no-store");
+        expect(browserGetHeaders?.origin).toBeUndefined();
+        expect(browserGetHeaders?.referer).toBe(`${localOrigin}/#/onboarding`);
+        expect(browserGetHeaders?.["sec-fetch-site"]).toBe("same-origin");
+      }
+      expect(lastUpstreamRequest.method).toBe("HEAD");
+      expect(lastUpstreamRequest.headers?.authorization).toMatch(/^Bearer /);
+      expect(lastUpstreamRequest.headers?.cookie).toBeUndefined();
+    } finally {
+      await new Promise<void>((resolve, reject) => localServer.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
+  it("rejects cross-site or forged origins even with a valid session cookie", async () => {
+    const rejectedRequests: Array<{ allowedOrigins: readonly string[]; headers: Record<string, string> }> = [
+      { allowedOrigins: [allowedOrigin], headers: { referer: "https://attacker.example/page", "sec-fetch-site": "same-origin" } },
+      { allowedOrigins: [allowedOrigin], headers: { referer: `${allowedOrigin}/page`, "sec-fetch-site": "cross-site" } },
+      { allowedOrigins: [allowedOrigin], headers: { referer: `${allowedOrigin}/page`, "sec-fetch-site": "same-site" } },
+      { allowedOrigins: [allowedOrigin], headers: { origin: "null", referer: `${allowedOrigin}/page`, "sec-fetch-site": "same-origin" } },
+      { allowedOrigins: [allowedOrigin], headers: { origin: "", referer: `${allowedOrigin}/page`, "sec-fetch-site": "same-origin" } },
+      { allowedOrigins: [allowedOrigin], headers: { origin: "https://attacker.example", referer: `${allowedOrigin}/page`, "sec-fetch-site": "same-origin" } },
+      { allowedOrigins: [allowedOrigin], headers: { referer: "not a URL", "sec-fetch-site": "same-origin" } },
+      { allowedOrigins: [allowedOrigin], headers: { referer: "https://user:pass@app.flowcard.test/page", "sec-fetch-site": "same-origin" } },
+      { allowedOrigins: [allowedOrigin], headers: { referer: "blob:https://app.flowcard.test/document-id", "sec-fetch-site": "same-origin" } },
+      { allowedOrigins: ["ftp://app.flowcard.test"], headers: { referer: "ftp://app.flowcard.test/page", "sec-fetch-site": "same-origin" } },
+    ];
+
+    for (const testCase of rejectedRequests) {
+      const handler = createProxyHandler(testCase.allowedOrigins);
+      const request = Object.assign(Readable.from([]), {
+        method: "GET",
+        url: "/api/companies",
+        headers: { ...testCase.headers, cookie: `kit5_operator_session=${validSessionCookie}` },
+      }) as IncomingMessage;
+      const recorder = responseRecorder();
+      handler(request, recorder.response);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(recorder.status()).toBe(403);
+      expect(recorder.headers["cache-control"]).toBe("no-store");
+      expect(JSON.parse(recorder.body())).toMatchObject({ error: "origin_forbidden" });
+    }
+  });
+
+  it("keeps unauthenticated reads, writes, preflight, and session establishment strict", async () => {
+    const handler = createProxyHandler([allowedOrigin]);
+    const noOriginHeaders = {
+      cookie: `kit5_operator_session=${validSessionCookie}`,
+      referer: `${allowedOrigin}/#/onboarding`,
+      "sec-fetch-site": "same-origin",
+    };
+    const cases = [
+      { method: "PATCH", url: "/api/companies/comp_1", headers: noOriginHeaders, body: "{}", status: 403 },
+      { method: "OPTIONS", url: "/api/companies", headers: noOriginHeaders, body: "", status: 403 },
+      { method: "POST", url: "/api/kit5/session", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: operatorToken }), status: 403 },
+      { method: "GET", url: "/api/companies", headers: { origin: allowedOrigin }, body: "", status: 401 },
+    ] as const;
+
+    for (const testCase of cases) {
+      const request = Object.assign(Readable.from(testCase.body ? [testCase.body] : []), {
+        method: testCase.method,
+        url: testCase.url,
+        headers: testCase.headers,
+      }) as IncomingMessage;
+      const recorder = responseRecorder();
+      handler(request, recorder.response);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(recorder.status()).toBe(testCase.status);
+      expect(recorder.headers["cache-control"]).toBe("no-store");
+    }
+  });
 
   it("handles CORS preflight including PATCH, idempotency-key, and if-match headers", async () => {
     const handler = createRequestHandler({
