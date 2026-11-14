@@ -38,3 +38,20 @@ xcrun_db
 # Design reference screenshots (Mobbin export) — large, not ours to redistribute
 Revolut Business web Dec 2025/
 Revolut Business web Dec 2025.zip
+
+
+# OpenTofu / Terraform local directories and state files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tflock
+backend-*.hcl
+
+# Track container definitions even when a global rule ignores secrets directories.
+!infra/modules/secrets/
+infra/modules/secrets/*
+!infra/modules/secrets/main.tf
+!infra/modules/secrets/outputs.tf
+!infra/modules/secrets/variables.tf
+!infra/modules/secrets/versions.tf
