@@ -51,8 +51,8 @@ The final output layout is `.dev/dist/` for frontend assets and `.dev/server/`
 for backend output. Both build orders preserve the other build's files, and the
 frontend contains no backend code or fixtures. Release metadata and Vitest
 reports are also ignored under `.dev/`. Infrastructure documentation lives in
-`docs/infra/`; the README is 26 lines and detailed setup is in
-`docs/development.md`. `CLAUDE.md` imports the canonical `AGENTS.md`.
+`docs/infra/`; the README is 26 lines and the local setup guidance is in
+`AGENTS.md`. `CLAUDE.md` imports the canonical `AGENTS.md`.
 
 Verification passed: 141 focused Node tests, cross-language Go authentication,
 138 offline safety checks, both build orders, focused lint, link checks, and the

@@ -147,5 +147,5 @@ bridge amounts. Existing bridge servicing remains owned by the bridge ledger.
 ## See also
 
 - [Project README](/README.md)
-- [Editing guide](/docs/EDITING.md)
-- [Salesforce snapshot implementation plan](/docs/plans/20261021-salesforce-snapshot-implementation-plan.md)
+- [Frontend development instructions](/AGENTS.md#frontend-development)
+- [Salesforce snapshot implementation plan](/docs/plans/completed/20261021-salesforce-snapshot-implementation-plan.md)
