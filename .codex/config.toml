@@ -1,0 +1,16 @@
+[marketplaces.agent-toolkit-for-aws]
+source_type = "git"
+source = "https://github.com/aws/agent-toolkit-for-aws.git"
+
+[marketplaces.airwallex-marketplace]
+source_type = "git"
+source = "https://github.com/airwallex/airwallex-marketplace.git"
+
+[plugins."aws-core@agent-toolkit-for-aws"]
+enabled = true
+
+[plugins."airwallex-agentos@airwallex-marketplace"]
+enabled = true
+
+[mcp_servers.airwallex-docs]
+url = "https://mcp.sandbox.airwallex.com/docs"

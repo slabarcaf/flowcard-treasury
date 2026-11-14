@@ -162,3 +162,5 @@ schema. The ledger and onboarding API health endpoints use ports 8000 and 8080.
   spawn subagents.
 - Create new worktrees from `develop` under `.worktrees/<branch-name>`; never
   base one on another worktree. Do not copy the root `.env` into a worktree.
+- For Codex, run `codex plugin marketplace upgrade` in the repo to download the
+  AWS and Airwallex marketplaces declared in `.codex/config.toml`.
