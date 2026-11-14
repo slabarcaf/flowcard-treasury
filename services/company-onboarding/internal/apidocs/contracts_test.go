@@ -42,19 +42,20 @@ const (
 
 // RouteInventoryItem captures the contract specification for a registered endpoint.
 type RouteInventoryItem struct {
-	Method          string
-	Path            string
-	Audience        string // "operator", "public", or "internal-webhook"
-	RequestType     reflect.Type
-	ResponseType    reflect.Type
-	SuccessStatus   int
-	ErrorStatuses   []int
-	IsMultipart     bool
-	IsBinaryStream  bool
-	QueryParameters []string
-	PathParameters  []string
-	ContentTypes    []string
-	Notes           string
+	Method           string
+	Path             string
+	Audience         string // "operator", "public", or "internal-webhook"
+	RequestType      reflect.Type
+	ResponseType     reflect.Type
+	SuccessStatus    int
+	ErrorStatuses    []int
+	IsMultipart      bool
+	IsBinaryStream   bool
+	QueryParameters  []string
+	PathParameters   []string
+	HeaderParameters []string
+	ContentTypes     []string
+	Notes            string
 }
 
 // FullInventory returns the exhaustive contract specification of all 25 implemented routes.
@@ -245,16 +246,17 @@ func FullInventory() []RouteInventoryItem {
 			Notes:          "Checks readiness for platform submission. Returns 200 on pass; 422 with same ValidationResult on failure.",
 		},
 		{
-			Method:         "POST",
-			Path:           "/api/onboarding-applications/{id}/submit",
-			Audience:       "operator",
-			PathParameters: []string{"id"},
-			RequestType:    reflect.TypeOf(internalHttp.SubmitApplicationRequest{}),
-			ResponseType:   reflect.TypeOf(internalHttp.ErrorResponse{}),
-			SuccessStatus:  0, // Blocked in implementation
-			ErrorStatuses:  []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusUnprocessableEntity, http.StatusInternalServerError, http.StatusServiceUnavailable},
-			ContentTypes:   []string{"application/json"},
-			Notes:          "Blocked fail-closed! Returns 422 SUBMISSION_CONTRACT_BLOCKED pending deferred revision policy freeze.",
+			Method:           "POST",
+			Path:             "/api/onboarding-applications/{id}/submit",
+			Audience:         "operator",
+			PathParameters:   []string{"id"},
+			HeaderParameters: []string{"Idempotency-Key"},
+			RequestType:      reflect.TypeOf(internalHttp.SubmitApplicationRequest{}),
+			ResponseType:     reflect.TypeOf(internalHttp.SubmitApplicationResponse{}),
+			SuccessStatus:    http.StatusAccepted,
+			ErrorStatuses:    []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusInternalServerError, http.StatusServiceUnavailable},
+			ContentTypes:     []string{"application/json"},
+			Notes:            "Requires Idempotency-Key. Atomically queues a durable submission and returns 202 with IDs and a Location for the existing submissions collection; readiness failures return 422.",
 		},
 		{
 			Method:         "GET",
@@ -921,7 +923,7 @@ func TestTask1_RouteInventoryAndWiringParity(t *testing.T) {
 // 1. Array responses (platform accounts, submissions, documents) are raw JSON arrays, not envelopes.
 // 2. Query parameter filters: GET /api/companies (limit, status, cursor); GET /api/onboarding-applications (company_id, platform, status, limit, cursor).
 // 3. Document download serves PDF/JPEG/PNG binary content with Content-Disposition: attachment.
-// 4. Submit application endpoint is blocked fail-closed (returns 422 SUBMISSION_CONTRACT_BLOCKED).
+// 4. Submit application endpoint durably queues work and returns a 202 receipt.
 // 5. Webhook error responses use map[string]string{"error": "..."} instead of ErrorResponse.
 func TestTask1_ContractAudit_SubtletiesAndGating(t *testing.T) {
 	// 1. Array responses are raw JSON arrays
@@ -937,16 +939,17 @@ func TestTask1_ContractAudit_SubtletiesAndGating(t *testing.T) {
 		t.Errorf("expected PlatformAccountResponse to serialize as top-level JSON array, got %T", paDecoded)
 	}
 
-	// 2. Submit application blocked response format
-	blockedErr := internalHttp.ErrorResponse{
-		Code:    "SUBMISSION_CONTRACT_BLOCKED",
-		Message: "submit API action is blocked pending explicit resolution of deferred reviewed revisions policy; fail-closed on unapproved submission contract",
+	// 2. Submit application response contains a durable receipt.
+	submitResponse := internalHttp.SubmitApplicationResponse{
+		Code:          "OK",
+		ApplicationID: "app_123",
+		SubmissionID:  "sub_123",
 	}
-	blockedBytes, _ := json.Marshal(blockedErr)
-	var blockedDecoded map[string]any
-	_ = json.Unmarshal(blockedBytes, &blockedDecoded)
-	if blockedDecoded["code"] != "SUBMISSION_CONTRACT_BLOCKED" {
-		t.Errorf("expected code SUBMISSION_CONTRACT_BLOCKED, got %v", blockedDecoded["code"])
+	submitBytes, _ := json.Marshal(submitResponse)
+	var submitDecoded map[string]any
+	_ = json.Unmarshal(submitBytes, &submitDecoded)
+	if submitDecoded["code"] != "OK" || submitDecoded["application_id"] != "app_123" || submitDecoded["submission_id"] != "sub_123" {
+		t.Errorf("submit response = %v, want OK receipt IDs", submitDecoded)
 	}
 
 	// 3. Webhook error response format: map[string]string{"error": "..."}
@@ -1365,10 +1368,10 @@ func TestTask5_SchemaVsEmittedHandlerResponses(t *testing.T) {
 		"company_revision": 1
 	}`)
 
-	// 8. Gate 422: SUBMISSION_CONTRACT_BLOCKED error payload
+	// 8. Readiness 422 error payload
 	validateComponent("ErrorResponse", `{
-		"code": "SUBMISSION_CONTRACT_BLOCKED",
-		"message": "submit API action is blocked pending explicit resolution of deferred reviewed revisions policy; fail-closed on unapproved submission contract"
+		"code": "IDEMPOTENCY_CONFLICT",
+		"message": "Idempotency-Key was used with a different request"
 	}`)
 
 	// 9. ErrorResponse with field errors (400 validation error)

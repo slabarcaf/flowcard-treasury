@@ -3,6 +3,8 @@ export type LegacyDemoVersion = 'kit5' | 'gd';
 
 const SCREEN_BY_HASH: Record<string, AppScreen> = {
   '#bridge-capital': 'dashboard',
+  '#login': 'login',
+  '#onboarding': 'onboarding',
   '#portal': 'portal',
   '#kit5': 'kit5',
 };

@@ -887,6 +887,10 @@ func (r *Repository) UpdateApplication(ctx context.Context, app *domain.Onboardi
 	return nil
 }
 
+// SubmissionReadinessCheck runs against the persisted Company and Application
+// locked by this transaction.
+type SubmissionReadinessCheck func(*domain.Company, *domain.OnboardingApplication) error
+
 // InitiateSubmissionParams carries parameters for the atomic submission transaction.
 // All fields are explicit command inputs without backwards-compatibility fallback objects.
 type InitiateSubmissionParams struct {
@@ -904,6 +908,7 @@ type InitiateSubmissionParams struct {
 	RequestFingerprint   string
 	ResponseStatusCode   int
 	ResponseBody         []byte
+	ReadinessCheck       SubmissionReadinessCheck
 }
 
 // InitiateSubmissionResult contains the durable response of InitiateSubmission.
@@ -970,7 +975,8 @@ func (r *Repository) InitiateSubmission(ctx context.Context, params InitiateSubm
 		)
 		ON CONFLICT (key_scope, idempotency_key) DO NOTHING
 	`
-	if _, err := tx.Exec(ctx, idempInsertSQL, params.IdempotencyScope, params.IdempotencyKey, params.RequestFingerprint); err != nil {
+	idempInsertTag, err := tx.Exec(ctx, idempInsertSQL, params.IdempotencyScope, params.IdempotencyKey, params.RequestFingerprint)
+	if err != nil {
 		return nil, fmt.Errorf("failed to reserve idempotency key: %w", err)
 	}
 
@@ -1012,6 +1018,9 @@ func (r *Repository) InitiateSubmission(ctx context.Context, params InitiateSubm
 			ResponseStatusCode: sc,
 			ResponseBody:       existingBody,
 		}, nil
+	}
+	if idempInsertTag.RowsAffected() == 0 || existingStatus != "STARTED" {
+		return nil, ErrConcurrentOperationInProgress
 	}
 
 	// 2. Fetch company_id for the application
@@ -1377,6 +1386,29 @@ func (r *Repository) InitiateSubmission(ctx context.Context, params InitiateSubm
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconstitute application: %w", err)
+	}
+
+	if rfiID == "" {
+		for _, submission := range lockedApp.Submissions() {
+			if submission.Status == domain.SubmissionStatusPending || submission.Status == domain.SubmissionStatusUnresolved {
+				return nil, domain.ErrSubmissionInFlight
+			}
+		}
+		if lockedApp.Status() != domain.ApplicationStatusDraft {
+			return nil, domain.ErrApplicationNotDraft
+		}
+	}
+	if params.ReadinessCheck != nil {
+		if err := params.ReadinessCheck(persistedCompany, lockedApp); err != nil {
+			return nil, err
+		}
+	}
+	if rfiID == "" && params.DocumentIDs == nil {
+		lockedDocuments := lockedApp.Documents()
+		docIDs = make([]string, len(lockedDocuments))
+		for i, document := range lockedDocuments {
+			docIDs[i] = document.ID
+		}
 	}
 
 	// 5. Execute reviewed domain aggregate command inside the transaction.

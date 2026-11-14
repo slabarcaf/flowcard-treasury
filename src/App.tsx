@@ -44,7 +44,7 @@ function App() {
     return <LoginPage onLogin={() => setScreen('dashboard')} onBack={() => setScreen('landing')} />;
   }
   if (screen === 'onboarding') {
-    return <OnboardingWizard onComplete={() => setScreen('dashboard')} />;
+    return <OnboardingWizard onComplete={() => setScreen('landing')} />;
   }
   if (screen === 'portal') {
     return <Portal onExit={() => setScreen('dashboard')} />;

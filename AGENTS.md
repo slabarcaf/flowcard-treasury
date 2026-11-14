@@ -49,6 +49,11 @@ Use Node 20.19+ or 22.12+ and npm. Install dependencies with `npm install`.
 
 ## Agent workflow
 
+- At the start of every session, including delegated agents, read the relevant
+  documents in [docs/designs/](docs/designs/) before planning or implementation.
+  They record design decisions, technical rationale, and deferred questions.
+  Check implementation against them and flag discrepancies before proposing
+  changes to agreed behavior.
 - Use brainstorming guidance for ideation, architecture, or product requirements.
 - Prepare an implementation plan with the Planning Make skill when available.
 - For planned execution, follow the Planning Exec workflow, with the project-specific adjustment that implementation happens in a new Codex session in agterm in the same workspace using `AGTERM_WORKSPACE_ID`, never a spawned subagent. Keep communication with the lead session through the requested agterm handoff.

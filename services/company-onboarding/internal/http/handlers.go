@@ -2,14 +2,17 @@ package http
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/domain"
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/postgres"
@@ -27,6 +30,14 @@ type Server struct {
 	docsHandler    http.Handler
 	platformGate   validation.PlatformContractValidator
 	storage        storage.ObjectStore
+}
+
+type submissionReadinessError struct {
+	result *validation.ValidationResult
+}
+
+func (e *submissionReadinessError) Error() string {
+	return "onboarding readiness validation failed"
 }
 
 // WithDocsHandler configures an explicit documentation handler for /docs/api.
@@ -902,12 +913,129 @@ func (s *Server) handleVerifyApplication(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleSubmitApplication(w http.ResponseWriter, r *http.Request) {
-	// Task 6 explicit constraint: submit API action contract remains blocked pending
-	// explicit resolution of deferred reviewed revisions policy. No silent "latest" semantics.
-	writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
-		Code:    "SUBMISSION_CONTRACT_BLOCKED",
-		Message: "submit API action is blocked pending explicit resolution of deferred reviewed revisions policy; fail-closed on unapproved submission contract",
+	var req SubmitApplicationRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Code: "MALFORMED_INPUT", Message: safeMalformedInputMessage(err)})
+		return
+	}
+	if fieldErrs := s.validator.ValidateStruct(req); len(fieldErrs) > 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
+			Code:    "VALIDATION_FAILED",
+			Message: "request validation failed",
+			Errors:  fieldErrs,
+		})
+		return
+	}
+	actor, err := GetActor(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, ErrorResponse{Code: "UNAUTHENTICATED", Message: err.Error()})
+		return
+	}
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Code: "IDEMPOTENCY_KEY_REQUIRED", Message: "Idempotency-Key header is required"})
+		return
+	}
+	if utf8.RuneCountInString(key) > 128 {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Code: "INVALID_IDEMPOTENCY_KEY", Message: "Idempotency-Key must not exceed 128 characters"})
+		return
+	}
+	applicationID := r.PathValue("id")
+	submissionID, err := generateID("sub")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "failed to generate submission ID"})
+		return
+	}
+
+	fingerprintBody, err := json.Marshal(req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "failed to fingerprint submission request"})
+		return
+	}
+	fingerprint := sha256.Sum256(fingerprintBody)
+	scopeInput := actor + "\x00" + applicationID + "\x00submit"
+	scope := sha256.Sum256([]byte(scopeInput))
+
+	responseBody, err := json.Marshal(SubmitApplicationResponse{
+		Code:          "OK",
+		ApplicationID: applicationID,
+		SubmissionID:  submissionID,
 	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "failed to encode submission response"})
+		return
+	}
+	outboxPayload, err := json.Marshal(struct {
+		ApplicationID string `json:"application_id"`
+		SubmissionID  string `json:"submission_id"`
+	}{ApplicationID: applicationID, SubmissionID: submissionID})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "failed to encode submission job"})
+		return
+	}
+
+	result, err := s.repo.InitiateSubmission(r.Context(), postgres.InitiateSubmissionParams{
+		ApplicationID:       applicationID,
+		ExpectedAppRevision: req.ExpectedRevision,
+		SubmissionID:        submissionID,
+		SubmittingActor:     actor,
+		OutboxTopic:         "onboarding.submission.v1",
+		OutboxPayload:       outboxPayload,
+		IdempotencyScope:    hex.EncodeToString(scope[:]),
+		IdempotencyKey:      key,
+		RequestFingerprint:  hex.EncodeToString(fingerprint[:]),
+		ResponseStatusCode:  http.StatusAccepted,
+		ResponseBody:        responseBody,
+		ReadinessCheck: func(company *domain.Company, application *domain.OnboardingApplication) error {
+			readiness := validation.VerifyOnboardingReadiness(company, application, s.platformGate)
+			if readiness.Code != "VALIDATION_PASSED" {
+				return &submissionReadinessError{result: readiness}
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		s.writeSubmitError(w, err)
+		return
+	}
+
+	location := "/api/onboarding-applications/" + url.PathEscape(applicationID) + "/submissions"
+	w.Header().Set("Location", location)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(result.ResponseStatusCode)
+	_, _ = w.Write(result.ResponseBody)
+}
+
+func (s *Server) writeSubmitError(w http.ResponseWriter, err error) {
+	var readinessErr *submissionReadinessError
+	if errors.As(err, &readinessErr) {
+		writeJSON(w, http.StatusUnprocessableEntity, readinessErr.result)
+		return
+	}
+	switch {
+	case errors.Is(err, postgres.ErrApplicationNotFound), errors.Is(err, postgres.ErrCompanyNotFound):
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Code: "NOT_FOUND", Message: "application or company not found"})
+	case errors.Is(err, postgres.ErrIdempotencyKeyPayloadMismatch):
+		writeJSON(w, http.StatusConflict, ErrorResponse{Code: "IDEMPOTENCY_CONFLICT", Message: "Idempotency-Key was used with a different request"})
+	case errors.Is(err, postgres.ErrConcurrentOperationInProgress), errors.Is(err, domain.ErrSubmissionInFlight):
+		writeJSON(w, http.StatusConflict, ErrorResponse{Code: "SUBMISSION_IN_PROGRESS", Message: "a submission with this key or application is already in progress"})
+	case errors.Is(err, postgres.ErrOptimisticLockConflict):
+		writeJSON(w, http.StatusConflict, ErrorResponse{Code: "REVISION_CONFLICT", Message: "application revision changed; refresh before retrying"})
+	case errors.Is(err, domain.ErrApplicationNotDraft), errors.Is(err, domain.ErrTerminalStatusImmutable), errors.Is(err, domain.ErrCompanyArchived):
+		writeJSON(w, http.StatusConflict, ErrorResponse{Code: "APPLICATION_STATE_CONFLICT", Message: "application or company is not in a submittable state"})
+	case errors.Is(err, domain.ErrConsentRequired):
+		writeJSON(w, http.StatusUnprocessableEntity, validation.ValidationResult{
+			Code:    "VALIDATION_FAILED",
+			Message: "onboarding data validation failed",
+			Errors: []validation.FieldError{
+				{Field: "platform.onboarding_details.customer_agreements.agreed_to_terms_and_conditions", Code: "required", Message: "terms and conditions must be explicitly agreed to"},
+				{Field: "platform.onboarding_details.customer_agreements.agreed_to_data_usage", Code: "required", Message: "data usage policy must be explicitly agreed to"},
+				{Field: "platform.onboarding_details.customer_agreements.terms_and_conditions.agreed_at", Code: "required", Message: "agreement timestamp is required"},
+			},
+		})
+	default:
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Code: "PERSISTENCE_ERROR", Message: "an internal persistence error occurred"})
+	}
 }
 
 func (s *Server) handleListSubmissions(w http.ResponseWriter, r *http.Request) {
