@@ -48,7 +48,7 @@ local implementation checks.
 | Area | Status | Evidence or remaining work |
 | --- | --- | --- |
 | Deployment workflow implementation | `VERIFIED_OFFLINE` | Tasks 3 and 4 were accepted offline. Focused workflow/deploy tests pass 91; offline safety passes 138; builds, lint, formatting, and OpenTofu validation pass. The first live workflow run remains pending. |
-| Frontend application build and routing fixtures | `VERIFIED_OFFLINE` | `npm run build` passes; route fixtures preserve `#bridge-capital`, `#portal`, and `#kit5`, including the legacy GD/Kit 5 preference on `#kit5`. |
+| Frontend application build and routing fixtures | `VERIFIED_OFFLINE` | Historical Nov 12 baseline: build and route fixtures passed for `#bridge-capital`, `#portal`, and `#kit5`. The Nov 13 cleanup removes the Kit 5 and GD dashboards and `#kit5`; the current frontend has not been rebuilt. |
 | Full Node test baseline | `VERIFIED_OFFLINE` | Latest strict comparison: 940 tests, 911 passed, 23 documented failures, 6 skipped, zero unexpected failures; comparator exit 0. An earlier run lacked local PostgreSQL and had one extra onboarding E2E failure; the isolated database rerun resolved it. Raw Vitest still exits 1 for the 23 known failures. |
 | Synthetic seed facility safety | `VERIFIED_OFFLINE` | PostgreSQL coverage verifies another active facility is preserved, fresh default creation is idempotent, and original facility rows are restored by fixture rollback. |
 | Go service checks | `VERIFIED_OFFLINE` | `go vet`, OpenAPI freshness, and `go test -race ./...` passed using the local `flowcard_onboarding_test` database and advisory lock `88888888`. |

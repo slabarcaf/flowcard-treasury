@@ -21,6 +21,7 @@ npm run dev
 - `npm run server:build` builds the Node server in `.dev/server/`.
 - `npm run test:acceptance` runs PostgreSQL acceptance tests.
 
-See [development setup and operations](docs/development.md), [editing guide](docs/EDITING.md), and [AWS infrastructure runbooks](docs/infra/demo-operations.md).
+See [repository instructions](AGENTS.md) and
+[AWS infrastructure runbooks](docs/infra/demo-operations.md).
 
 Originally built by [@yidi-li-ydl](https://github.com/yidi-li-ydl) in [yidi-li-ydl/flowcard-treasury](https://github.com/yidi-li-ydl/flowcard-treasury). The original commit history is preserved.

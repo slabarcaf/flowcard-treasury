@@ -39,7 +39,7 @@ the only Compose configuration.
   label groups rather than individual variables.
 - The [Dockerfile](/Dockerfile) sets `NODE_ENV=production` directly. Move this
   setting to the root `.env`.
-- The [README](/README.md) and [frontend editing guide](/docs/EDITING.md)
+- The [README](/README.md) and [frontend development instructions](/AGENTS.md#frontend-development)
   describe current setup and need to document the single Compose mode.
 - `.worktrees/` is already ignored. If implementation uses a worktree, create
   it from `develop` under `.worktrees/` and do not copy the root `.env` into it.

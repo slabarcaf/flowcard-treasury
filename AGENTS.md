@@ -6,7 +6,8 @@ FlowCard is a bridge-financing underwriting platform.
 
 - Keep credentials server-side; never expose them in browser code, fixtures, tracked files, or logs.
 - Keep routine development and automated tests fixture-based.
-- Add schema changes as new numbered SQL migrations, and follow the [development guide](docs/development.md) for database and server setup.
+- Add schema changes as new numbered SQL migrations. Follow the Database and
+  migrations section below for local setup.
 
 ## Project structure
 
@@ -21,7 +22,10 @@ FlowCard is a bridge-financing underwriting platform.
 ## Product conventions
 
 - The app uses hash-based routes in `src/app-routing.ts` and view state in `src/App.tsx`; preserve direct links such as `#bridge-capital` and `#portal`.
-- Bridge Capital policy is implemented as pure functions over its specification. Its policy configuration is the source for thresholds.
+- Consolidated product requirements live in `docs/requirements/README.md`.
+  Current policy design is in
+  `docs/designs/bridge-capital-policy-spec.md`; runtime thresholds live in the
+  feature's `policy.config.ts`.
 - TypeScript uses ESM with explicit `.js` extensions in relative imports.
 - Do not add runtime or development dependencies without user approval.
 
@@ -64,7 +68,8 @@ FlowCard is a bridge-financing underwriting platform.
   trusted identifiers, policy decisions, or provider commands.
 - Use fixtures and mocked providers for routine development and automated
   tests. Sandbox operations require verified mappings, API permissions, and
-  webhook setup; see `docs/development.md` for acceptance gates.
+  webhook setup. See `docs/demo/airwallex-sandbox-demo-prerequisites.md` and
+  `docs/infra/demo-acceptance.md` for sandbox gates.
 - Apply backend schema migrations before startup. Runtime APIs and workers
   must not run DDL. Use each service's migration tooling and a privileged
   database connection.
@@ -96,8 +101,24 @@ configuration separate.
 - Do not copy the ignored root `.env` into a worktree. The named PostgreSQL
   volume persists across Compose restarts; remove it only when deleting its
   data is intended.
-- See `docs/development.md` for local startup, health checks, ports, and service
-  commands.
+
+For local setup from the repository root, source `.env`, then start and migrate
+the database before starting the rest of the Compose services:
+
+```sh
+set -a
+source .env
+set +a
+docker compose up -d database
+DATABASE_URL="$DATABASE_URL_HOST" npm run db:migrate
+docker compose run --build --rm onboarding-api /bin/migrate
+docker compose up -d --build
+```
+
+The Vite frontend runs separately with `npm run dev`. Compose initializes Node
+migrations 001 through 003 on an empty volume; `npm run db:migrate` tracks the
+full Node migration set. The Go migration command applies the onboarding
+schema. The ledger and onboarding API health endpoints use ports 8000 and 8080.
 
 ### Demo environment
 

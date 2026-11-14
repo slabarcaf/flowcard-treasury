@@ -132,6 +132,7 @@ sandbox funding configuration.
 The ignored root `.env` in the main checkout was previously checked for the
 presence of these seven variable names. Their values were not copied, printed,
 or logged:
+or logged:
 
 - `AIRWALLEX_API_KEY`
 - `AIRWALLEX_CLIENT_ID`
