@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -782,8 +783,8 @@ func TestVerifyApplicationEndpoint(t *testing.T) {
 	}
 }
 
-// 6. Submit Endpoint Contract Blocked Pending Deferred Revisions Policy
-func TestSubmitApplicationBlockedEndpoint(t *testing.T) {
+// 6. Submit requires an idempotency key before resource processing.
+func TestSubmitApplicationRequiresIdempotencyKey(t *testing.T) {
 	_, handler := setupTestServer(t)
 
 	req := newAuthRequest("POST", "/api/onboarding-applications/app_dummy/submit", map[string]any{
@@ -792,16 +793,108 @@ func TestSubmitApplicationBlockedEndpoint(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("POST /submit status = %d, want 422; body: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /submit without Idempotency-Key status = %d, want 400; body: %s", rec.Code, rec.Body.String())
 	}
 	var errResp internalhttp.ErrorResponse
 	_ = json.NewDecoder(rec.Body).Decode(&errResp)
-	if errResp.Code != "SUBMISSION_CONTRACT_BLOCKED" {
-		t.Errorf("error code = %q, want SUBMISSION_CONTRACT_BLOCKED", errResp.Code)
+	if errResp.Code != "IDEMPOTENCY_KEY_REQUIRED" {
+		t.Errorf("error code = %q, want IDEMPOTENCY_KEY_REQUIRED", errResp.Code)
 	}
-	if !strings.Contains(errResp.Message, "blocked pending explicit resolution") {
-		t.Errorf("error message = %q, want blocked message", errResp.Message)
+}
+
+func TestSubmitApplicationDefaultGateRejectsWithoutQueueing(t *testing.T) {
+	repo, _ := setupTestServer(t)
+	ctx := context.Background()
+	company, err := domain.NewDraftCompany(fmt.Sprintf("comp_gate_%d", time.Now().UnixNano()), "Readiness Gate Company")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := company.UpdateProfile(domain.BusinessProfile{Website: "https://example.test", Description: "Payments", Products: "Treasury software", RegisteredAddress: domain.Address{Line1: "1 Main", City: "Wilmington", State: "DE", PostalCode: "19801", Country: "US"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := company.CorrectLegalIdentifiers(domain.LegalIdentifierCorrectionParams{LegalName: "Readiness Gate Company", EntityType: "CORPORATION", RegistrationCountry: "US", RegistrationState: "DE", RegistrationIdentifiers: []domain.RegistrationIdentifier{{Type: "EIN", Value: "12-3456789", IssuingCountry: "US"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := company.AddPerson(domain.Person{ID: "person_gate", FirstName: "Synthetic", LastName: "Operator", Email: "operator@example.test", Phone: "+15555550100", Role: "Director", DateOfBirth: domain.Date("1985-01-01"), Identifications: []domain.Identification{{ID: "ident_gate", Type: "PASSPORT", Number: "P123456", IssuingCountry: "US"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CreateCompany(ctx, company); err != nil {
+		t.Fatal(err)
+	}
+	app, err := domain.NewDraftApplication(fmt.Sprintf("app_gate_%d", time.Now().UnixNano()), company, "creator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{PrimaryContactPersonID: "person_gate", IndustryCategoryCode: "software_saas", IntendedProducts: []string{"card_issuing"}, EstimatedRevenue: domain.RevenueEstimate{Amount: "100000", Currency: "USD"}, People: []domain.PersonPlatformDetails{{PersonID: "person_gate", PlatformRoles: []string{"DIRECTOR"}, ResidentialAddress: domain.Address{Line1: "1 Main", City: "Wilmington", State: "DE", PostalCode: "19801", Country: "US"}}}, CustomerAgreements: domain.CustomerAgreements{AgreedToTermsAndConditions: true, AgreedToDataUsage: true, TermsAndConditions: &domain.TermsAndConditionsAgreement{AgreedAt: time.Now().UTC(), ServiceAgreementType: "FULL"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CreateApplication(ctx, app); err != nil {
+		t.Fatal(err)
+	}
+
+	// A repository whose readiness callback models the production default gate.
+	defaultGate := internalhttp.NewServer(repo, fakeTestAuthenticator{expectedToken: "valid_internal_test_token"}, validation.UnverifiedPlatformContractGate{}, nil).Routes()
+	req := newAuthRequest("POST", "/api/onboarding-applications/"+app.ID()+"/submit", map[string]any{"expected_revision": app.Revision()})
+	req.Header.Set("Idempotency-Key", fmt.Sprintf("gate_%d", time.Now().UnixNano()))
+	rec := httptest.NewRecorder()
+	defaultGate.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "PLATFORM_CONTRACT_INCOMPLETE") {
+		t.Fatalf("submit with default gate status/body = %d %s, want 422 PLATFORM_CONTRACT_INCOMPLETE", rec.Code, rec.Body.String())
+	}
+	latest, err := repo.GetApplication(ctx, app.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if latest.Status() != domain.ApplicationStatusDraft {
+		t.Fatalf("status = %s, want DRAFT", latest.Status())
+	}
+	if submissions, err := repo.ListSubmissions(ctx, app.ID()); err != nil || len(submissions) != 0 {
+		t.Fatalf("submissions = %d, err=%v, want none", len(submissions), err)
+	}
+}
+
+func TestDocumentUploadDefaultStorageReturnsExplicitUnavailable(t *testing.T) {
+	_, handler := setupTestServerWithStore(t, storage.NewUnavailableStore("D1 storage intentionally unconfigured"))
+	companyReq := newAuthRequest("POST", "/api/companies", internalhttp.CreateCompanyRequest{LegalName: "Upload Gate Company"})
+	companyRec := httptest.NewRecorder()
+	handler.ServeHTTP(companyRec, companyReq)
+	if companyRec.Code != http.StatusCreated {
+		t.Fatalf("create company status=%d body=%s", companyRec.Code, companyRec.Body.String())
+	}
+	var company internalhttp.CompanyResponse
+	if err := json.Unmarshal(companyRec.Body.Bytes(), &company); err != nil {
+		t.Fatal(err)
+	}
+	appReq := newAuthRequest("POST", "/api/onboarding-applications", internalhttp.CreateApplicationRequest{CompanyID: company.ID, PlatformName: "AIRWALLEX", Environment: "sandbox"})
+	appRec := httptest.NewRecorder()
+	handler.ServeHTTP(appRec, appReq)
+	if appRec.Code != http.StatusCreated {
+		t.Fatalf("create application status=%d body=%s", appRec.Code, appRec.Body.String())
+	}
+	var app internalhttp.ApplicationResponse
+	if err := json.Unmarshal(appRec.Body.Bytes(), &app); err != nil {
+		t.Fatal(err)
+	}
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("expected_revision", fmt.Sprint(app.Revision))
+	_ = writer.WriteField("type", "BUSINESS_DOCUMENT")
+	part, err := writer.CreateFormFile("file", "synthetic.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write([]byte("%PDF-1.4 synthetic document"))
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	uploadReq := newAuthRequest("POST", "/api/onboarding-applications/"+app.ID+"/documents", nil)
+	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
+	uploadReq.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
+	uploadRec := httptest.NewRecorder()
+	handler.ServeHTTP(uploadRec, uploadReq)
+	if uploadRec.Code != http.StatusServiceUnavailable || !strings.Contains(uploadRec.Body.String(), "STORAGE_UNAVAILABLE") {
+		t.Fatalf("upload status/body=%d %s, want explicit 503 STORAGE_UNAVAILABLE", uploadRec.Code, uploadRec.Body.String())
 	}
 }
 

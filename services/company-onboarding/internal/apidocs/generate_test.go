@@ -218,17 +218,31 @@ func TestTask2_ContractAccuraciesInGeneratedSpecs(t *testing.T) {
 		t.Fatalf("failed to generate operator spec: %v", err)
 	}
 
-	// 1. Submit application endpoint is documented as fail-closed blocked (422)
+	// 1. Submit application documents idempotency, the 202 receipt, and readiness errors.
 	submitPath := opDoc.Paths.Find("/api/onboarding-applications/{id}/submit")
 	if submitPath == nil || submitPath.Post == nil {
 		t.Fatalf("missing POST /api/onboarding-applications/{id}/submit in operator spec")
+	}
+	idempotencyKeyRequired := false
+	for _, parameter := range submitPath.Post.Parameters {
+		if parameter.Value != nil && parameter.Value.Name == "Idempotency-Key" &&
+			parameter.Value.In == "header" && parameter.Value.Required {
+			idempotencyKeyRequired = true
+		}
+	}
+	if !idempotencyKeyRequired {
+		t.Errorf("submit operation must require the Idempotency-Key header")
+	}
+	resp202 := submitPath.Post.Responses.Value("202")
+	if resp202 == nil || resp202.Value == nil || resp202.Value.Headers["Location"] == nil {
+		t.Fatalf("submit operation must document a 202 response with Location")
 	}
 	resp422 := submitPath.Post.Responses.Value("422")
 	if resp422 == nil || resp422.Value == nil {
 		t.Fatalf("missing 422 response in submit operation")
 	}
-	if !strings.Contains(*resp422.Value.Description, "SUBMISSION_CONTRACT_BLOCKED") {
-		t.Errorf("expected 422 description to mention SUBMISSION_CONTRACT_BLOCKED, got %s", *resp422.Value.Description)
+	if !strings.Contains(*resp422.Value.Description, "readiness") {
+		t.Errorf("expected 422 description to mention readiness, got %s", *resp422.Value.Description)
 	}
 
 	// 2. Raw array responses: list platform accounts, submissions, documents
@@ -614,7 +628,7 @@ func TestTask2_LeadPoint6_SchemaValidationAllDocumentedTypes(t *testing.T) {
 			{"type": "EIN", "value": "12-3456789", "issuing_country": "US"}
 		],
 		"people": [
-			{"id": "per_1", "first_name": "Patrick", "last_name": "Collison", "role": "CEO", "date_of_birth": "1988-09-09"}
+			{"id": "per_1", "person_id": "per_1", "first_name": "Patrick", "last_name": "Collison", "role": "CEO", "date_of_birth": "1988-09-09"}
 		],
 		"revision": 1,
 		"created_at": "2026-11-10T10:00:00Z",
@@ -772,7 +786,7 @@ func TestTask2_LeadPoint6_SchemaValidationAllDocumentedTypes(t *testing.T) {
 		t.Errorf("ApplicationListResponse schema validation failed: %v", err)
 	}
 
-	// 12. Blocked /submit request body and response
+	// 12. /submit request, accepted receipt, and validation error shapes
 	submitReqJSON := `{"expected_revision": 1}`
 	if err := validateJSONAgainstSchema(t, schemas["SubmitApplicationRequest"].Value, submitReqJSON); err != nil {
 		t.Errorf("SubmitApplicationRequest schema validation failed: %v", err)
@@ -782,12 +796,13 @@ func TestTask2_LeadPoint6_SchemaValidationAllDocumentedTypes(t *testing.T) {
 		t.Errorf("expected expected_revision 0 to fail min=1 on SubmitApplicationRequest")
 	}
 
-	blockedRespJSON := `{
-		"code": "SUBMISSION_CONTRACT_BLOCKED",
-		"message": "platform submission is fail-closed blocked pending external compliance verification"
+	submitRespJSON := `{
+		"code": "OK",
+		"application_id": "app_123",
+		"submission_id": "sub_123"
 	}`
-	if err := validateJSONAgainstSchema(t, schemas["ErrorResponse"].Value, blockedRespJSON); err != nil {
-		t.Errorf("blocked /submit ErrorResponse schema validation failed: %v", err)
+	if err := validateJSONAgainstSchema(t, schemas["SubmitApplicationResponse"].Value, submitRespJSON); err != nil {
+		t.Errorf("SubmitApplicationResponse schema validation failed: %v", err)
 	}
 
 	// 13. CreateCompanyRequest with min/max string limits and ISO country regex

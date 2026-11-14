@@ -25,6 +25,11 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "code",
+                "field",
+                "message"
+              ],
               "type": "object"
             },
             "type": "array"

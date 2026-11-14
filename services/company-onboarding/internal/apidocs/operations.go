@@ -933,8 +933,8 @@ func AllOperations() []OperationDefinition {
 			Audience:    "operator",
 			Method:      http.MethodPost,
 			Path:        "/api/onboarding-applications/{id}/submit",
-			Summary:     "Submit application (BLOCKED)",
-			Description: "CRITICAL CONTRACT STATUS: This action is explicitly blocked fail-closed, returning HTTP 422 with code SUBMISSION_CONTRACT_BLOCKED pending resolution of deferred reviewed revisions policy. Platform submission contracts remain unexecuted.",
+			Summary:     "Queue application submission",
+			Description: "Validates saved application data and atomically records a frozen initial Submission, idempotency response, and durable worker job. Platform submission runs asynchronously.",
 			Tags:        []string{"Onboarding Applications"},
 			Parameters: []ParameterDefinition{
 				{
@@ -944,14 +944,34 @@ func AllOperations() []OperationDefinition {
 					Description: "Application ID",
 					Schema:      &openapi3.Schema{Type: &openapi3.Types{"string"}},
 				},
+				{
+					Name:        "Idempotency-Key",
+					In:          "header",
+					Required:    true,
+					Description: "Unique key for this actor, application, and submit action. Reuse it unchanged to replay the original response.",
+					Schema:      &openapi3.Schema{Type: &openapi3.Types{"string"}},
+				},
 			},
 			RequestBody: &RequestBodyDefinition{
-				Description: "CAS expected_revision",
+				Description: "Application revision expected by the operator",
 				Required:    true,
 				ContentType: "application/json",
 				Type:        reflect.TypeOf(internalHttp.SubmitApplicationRequest{}),
 			},
 			Responses: map[int]ResponseDefinition{
+				http.StatusAccepted: {
+					Description:  "Submission queued for asynchronous processing; acceptance is not provider approval",
+					Type:         reflect.TypeOf(internalHttp.SubmitApplicationResponse{}),
+					ContentTypes: []string{"application/json"},
+					Headers: map[string]string{
+						"Location": "Existing application submissions collection",
+					},
+				},
+				http.StatusBadRequest: {
+					Description:  "Malformed request or missing Idempotency-Key",
+					Type:         reflect.TypeOf(internalHttp.ErrorResponse{}),
+					ContentTypes: []string{"application/json"},
+				},
 				http.StatusUnauthorized: {
 					Description:  "Missing or invalid credentials",
 					Type:         reflect.TypeOf(map[string]any{}),
@@ -962,10 +982,22 @@ func AllOperations() []OperationDefinition {
 					Type:         reflect.TypeOf(internalHttp.ErrorResponse{}),
 					ContentTypes: []string{"application/json"},
 				},
-				http.StatusUnprocessableEntity: {
-					Description:  "Contract blocked: SUBMISSION_CONTRACT_BLOCKED",
+				http.StatusConflict: {
+					Description:  "Idempotency mismatch, in-progress submission, incompatible state, or revision conflict",
 					Type:         reflect.TypeOf(internalHttp.ErrorResponse{}),
 					ContentTypes: []string{"application/json"},
+				},
+				http.StatusUnprocessableEntity: {
+					Description:  "Saved-data readiness or request validation failed",
+					ContentTypes: []string{"application/json"},
+					SchemaBuilder: func() *openapi3.SchemaRef {
+						return &openapi3.SchemaRef{Value: &openapi3.Schema{
+							AnyOf: openapi3.SchemaRefs{
+								&openapi3.SchemaRef{Ref: "#/components/schemas/ErrorResponse"},
+								&openapi3.SchemaRef{Ref: "#/components/schemas/ValidationResult"},
+							},
+						}}
+					},
 				},
 				http.StatusInternalServerError: {
 					Description:  "Persistence error",
