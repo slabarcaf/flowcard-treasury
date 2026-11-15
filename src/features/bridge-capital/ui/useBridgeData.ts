@@ -3,7 +3,10 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
+  Acceptance,
+  Approval,
   Bridge,
+  BridgeOffer,
   BridgeRequest,
   CardTransaction,
   Customer,
@@ -13,6 +16,7 @@ import type {
 } from '../types.js';
 import type { DataAdapter } from '../data/adapter.js';
 import { MockAdapter } from '../data/MockAdapter.js';
+import { buildOffer } from '../policy/pricing.js';
 
 export interface BridgeData {
   customers: Customer[];
@@ -22,6 +26,9 @@ export interface BridgeData {
   requests: BridgeRequest[];
   bridges: Bridge[];
   timeline: TimelineEvent[];
+  offers: Record<string, BridgeOffer>;
+  acceptances: Record<string, Acceptance>;
+  approvals: Record<string, Approval>;
 }
 
 export interface BridgeDataHandle {
@@ -44,7 +51,22 @@ export function useBridgeData(adapter?: DataAdapter): BridgeDataHandle {
       client.listBridges(),
       client.listTimeline(),
     ]);
-    setData({ customers, capital, transactions, deposits, requests, bridges, timeline });
+    const bindings = await Promise.all(requests.map(async (request) => {
+      const id = buildOffer(request).id;
+      const [offer, acceptance, approval] = await Promise.all([
+        client.getOffer(id), client.getAcceptance(id), client.getApproval(id),
+      ]);
+      return { offer, acceptance, approval };
+    }));
+    const offers: Record<string, BridgeOffer> = {};
+    const acceptances: Record<string, Acceptance> = {};
+    const approvals: Record<string, Approval> = {};
+    for (const binding of bindings) {
+      if (binding.offer !== null) offers[binding.offer.id] = binding.offer;
+      if (binding.acceptance !== null) acceptances[binding.acceptance.offer_id] = binding.acceptance;
+      if (binding.approval !== null) approvals[binding.approval.offer_id] = binding.approval;
+    }
+    setData({ customers, capital, transactions, deposits, requests, bridges, timeline, offers, acceptances, approvals });
   }, [client]);
 
   useEffect(() => {

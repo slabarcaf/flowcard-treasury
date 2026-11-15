@@ -63,36 +63,11 @@ export function useBackOffice(adapter?: DataAdapter): BackOffice {
         approved_at: AS_OF,
       });
 
-      const bridge: Bridge = {
-        id: `bridge_${request.id}`,
-        customer_id: request.customer_id,
-        transaction_id: request.transaction.id,
-        principal: offer.principal,
-        fee: offer.fee,
-        term_days: offer.term_days,
-        status: 'DISBURSED',
-        disbursed_at: AS_OF,
-        due_date: offer.due_date,
-        principal_outstanding: offer.principal,
-        fee_outstanding: offer.fee,
-        accrued_fee: 0,
-      };
-      await client.saveBridge(bridge);
-      await client.disburse(bridge);
-
       await client.appendTimeline({
         at: `${AS_OF}T09:30:00Z`,
         customer_id: request.customer_id,
-        bridge_id: bridge.id,
         type: 'APPROVAL',
         text: `Credit officer approved ${offer.principal} over ${offer.term_days} days, fee ${offer.fee}.`,
-      });
-      await client.appendTimeline({
-        at: `${AS_OF}T09:31:00Z`,
-        customer_id: request.customer_id,
-        bridge_id: bridge.id,
-        type: 'DISBURSEMENT',
-        text: 'Transfer to connected account SETTLED.',
       });
 
       setOutcomes((prev) => ({ ...prev, [request.id]: 'APPROVED' }));

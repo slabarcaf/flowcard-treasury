@@ -56,6 +56,7 @@ export interface DataAdapter {
   listBridges(customerId?: string): Promise<Bridge[]>;
 
   // Money movement, mirroring Airwallex connected-account transfers and charges
+  /** Settled funding is reflected in adapter-owned bridge state before return. */
   disburse(bridge: Bridge): Promise<TransferResponse>;
   chargeDeposit(bridge: Bridge, deposit: Deposit): Promise<ChargeResponse>;
 
