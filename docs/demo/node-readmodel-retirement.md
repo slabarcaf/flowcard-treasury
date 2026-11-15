@@ -1,9 +1,9 @@
 # Node snapshot and evidence retirement
 
 Source retirement implemented on November 15, 2026 in
-`chore/retire-node-readmodels`, based on develop `8662dd1`. The change is
-uncommitted and unmerged pending integration. Existing processes and stored
-records were not changed.
+`chore/retire-node-readmodels`, based on develop `8662dd1`. Source commit
+`c6d4831` was merged into local develop at `7d2bba4`. Existing processes and
+stored records were not changed.
 
 [TOC]
 
@@ -51,11 +51,19 @@ This retirement does not add either capability.
   executable source, scripts or retained tests.
 - The server build removed obsolete compiled worker/review modules. A direct
   compiled evidence CLI invocation returned the explicit retirement error.
+- Post-merge builds passed. The first retained-suite run had one docs-proxy
+  assertion miss its fixed 80 ms wait (166 passed, one failed, one excluded).
+  The same 20-file suite passed with four workers: 167 passed, one shared-DB
+  test excluded. No docs-proxy source or test was changed for the rerun.
+- Pre-existing main checkout changes were verified byte-for-byte unchanged
+  after the merge.
 
 Local logs: `/tmp/flowcard-readmodel-final-tests.log`,
 `/tmp/flowcard-readmodel-server-build.log`,
 `/tmp/flowcard-readmodel-frontend-build.log` and
-`/tmp/flowcard-readmodel-retired-cli.log`.
+`/tmp/flowcard-readmodel-retired-cli.log`. Post-merge evidence is retained in
+`/tmp/flowcard-readmodel-merged-tests.log` and
+`/tmp/flowcard-readmodel-merged-rerun-tests.log`.
 
-No commit, merge, provider/model request, process restart, database mutation,
-remote publication or deployment was performed.
+No provider/model request, process restart, database mutation, remote
+publication or deployment was performed.

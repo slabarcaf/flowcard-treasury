@@ -15,8 +15,10 @@ Implementation is owned directly by the addressed agent in the isolated
   (167 passed; one shared-DB test deliberately excluded).
 - [x] Record exact results and remaining Node responsibilities for review in
   [the verification note](/docs/demo/node-readmodel-retirement.md).
-- [ ] Integrate the tested source into develop when authorized. Keep this plan
-  open until integration is complete.
+- [x] Integrate the tested source into develop under Ramil's authorization:
+  source `c6d4831`, merge `7d2bba4`. Post-merge builds and retained suite passed
+  (167 tests; one shared-DB test excluded). The initial docs-proxy timing
+  failure and successful bounded rerun are recorded in the verification note.
 
-No commit, merge, process restart, database mutation, deployment or real
-provider/model call is included in this source retirement.
+Local integration is complete. No process restart, database mutation,
+deployment or real provider/model call was performed.
