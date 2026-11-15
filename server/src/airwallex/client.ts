@@ -1,5 +1,4 @@
 import { providerHttpErrorDetails, ProviderHttpError, type ProviderHttpErrorPhase } from "./errors.js";
-import { AIRWALLEX_ISSUING_API_VERSION } from "../config.js";
 
 async function readProviderHttpErrorDetails(response: Response, phase: ProviderHttpErrorPhase) {
   try {
@@ -9,43 +8,9 @@ async function readProviderHttpErrorDetails(response: Response, phase: ProviderH
   }
 }
 
-export interface IssuingSimulationRequest {
-  accountId: string;
-  cardId: string;
-  amountCents: number;
-  currency: string;
-  merchant: string;
-  merchantCategoryCode?: string;
-  /** Provider lifecycle ID to associate with the new authorization. */
-  lifecycleId?: string;
-}
-
-export interface IssuingSimulationResponse {
-  processResult: "APPROVED" | "DECLINED";
-  failureReason: string | null;
-  cardTransactionEventId: string;
-  cardTransactionId: string;
-  cardTransactionLifecycleId: string;
-  /** Present only when Airwallex returns transaction facts with the simulation result. */
-  transactionType?: "AUTHORIZATION" | "CLEARING";
-  transactionCategory?: string;
-  merchantName?: string;
-  merchantCategoryCode?: string;
-  accountId?: string;
-  cardId?: string;
-  transactionAmountCents?: number;
-  transactionCurrency?: string;
-}
-
 export interface ProviderConnectedAccount {
   id: string;
   status: string;
-}
-
-export interface IssuingSimulationGateway {
-  createIssuingSimulation(request: IssuingSimulationRequest): Promise<unknown>;
-  getIssuingLifecycle(lifecycleId: string, accountId: string): Promise<unknown | null>;
-  getIssuingLifecycleEvents?(lifecycleId: string, accountId: string): Promise<unknown[] | null>;
 }
 
 /** Retained account directory for roster reconciliation. */
@@ -54,7 +19,7 @@ export interface AirwallexGateway {
 }
 
 /** Fetch-backed gateway. Constructing it is side-effect free; calls happen only when dispatched. */
-export class HttpAirwallexGateway implements AirwallexGateway, IssuingSimulationGateway {
+export class HttpAirwallexGateway implements AirwallexGateway {
   private accessToken: string | undefined;
   private tokenExpiresAt = 0;
 
@@ -94,86 +59,18 @@ export class HttpAirwallexGateway implements AirwallexGateway, IssuingSimulation
     return accounts;
   }
 
-  createIssuingSimulation(request: IssuingSimulationRequest): Promise<unknown> {
-    return this.request("/api/v1/simulation/issuing/create", {
-      method: "POST",
-      body: JSON.stringify({
-        card_id: request.cardId,
-        transaction_amount: request.amountCents / 100,
-        transaction_currency: request.currency,
-        ...(request.merchantCategoryCode ? { merchant_category_code: request.merchantCategoryCode } : {}),
-        merchant_info: request.merchant.trim().padEnd(43, " ").slice(0, 43),
-        ...(request.lifecycleId ? { card_transaction_lifecycle_id: request.lifecycleId } : {}),
-      }),
-    }, { "x-on-behalf-of": request.accountId, "x-api-version": AIRWALLEX_ISSUING_API_VERSION });
-  }
-
-  getIssuingLifecycle(lifecycleId: string, accountId: string): Promise<unknown | null> {
-    return this.get(`/api/v1/issuing/lifecycles/${encodeURIComponent(lifecycleId)}`, { "x-on-behalf-of": accountId })
-      .catch((error: unknown) => {
-        if (error instanceof ProviderHttpError && error.status === 404) return null;
-        throw error;
-      });
-  }
-
-  async getIssuingLifecycleEvents(lifecycleId: string, accountId: string): Promise<unknown[] | null> {
-    const events: unknown[] = [];
-    const seenPages = new Set<string>();
-    let page: string | null = null;
-    try {
-      while (true) {
-        const query = new URLSearchParams({ lifecycle_id: lifecycleId, page_size: "100" });
-        if (page) query.set("page", page);
-        const result = await this.get<unknown>(`/api/v1/issuing/card_transaction_events?${query.toString()}`, {
-          "x-on-behalf-of": accountId,
-          "x-api-version": AIRWALLEX_ISSUING_API_VERSION,
-        });
-        if (typeof result !== "object" || result === null || Array.isArray(result) ||
-            !Array.isArray((result as Record<string, unknown>).items)) {
-          throw new Error("Airwallex issuing transaction event list returned a malformed response");
-        }
-        const response = result as Record<string, unknown>;
-        for (const item of response.items as unknown[]) {
-          if (typeof item !== "object" || item === null || Array.isArray(item)) {
-            throw new Error("Airwallex issuing transaction event list returned a malformed event");
-          }
-          events.push(item);
-        }
-
-        const nextPage = typeof response.page_after === "string" && response.page_after.trim()
-          ? response.page_after.trim()
-          : null;
-        if (response.has_more === true && nextPage === null) {
-          throw new Error("Airwallex issuing transaction event pagination omitted its next page marker");
-        }
-        if (response.has_more === false || nextPage === null) return events;
-        if (seenPages.has(nextPage)) {
-          throw new Error("Airwallex issuing transaction event pagination repeated a page marker");
-        }
-        seenPages.add(nextPage);
-        page = nextPage;
-      }
-    } catch (error) {
-      if (error instanceof ProviderHttpError && error.status === 404) return null;
-      throw error;
-    }
-  }
-
-  private get<T>(path: string, headers: Record<string, string> = {}) { return this.request<T>(path, { method: "GET" }, headers); }
-  private async request<T>(path: string, init: RequestInit, extraHeaders: Record<string, string> = {}): Promise<T> {
+  private async get<T>(path: string): Promise<T> {
     const token = await this.getAccessToken();
     const response = await (this.options.fetcher ?? fetch)(new URL(path, this.options.baseUrl), {
-      ...init,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...extraHeaders, ...init.headers },
+      method: "GET",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
-      if (response.status === 409 && init.method === "POST") return await response.json() as T;
-      const phase = path === "/api/v1/simulation/issuing/create" ? "issuing_simulation" : "provider_request";
       throw new ProviderHttpError(
         response.status,
         `Airwallex request failed (${response.status})`,
-        await readProviderHttpErrorDetails(response, phase),
+        await readProviderHttpErrorDetails(response, "provider_request"),
       );
     }
     return await response.json() as T;

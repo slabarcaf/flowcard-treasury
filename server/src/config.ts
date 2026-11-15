@@ -17,9 +17,6 @@ export interface ServerConfig {
   onboardingServiceSecret?: string;
 }
 
-/** API version required by the sandbox issuing-simulation endpoint. */
-export const AIRWALLEX_ISSUING_API_VERSION = "2026-08-21";
-
 export interface OnboardingProxyConfig {
   onboardingServiceUrl: string;
   onboardingServiceSecret: string;

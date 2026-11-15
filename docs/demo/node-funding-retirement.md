@@ -19,8 +19,10 @@ provider subscriptions and financial records were not changed.
 | Node transfer/charge create, balance/lookup and repayment-deposit simulation helpers | Funding HTTP adapter and local provider-double boundary |
 
 The old demo coupled card retry to its financial reservation path, so that
-orchestrator is also removed. Independent issuing parsing/client utilities
-remain; Go card retry is still outside the completed funding scope.
+orchestrator is also removed. The subsequent
+[issuing/ledger cleanup](/docs/demo/node-issuing-ledger-retirement.md) removes
+its unused simulation/parser utilities. Go card retry remains outside the
+completed funding scope.
 Tests exclusive to removed implementations were deleted with their source.
 Historical SQL migrations, seed SQL and schema/seed safety tests remain.
 
@@ -51,7 +53,7 @@ are distinct from the retired Node routes.
 | Onboarding API/docs proxy, authenticated operator session and webhook forwarding | Onboarding frontend and Go company-onboarding service |
 | Customer roster/card mappings and provider account reconciliation CLI | Shared roster readers, onboarding and trusted mapping consumers |
 | CRM snapshots, evidence review and legacy provider profile publication | Retired in the [read-model follow-up](/docs/demo/node-readmodel-retirement.md); unused presenter fixtures subsequently removed in [UI cleanup](/docs/demo/legacy-ui-cleanup.md) |
-| Read-only `/api/ledger` | Legacy browser client and historical Node projections |
+| Historical `/api/ledger` | Retired with explicit 410 in the [issuing/ledger cleanup](/docs/demo/node-issuing-ledger-retirement.md); records and migrations preserved |
 | Database migration and guarded seed commands | Historical schema and existing onboarding/development tooling |
 | Current frontend policy calculations | Existing fixture/simulation UI, not Funding execution authority |
 
