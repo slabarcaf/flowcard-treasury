@@ -29,7 +29,9 @@ fixture-based persistence, calculation, worker, and read-API work can proceed.
 
 ## Reusable Node behavior and explicit changes
 
-Source files inspected:
+Historical Node source inspected before retirement (the financial worker and
+policy mapping resolver were later removed; see the
+[retirement inventory](/docs/demo/node-funding-retirement.md)):
 
 - `server/src/http/routes/airwallex-webhook.ts`
 - `server/src/webhooks/verify.ts`, `inbox.ts`, and `process.ts`

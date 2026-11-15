@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { DatabasePool } from "../../db/pool.js";
-import { insertWebhookOnce, type AirwallexWebhookEvent } from "../../webhooks/inbox.js";
+import { insertWebhookOnce, isOnboardingWebhookEvent, type AirwallexWebhookEvent } from "../../webhooks/inbox.js";
 import { verifyAirwallexSignature } from "../../webhooks/verify.js";
 
 const MAX_BODY_BYTES = 1_048_576;
@@ -32,6 +32,10 @@ export async function handleAirwallexWebhook(
     if (typeof event.id !== "string" || !event.id || typeof event.name !== "string" || !event.name) throw new Error("invalid event");
   } catch {
     send(response, 400, { error: "invalid_event" });
+    return;
+  }
+  if (!isOnboardingWebhookEvent(event.name)) {
+    send(response, 410, { error: "legacy_servicing_retired" });
     return;
   }
   try {

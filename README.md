@@ -18,8 +18,15 @@ npm run dev
 - `npm test` runs Vitest.
 - `npm run lint` runs oxlint.
 - `npm run build` type-checks and builds the frontend in `.dev/dist/`.
-- `npm run server:build` builds the Node server in `.dev/server/`.
-- `npm run test:acceptance` runs PostgreSQL acceptance tests.
+- `npm run server:build` cleans and builds the Node compatibility API in
+  `.dev/server/`.
+- `go -C services/funding-collection test -p 1 ./...` runs the Go financial
+  tests with an explicitly configured owned local test database.
+
+Node funding, approval and repayment execution is retired. Node continues to
+serve onboarding proxies, operator sessions, snapshots and historical ledger
+reads. See the [retirement inventory](/docs/demo/node-funding-retirement.md)
+and [Go Funding runbook](/docs/demo/funding-and-collection-local.md).
 
 See [repository instructions](AGENTS.md) and
 [AWS infrastructure runbooks](docs/infra/demo-operations.md).

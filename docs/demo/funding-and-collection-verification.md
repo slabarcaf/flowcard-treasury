@@ -140,8 +140,10 @@ Credentials remain in private runtime files and are omitted from this report.
 
 Tasks 1–13 of the
 [implementation plan](/docs/plans/20261114-funding-and-collection.md) are
-complete for the local fixture delivery. Task 14 Node retirement and the
-listed live-provider, consent, UI and deployment acceptance gates remain
-separate work. Provider acceptance remains explicitly unverified. The joined
+complete for the local fixture delivery. The
+[Node source retirement](/docs/demo/node-funding-retirement.md) removes the
+duplicate financial implementations. Full Node/data cutover and the listed
+live-provider, consent, UI and deployment acceptance gates remain separate
+work. Provider acceptance remains explicitly unverified. The joined
 proof used standalone binaries; container image build and startup were not
 exercised.

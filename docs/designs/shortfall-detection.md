@@ -415,7 +415,8 @@ operations.
 - [FlowCard requirements](/docs/requirements/README.md)
 - Existing Node receiver: `server/src/http/routes/airwallex-webhook.ts`
 - Existing signature verifier: `server/src/webhooks/verify.ts`
-- Existing mapping resolver: `server/src/policy/kit5-funding.ts`
+- Historical mapping resolver: `server/src/policy/kit5-funding.ts`, removed
+  during [Node financial retirement](/docs/demo/node-funding-retirement.md).
 - [Airwallex issuing webhooks](https://www.airwallex.com/docs/developer-tools/webhooks/listen-for-webhook-events/issuing)
 - [Card transaction events API](https://www.airwallex.com/docs/api/issuing/card_transaction_events)
 - [Retrieve lifecycle and transaction data](https://www.airwallex.com/docs/issuing/transactions/transaction-lifecycle/retrieve-lifecycle-and-transaction-data)
