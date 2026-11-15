@@ -65,11 +65,12 @@ Evidence available in this execution environment:
 
 The verification report records the actual joined result, independent
 read-only audits and their retained evidence paths. Source checkboxes below
-mean implemented and source-accepted; demonstration and verification boxes
-are backed by their stated runtime or test evidence. Task 14 and live
-acceptance remain separate scope.
-Ramil removed the numeric test cap: prefer isolated focused tests and concise
-journeys, preserve assertions, and reuse existing fixtures and dependencies.
+mean implemented and source-accepted; demonstration and verification boxes are
+backed by their stated runtime or test evidence. Task 14 source retirement is
+now released by Ramil; live acceptance and financial data cutover remain
+separate scope. Ramil removed the numeric test cap: prefer isolated focused
+tests and concise journeys, preserve assertions, and reuse existing fixtures
+and dependencies.
 
 ## Scope, dependencies and execution boundary
 
@@ -693,45 +694,46 @@ and source windows; do not launch duplicate consumers or rewrite old runs.
 No live provider/model calls, deployment, Node cutover or financial-state
 injection.
 
-## Later separately authorized migration phase
-
-Task 13 completes the fixture delivery and its verification. The following
-task is retained at Ramil's request, but is not executable from fixture proof
-or this planning session. A lead-reviewed cutover inventory and explicit
-execution scope must precede any removal or routing/process change.
+## Node source retirement and remaining cutover
 
 ### Task 14: Retire replaced Node funding and collection paths
 
-Ramil requested this cleanup in his design review. This is a planned migration
-step; it authorizes no deletion or process change in the planning session.
+Ramil authorized deleting the Go-replaced Node source on November 15, 2026.
+The first retirement slice removes its financial startup paths and duplicate
+implementations. Existing running processes, books and provider callbacks are
+unchanged. See the [ownership inventory](/docs/demo/node-funding-retirement.md).
 
-**Files:** inventory `server/src/{ledger,collections,outbox,airwallex}/`,
-`server/src/policy/kit5-funding.ts`, `server/src/main.ts`,
-`server/src/http/routes/bridge-decision.ts`, `remote-authorization.ts`,
-`kit5-demo.ts`, `airwallex-webhook.ts`, `ledger-projection.ts`, related tests;
-update the actual entrypoints, package scripts, Compose and runbooks only when
-their replacement scope has been reviewed with the lead.
+- [x] Inventory Node responsibilities and their callers. Record Go financial
+  replacements and retain onboarding/session proxies, CRM/evidence/profile
+  read models, roster tooling, historical ledger reads and migration/seed
+  tooling that still have callers.
+- [x] Remove Node financial reservation/ledger/projector writers, collections,
+  outbox and money-reconciliation workers, financial webhook processing,
+  legacy policy decisions/approval CLI and coupled Kit 5 orchestration.
+  Remove exclusive tests and scripts with their source. Historical migrations
+  and financial records are preserved.
+- [x] Make old financial endpoints return explicit 410 retirement responses
+  without database or provider execution. Retain onboarding session/forwarding
+  and report Node approval unavailable. Do not forge Go consent or proxy the
+  incompatible old command contract.
+- [x] Update Node startup, command wiring and build cleanup, run the server and
+  frontend builds and 121 focused retained-function/retirement tests, and
+  document remaining Node dependencies. No database-backed test or live
+  runtime operation was performed for source retirement.
+- [ ] Reconcile opening balances and unresolved operations before retiring a
+  running old financial writer or switching provider callbacks. Go currently
+  supports known-empty DEMO opening books, not nonempty legacy cutover.
+  Preserve operation identities and settlement provenance.
+- [ ] Migrate legacy browser execution callers to the Go offer and actor
+  contract. The old `BridgeApiClient` receives 410 for financial commands and
+  retains only its historical ledger read; it is not a Go consent adapter.
+- [ ] Replace remaining onboarding/session/CRM/roster/tooling responsibilities
+  before deleting the whole Node service, its Compose/Docker process or shared
+  dependencies. Funding verification alone does not complete that rewrite.
 
-- [ ] Inventory Node responsibilities and their callers, including remaining
-  onboarding/auth/proxy/demo responsibilities outside this service. Record
-  the Go replacement and acceptance evidence for each retained dependency.
-- [ ] After Go servicing verification and a separately authorized cutover,
-  reconcile opening balances/operations, establish one financial writer and
-  switch callers/webhook routing to Go. Preserve unresolved provider operation
-  identities and settlement provenance; never abandon pending movements.
-- [ ] Remove replaced Node funding/collection implementations, obsolete routes,
-  scripts and fixtures once references and compatibility callers are migrated.
-  Update operational instructions to use the Go entrypoints.
-- [ ] Remove the entire Node service only after its remaining responsibilities
-  have Go replacements and the lead verifies the dependency inventory. The
-  funding service alone cannot establish completion of the wider Go rewrite.
-- [ ] Re-run the relevant final checks after cleanup and report remaining Node
-  dependencies explicitly. Preserve historical SQL migrations and financial
-  records; retiring runtime code does not permit deleting those artifacts.
-
-Acceptance: Go owns the replaced funding/collection paths with no duplicate
-Node writer. Whole-service retirement is complete only when all remaining
-responsibilities and callers have verified Go replacements.
+Acceptance: duplicate Node financial source and automatic writer startup are
+removed. Full runtime/data and whole-service cutover remain explicitly open.
+No database records, historical migrations or running instances were deleted.
 
 ## Post-completion live acceptance gates
 

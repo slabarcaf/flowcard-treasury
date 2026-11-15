@@ -13,7 +13,9 @@ FlowCard is a bridge-financing underwriting platform.
 
 - Frontend ownership and editing guidance is in the
   [Frontend development](#frontend-development) section below.
-- Server APIs and integrations live in `server/src/`
+- Node compatibility APIs and data integrations live in `server/src/`.
+- Financial execution belongs to `services/funding-collection/`; Node funding,
+  approval and repayment code is retired.
 - tests live in `tests/`.
 - SQL migrations live with their owning backend under
   `server/src/db/migrations/` or
@@ -94,7 +96,8 @@ configuration separate.
 ### Local environment
 
 - The Vite frontend runs on the host. The root `compose.yaml` loads `.env` for
-  PostgreSQL, the Node ledger, and the company-onboarding API and worker.
+  PostgreSQL, the Node compatibility API (`ledger` in Compose), and the
+  company-onboarding API and worker.
 - Keep local environment variables in the root `.env`. Add only necessary
   variables, each with a short comment; ask before adding one that changes
   behavior. Dockerfiles and Compose must use `.env` as a file.
@@ -118,7 +121,7 @@ docker compose up -d --build
 The Vite frontend runs separately with `npm run dev`. Compose initializes Node
 migrations 001 through 003 on an empty volume; `npm run db:migrate` tracks the
 full Node migration set. The Go migration command applies the onboarding
-schema. The ledger and onboarding API health endpoints use ports 8000 and 8080.
+schema. The Node compatibility and onboarding APIs use health ports 8000 and 8080.
 
 ### Demo environment
 

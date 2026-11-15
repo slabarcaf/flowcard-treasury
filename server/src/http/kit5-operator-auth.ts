@@ -37,7 +37,7 @@ export function handleKit5Session(
       return;
     }
     response.setHeader("Set-Cookie", `${COOKIE_NAME}=${createOperatorSessionCookie(config.operatorToken!, Date.now(), config.operatorId)}; Path=/api; HttpOnly; Secure; SameSite=None; Max-Age=${SESSION_TTL_SECONDS}`);
-    send(response, 200, { status: "authenticated", approvalAvailable: Boolean(config.operatorId) });
+    send(response, 200, { status: "authenticated", approvalAvailable: false });
   }).catch(() => send(response, 400, { error: "invalid_request" }));
 }
 

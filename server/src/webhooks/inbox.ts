@@ -9,21 +9,6 @@ export interface AirwallexWebhookEvent {
   created_at?: string;
 }
 
-export const AIRWALLEX_WEBHOOK_EVENTS = [
-  "connected_account_transfer.new",
-  "connected_account_transfer.pending",
-  "connected_account_transfer.settled",
-  "connected_account_transfer.suspended",
-  "connected_account_transfer.failed",
-  "charge.new",
-  "charge.pending",
-  "charge.settled",
-  "charge.suspended",
-  "charge.failed",
-  "deposit.settled",
-  "issuing.card_transaction.declined",
-] as const;
-
 export function isOnboardingWebhookEvent(eventType: string): boolean {
   return eventType.startsWith("account.") || eventType.startsWith("rfi.");
 }

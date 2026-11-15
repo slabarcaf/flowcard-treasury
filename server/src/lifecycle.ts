@@ -1,16 +1,12 @@
 /**
- * Graceful shutdown management for the FlowCard Node bridge ledger server.
+ * Graceful shutdown management for the FlowCard Node compatibility API.
  */
 
 export interface ShutdownDependencies {
   server?: { close: (cb: (err?: Error) => void) => void; closeAllConnections?: () => void };
   pool?: { end: () => Promise<void> };
   onboardingForwarder?: { stop: () => Promise<void> };
-  webhookWorker?: { stop: () => void };
-  outboxWorker?: { stop: () => void };
-  reconciliationWorker?: { stop: () => void };
   snapshotSchedule?: { stop: () => void };
-  fundingRecoveryTimer?: NodeJS.Timeout;
   exitProcess?: (code: number) => void;
 }
 
@@ -59,13 +55,7 @@ export function createGracefulShutdown(deps: ShutdownDependencies, timeoutMs = 1
       }
 
       // 2. Concurrently clear intervals and stop background workers/forwarders promptly to avoid generating new work
-      if (deps.fundingRecoveryTimer) {
-        clearInterval(deps.fundingRecoveryTimer);
-      }
       deps.snapshotSchedule?.stop();
-      deps.webhookWorker?.stop();
-      deps.outboxWorker?.stop();
-      deps.reconciliationWorker?.stop();
 
       const forwarderStopPromise = deps.onboardingForwarder ? deps.onboardingForwarder.stop() : Promise.resolve();
 
