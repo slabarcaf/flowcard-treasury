@@ -3,7 +3,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ServerConfig } from "../config.js";
 import type { DatabasePool } from "../db/pool.js";
 import { handleAirwallexWebhook } from "./routes/airwallex-webhook.js";
-import { handleCustomerSnapshot, requestAuthorization } from "./routes/customer-snapshot.js";
 import { handleLedgerProjection } from "./routes/ledger-projection.js";
 import { handleKit5Preflight, handleKit5Session } from "./kit5-operator-auth.js";
 import { handleOnboardingProxy, handleOnboardingDocsProxy, isOnboardingDocsRoute } from "./routes/onboarding-proxy.js";
@@ -17,7 +16,7 @@ export function createHttpServer(
   return createServer(createRequestHandler(config, pool, onboardingForwarder));
 }
 
-/** Node retains onboarding, snapshots and historical ledger reads only. */
+/** Node retains onboarding, mapping tooling and historical ledger reads. */
 export function createRequestHandler(
   config: ServerConfig,
   pool?: DatabasePool,
@@ -28,6 +27,11 @@ export function createRequestHandler(
     if (isRetiredFinancialRoute(pathname)) {
       response.writeHead(410, { "content-type": "application/json", "cache-control": "no-store" });
       response.end(JSON.stringify({ error: "legacy_funding_retired", message: "Use the Funding and Collection service's authenticated offer workflow." }));
+      return;
+    }
+    if (/^\/api\/customers\/[^/]+\/snapshot\/?$/.test(pathname)) {
+      response.writeHead(410, { "content-type": "application/json", "cache-control": "no-store" });
+      response.end(JSON.stringify({ error: "legacy_customer_snapshot_retired", message: "Use the Go underwriting customer-context contract with its service authentication." }));
       return;
     }
     const operatorAuth = {
@@ -67,22 +71,6 @@ export function createRequestHandler(
     if (request.method === "GET" && request.url === "/api/ledger" && pool) {
       void handleLedgerProjection(response, pool);
       return;
-    }
-    if (request.method === "GET" && pool) {
-      const match = /^\/api\/customers\/([^/]+)\/snapshot(?:\?.*)?$/.exec(request.url ?? "");
-      if (match) {
-        let customerId: string;
-        try {
-          customerId = decodeURIComponent(match[1]!);
-        } catch {
-          response.writeHead(400, { "content-type": "application/json", "cache-control": "no-store" });
-          response.end(JSON.stringify({ error: "invalid_customer_id" }));
-          return;
-        }
-        void handleCustomerSnapshot(response, pool, customerId, requestAuthorization(request),
-          config.salesforceSnapshotReadToken, config.salesforceSnapshotMode);
-        return;
-      }
     }
     handleRequest(request, response);
   };

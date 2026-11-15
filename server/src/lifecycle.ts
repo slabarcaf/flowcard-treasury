@@ -6,7 +6,6 @@ export interface ShutdownDependencies {
   server?: { close: (cb: (err?: Error) => void) => void; closeAllConnections?: () => void };
   pool?: { end: () => Promise<void> };
   onboardingForwarder?: { stop: () => Promise<void> };
-  snapshotSchedule?: { stop: () => void };
   exitProcess?: (code: number) => void;
 }
 
@@ -54,9 +53,7 @@ export function createGracefulShutdown(deps: ShutdownDependencies, timeoutMs = 1
         });
       }
 
-      // 2. Concurrently clear intervals and stop background workers/forwarders promptly to avoid generating new work
-      deps.snapshotSchedule?.stop();
-
+      // 2. Stop the retained webhook forwarder while HTTP requests drain.
       const forwarderStopPromise = deps.onboardingForwarder ? deps.onboardingForwarder.stop() : Promise.resolve();
 
       // Await both HTTP server drain and forwarder termination concurrently

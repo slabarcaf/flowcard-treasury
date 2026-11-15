@@ -53,9 +53,6 @@ export interface AirwallexGateway {
   listConnectedAccounts(): Promise<ProviderConnectedAccount[]>;
 }
 
-export { HttpAirwallexUnderwritingGateway } from "./underwriting-client.js";
-export type { AirwallexUnderwritingGateway } from "./underwriting-client.js";
-
 /** Fetch-backed gateway. Constructing it is side-effect free; calls happen only when dispatched. */
 export class HttpAirwallexGateway implements AirwallexGateway, IssuingSimulationGateway {
   private accessToken: string | undefined;

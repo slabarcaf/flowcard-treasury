@@ -1,5 +1,5 @@
 import type { CrmClient } from '../types.js';
-import { getDemoSalesforceSnapshot } from '../../../server/src/salesforce/fixture-source.js';
+import { getDemoSalesforceSnapshot } from './salesforce/fixture-source.js';
 
 /**
  * Mock CRM client that returns seeded Salesforce notes.

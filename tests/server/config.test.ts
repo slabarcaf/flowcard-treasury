@@ -43,11 +43,6 @@ describe("server configuration", () => {
     });
   });
 
-  it("loads the optional Salesforce snapshot read token", () => {
-    expect(loadConfig({ ...validEnv, SALESFORCE_SNAPSHOT_READ_TOKEN: "  read-secret  " }).salesforceSnapshotReadToken)
-      .toBe("read-secret");
-  });
-
   it("loads server-only Kit 5 operator authentication configuration", () => {
     const config = loadConfig({
       ...validEnv,

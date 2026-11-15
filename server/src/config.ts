@@ -11,10 +11,6 @@ export interface ServerConfig {
   kit5OperatorId?: string;
   /** Exact browser origins allowed to establish the operator session. */
   kit5AllowedOrigins?: readonly string[];
-  /** Optional read boundary for production Salesforce snapshot responses. */
-  salesforceSnapshotReadToken?: string;
-  /** Snapshot source selected for this server process, when configured. */
-  salesforceSnapshotMode?: "demo" | "production_mcp";
   /** Upstream URL for Go onboarding service proxy (constructor injection or test). */
   onboardingServiceUrl?: string;
   /** Shared secret for service-to-service JWT assertions (constructor injection or test). */
@@ -141,12 +137,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     ...(env.KIT5_OPERATOR_ID?.trim() ? { kit5OperatorId: env.KIT5_OPERATOR_ID.trim() } : {}),
     ...(env.KIT5_ALLOWED_ORIGINS?.trim()
       ? { kit5AllowedOrigins: env.KIT5_ALLOWED_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean) }
-      : {}),
-    ...(env.SALESFORCE_SNAPSHOT_MODE?.trim() === "demo" || env.SALESFORCE_SNAPSHOT_MODE?.trim() === "production_mcp"
-      ? { salesforceSnapshotMode: env.SALESFORCE_SNAPSHOT_MODE.trim() as "demo" | "production_mcp" }
-      : {}),
-    ...(env.SALESFORCE_SNAPSHOT_READ_TOKEN?.trim()
-      ? { salesforceSnapshotReadToken: env.SALESFORCE_SNAPSHOT_READ_TOKEN.trim() }
       : {}),
     ...(onboardingProxy ?? {}),
   };

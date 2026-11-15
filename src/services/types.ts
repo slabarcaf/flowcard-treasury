@@ -84,7 +84,7 @@ export interface CrmNote {
 // Salesforce snapshot read API
 // ---------------------------------------------------------------------------
 
-import type { SalesforceCustomerSnapshot } from '../../server/src/salesforce/types.js';
+import type { SalesforceCustomerSnapshot } from './mock/salesforce/types.js';
 export type { DemoPolicyReadiness } from '../../shared/policy/types.js';
 
 export type SalesforceSnapshotSourceMode = 'demo' | 'production_mcp';
