@@ -10,9 +10,9 @@ requirement drafts that were previously stored in this directory.
 
 - The current user-facing product is the Bridge Capital back office and
   customer portal.
-- The Kit 5 and GD dashboards, their presenter scripts, and their demo-only
-  screen behavior are retired. Some Kit 5 server APIs remain for authenticated
-  API clients; they are compatibility surfaces, not current product UI.
+- The Kit 5 and GD dashboards, their presenter scripts and financial APIs are
+  retired. The Node operator-session endpoint remains for onboarding until
+  the Go browser gateway replaces that compatibility boundary.
 - Current Bridge Capital policy is summarized here and specified in the
   [Bridge Capital policy design](/docs/designs/bridge-capital-policy-spec.md).
   Runtime thresholds live in `src/features/bridge-capital/policy/`.
@@ -141,7 +141,7 @@ For the current Bridge Capital product, the configured fee is a $50 service
 fee plus 2% per month on principal, prorated over the selected term. Preset
 terms are 15, 30, 60, or 90 days; custom terms are 7 to 90 days. The full
 selected-term fee applies even if the customer repays early. There is no fee on
-an unused limit. This is distinct from the legacy server-side Kit 5 API fee.
+an unused limit. The retired server-side Kit 5 fee is historical only.
 
 The funding and repayment flow must:
 
@@ -157,11 +157,10 @@ The funding and repayment flow must:
 - Apply the late ladder: days 1–7 Watch; 8–30 Delinquent; 31–60 Serious; and
   61+ Default. A default makes the customer ineligible for 12 months.
 
-The retained server-side Kit 5 API uses separate compatibility settings: a
-USD $50,000 facility, 20% reserve floor, 20% per-customer cap, and a legacy
-1.5%-per-30-days fee with a seven-day minimum. These are not the source of
-terms for current Bridge Capital offers. Keep this API behavior separate from
-the current product policy.
+The historical Kit 5 financial API returns 410. Its old facility, limits and
+fees no longer configure executable server-side financial behavior. Go
+underwriting and Funding own the authoritative policy and financial execution;
+the current UI's TypeScript policy remains a fixture-demonstration model.
 
 ## Integrations, security, and audit
 
@@ -170,8 +169,10 @@ the current product policy.
   provider's account-scoping mechanism.
 - Keep Salesforce read-only and restrict it to allowlisted records and fields.
   Production connector permissions, field names, picklists, pagination, and
-  text limits must be verified before production use. See the
-  [Salesforce snapshot runbook](/docs/salesforce-snapshot-operations.md).
+  text limits must be verified before production use. The old Node snapshot
+  pipeline is retired; Go currently imports normalized facts and records
+  pending evidence. Live CRM retrieval remains deferred. See the
+  [retirement note](/docs/salesforce-snapshot-operations.md).
 - Verify webhook signatures over the raw request, deduplicate by event ID, and
   reconcile out-of-order or missed provider events.
 - Record the policy version, input/snapshot versions, signal evidence, rule
@@ -192,12 +193,11 @@ provider record retrieval and reconciliation. See the
 [sandbox prerequisites](/docs/demo/airwallex-sandbox-demo-prerequisites.md) and
 [demo acceptance matrix](/docs/infra/demo-acceptance.md).
 
-Production remote authorization remains gated on its provider contract,
-authentication, account mappings, trusted expected-deposit source, and verified
-policy inputs. The decision path must meet the 2.5-second authorization budget
-using cached profile features and a current-balance check, not live history
-queries. Verify the contract and permissions before enabling it. Do not infer
-production readiness from fixture tests or a local demo.
+The active Go flow starts after a decline. The old Node remote-authorization
+API is retired; its historical timing budget is not a delivered Go capability.
+Real shortfall extraction, provider authentication, trusted mappings and source
+facts need their own acceptance. A local fixture journey does not establish
+production readiness.
 
 ## Open requirements
 

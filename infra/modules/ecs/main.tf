@@ -91,9 +91,7 @@ resource "aws_ecs_task_definition" "node_gateway" {
           { name = "NODE_ENV", value = "production" },
           { name = "PORT", value = "3000" },
           { name = "KIT5_OPERATOR_ID", value = "flowcard-operator" },
-          { name = "KIT5_ALLOWED_ORIGINS", value = join(",", var.allowed_origins) },
-          { name = "REMOTE_AUTH_REPAYMENT_TERM", value = "asap" },
-          { name = "SALESFORCE_SNAPSHOT_MODE", value = "demo" }
+          { name = "KIT5_ALLOWED_ORIGINS", value = join(",", var.allowed_origins) }
         ],
         var.enable_proposed_onboarding_integration ? [
           { name = "ONBOARDING_SERVICE_URL", value = "http://onboarding-api.flowcard.internal:8080" }
