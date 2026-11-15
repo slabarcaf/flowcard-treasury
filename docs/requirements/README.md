@@ -93,6 +93,13 @@ key, date semantics, and completeness rules remain open; see the
 
 ## Underwriting and capital policy
 
+The separate `services/underwriting-engine` Go service is a proposed local
+assessment path using versioned structured snapshots and deterministic rules.
+Its synthetic DEMO imports and local API do not represent live customer data
+connectors, production credit approval, or a cutover of the existing Node/UI
+policy paths. Live receivable dates, allocation, history and servicing-ledger
+sources remain explicit integration gaps.
+
 The current demo policy has an eligibility stage and a request-time decision.
 A customer needs at least three months of tenure and 90 days of balance history.
 The tier determines a share of average monthly inflows that may be outstanding:

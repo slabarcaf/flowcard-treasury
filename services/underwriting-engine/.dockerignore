@@ -1,0 +1,9 @@
+**/.env
+**/.env.*
+**/.migration.env*
+**/runtime.env*
+**/migration.env*
+.dev/
+**/.dev/
+.git/
+**/*.tmp
