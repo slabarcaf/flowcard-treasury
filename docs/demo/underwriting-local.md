@@ -263,6 +263,78 @@ same POST/key and verifies the saved response is unchanged. A new preparation
 uses new versions and keys; it does not rewrite old snapshots or evaluations.
 Prepare a fresh run after the five-minute facility/shortfall window expires.
 
+## Coordinator handoff
+
+For one shared coordinator walkthrough, prepare once and pass the same
+`.dev/demo/manifest.json` bundle to the importer, mock and presenter. The exact
+prepare command is:
+
+```bash
+go -C services/underwriting-engine run ./cmd/demo prepare \
+  --scenario all --as-of now --out .dev/demo
+go -C services/underwriting-engine run ./cmd/demo serve-shortfalls \
+  --manifest .dev/demo/manifest.json
+go -C services/underwriting-engine run ./cmd/demo evaluate \
+  --manifest .dev/demo/manifest.json --api-url http://127.0.0.1:8083
+```
+
+If the integration uses a uniquely named task-owned database, append
+`--database-name flowcard_underwriting_demo_<safe_suffix>` and apply the
+generated mapping SQL only to that captured database. `prepare` returns a
+fresh `run_id`. Top-level manifest fields are `fixture_pack_version`,
+`run_id`, `run_anchor`, `source_mode`, `policy_id`, `policy_hash`,
+`output_directory`, `database_name`, `facility_id`, `facility_file`,
+`shortfalls_file`, `mapping_setup_sql`, `expected_trace_file`,
+`facility_books`, `scenarios`, and `provenance`. Each scenario includes
+`scenario_id`, `customer_id`, `account_id`, `card_id`, `shortfall_id`,
+`transaction_id`, `canonical_event_id`, `lifecycle_id`, `idempotency_key`,
+`customer_file`, `term_days`, `principal_cents`, `estimated_fee_cents`,
+`total_due_cents`, `customer_limit_cents`, `existing_exposure_cents`,
+`post_funding_exposure_cents`, `free_receivables_cents`, `expected_status`,
+`expected_rules`, and provenance.
+The complete retained run manifest is
+`.dev/demo/runs/<run_id>/manifest.json`; the top-level manifest points to the
+latest prepared run. Use one run's manifest, customer files and shortfall
+records throughout the walkthrough, without changing its anchor or IDs.
+
+If an existing local manifest points to a database/login removed during a
+prior test run, that bundle is not usable. Create the coordinator's owned
+database, then run `prepare` with its `--database-name` to produce fresh IDs
+and captures. Build the container before preparing; the shortfall/facility
+window is five minutes, and `cmd/demo evaluate` rejects a stale prepared run.
+Never edit timestamps or clone a saved decision.
+
+For coordinator requests, use the normal API endpoints:
+
+- `POST /api/underwriting/evaluations` with the generated `shortfall_id`,
+  requested term, and a new idempotency key for a new decision.
+- `GET /api/underwriting/evaluations/{evaluation_id}` for the saved result.
+- `GET /api/underwriting/evaluations?customer_id=<customer_id>` for customer
+  history, or omit the filter for the mode-wide list.
+- `GET /api/underwriting/customers/{customer_id}/context` for normalized
+  context and coverage/freshness flags.
+
+Incoming API auth uses `UNDERWRITING_SERVICE_SECRET` from the private runtime
+configuration. The JWT uses HS256, issuer `flowcard-node-proxy`, audience
+`flowcard-underwriting-service`, subject `underwriting-evaluator`, a `jti`,
+and a 30-second maximum lifetime. There is no separate read-only secret or
+snapshot/evidence publication endpoint. `POST /api/underwriting/evaluations`
+creates an authenticated assessment only. `SHORTFALL_SERVICE_SECRET` and
+`SHORTFALL_BASE_URL` configure the API's outbound shortfall read; they are not
+coordinator caller credentials. `UNDERWRITING_MODE`,
+`UNDERWRITING_FACILITY_ID`, `DATABASE_URL`, and `UNDERWRITING_SERVICE_SECRET`
+are runtime settings; the container also uses
+`UNDERWRITING_CONTAINER_DATABASE_URL`. Keep all values in the ignored
+mode-0600 configuration and do not transmit the secret value.
+
+The `customer_id` is the stable coordinator key. Service DTOs and synthetic
+manifest records can also contain internal `account_id`/`card_id` fields for
+server linkage; keep them out of model context and use the coordinator's
+`customer:<customer_id>` alias for funding references. All IDs and source rows
+in this bundle are synthetic DEMO fixtures. Prepare a fresh run immediately
+before presenting if the shortfall/facility freshness window expires; do not
+clone a saved decision or use a stale manifest as a success fixture.
+
 ## Stop and preserve data
 
 Stop only the opt-in Compose project, without removing volumes or database data:
