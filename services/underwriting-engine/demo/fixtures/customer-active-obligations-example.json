@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "source_mode": "DEMO",
+  "source_id": "underwriting-schema-example",
+  "source_version": "{{run_id}}-active-obligations",
+  "captured_at": "{{run_anchor}}",
+  "source_refs": [
+    {
+      "system": "synthetic-fixture",
+      "record_id": "customer-active-obligations-example",
+      "version": "{{run_id}}",
+      "effective_at": "{{run_anchor}}"
+    }
+  ],
+  "customer_id": "acct_bloom001",
+  "account_id": "acct_bloom001",
+  "card_id": "card_synthetic_bloom001",
+  "coverage": {
+    "standing": true,
+    "balance_history": false,
+    "inflow_history": false,
+    "bridge_history": true,
+    "lifetime_defaults": true,
+    "reservations": true,
+    "receivables": true,
+    "classification": true
+  },
+  "standing": {
+    "relationship_started_on": "{{run_anchor_date_minus_9_months}}",
+    "onboarding_complete": true,
+    "active": true,
+    "suspended": false,
+    "provider_account_status": "ACTIVE"
+  },
+  "history_window": {
+    "window_start": "{{run_anchor_date_minus_90_days}}",
+    "window_end": "{{run_anchor_date_minus_1_day}}"
+  },
+  "balance_history": [],
+  "inflow_history": [],
+  "bridges": [],
+  "reservations": [
+    {
+      "id": "{{run_id}}-reservation-1",
+      "transaction_id": "{{run_id}}-parent-transaction-1",
+      "principal_cents": 500000,
+      "fee_cents": 9500,
+      "status": "ACTIVE",
+      "bridge_id": null
+    }
+  ],
+  "receivables": [
+    {
+      "invoice_id": "{{run_id}}-invoice-1",
+      "payer_id": "synthetic-payer-1",
+      "currency": "USD",
+      "eligible_unpaid_cents": 1000000,
+      "allocated_cents": 500000,
+      "due_on": "{{run_anchor_date_plus_20_days}}",
+      "due_date_verified": true,
+      "allocation_complete": true,
+      "source_ref": {
+        "system": "synthetic-fixture",
+        "record_id": "invoice-1",
+        "version": "{{run_id}}",
+        "effective_at": "{{run_anchor}}"
+      }
+    }
+  ],
+  "classifications": [
+    {
+      "transaction_id": "{{run_id}}-parent-transaction-1",
+      "merchant_category": "suppliers",
+      "source_ref": {
+        "system": "synthetic-fixture",
+        "record_id": "classification-1",
+        "version": "{{run_id}}",
+        "effective_at": "{{run_anchor}}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "fixture_pack_version": 1,
+  "source_mode": "DEMO",
+  "provenance": "All financial facts and source references in this pack are explicitly synthetic templates. Relative timestamps are rendered from one run anchor by Task E.",
+  "schema_examples": [
+    "customer-empty-history-example.json",
+    "customer-active-obligations-example.json"
+  ],
+  "facility_template": "facility-template.json",
+  "shortfalls_template": "shortfalls-template.json",
+  "scenarios": [
+    {
+      "scenario_id": "eligible",
+      "customer_id": "acct_bloom001",
+      "account_id": "acct_bloom001",
+      "card_id": "card_synthetic_bloom001",
+      "expected_status": "ELIGIBLE",
+      "principal_cents": 700000,
+      "term_days": 30,
+      "estimated_fee_cents": 19000,
+      "total_due_cents": 719000,
+      "customer_limit_cents": 2000000,
+      "existing_exposure_cents": 1200000,
+      "post_funding_exposure_cents": 1919000,
+      "free_receivables_cents": 800000,
+      "expected_rules": [
+        {"rule_id": "INPUT_FRESH", "status": "PASS"},
+        {"rule_id": "CUSTOMER_ACTIVE", "status": "PASS"},
+        {"rule_id": "HISTORY_SUFFICIENT", "status": "PASS"},
+        {"rule_id": "NO_OVERDUE_OR_DEFAULT", "status": "PASS"},
+        {"rule_id": "CUSTOMER_CAPACITY", "status": "PASS"},
+        {"rule_id": "PAYMENT_NOT_BRIDGED", "status": "PASS"},
+        {"rule_id": "RECEIVABLE_COVERAGE", "status": "PASS"},
+        {"rule_id": "CAPITAL_AVAILABLE", "status": "PASS"},
+        {"rule_id": "SPEND_ALLOWED", "status": "PASS"},
+        {"rule_id": "REGIME_TIER_ALLOWED", "status": "PASS"}
+      ],
+      "provenance": "Synthetic Tier B scenario; run-specific shortfall and payment IDs are generated in Task E."
+    },
+    {
+      "scenario_id": "capacity_exceeded",
+      "customer_id": "acct_atlas001",
+      "account_id": "acct_atlas001",
+      "card_id": "card_synthetic_atlas001",
+      "expected_status": "INELIGIBLE",
+      "principal_cents": 700000,
+      "term_days": 30,
+      "estimated_fee_cents": 19000,
+      "total_due_cents": 719000,
+      "customer_limit_cents": 2000000,
+      "existing_exposure_cents": 1400000,
+      "post_funding_exposure_cents": 2119000,
+      "free_receivables_cents": 800000,
+      "expected_rules": [
+        {"rule_id": "INPUT_FRESH", "status": "PASS"},
+        {"rule_id": "CUSTOMER_ACTIVE", "status": "PASS"},
+        {"rule_id": "HISTORY_SUFFICIENT", "status": "PASS"},
+        {"rule_id": "NO_OVERDUE_OR_DEFAULT", "status": "PASS"},
+        {"rule_id": "CUSTOMER_CAPACITY", "status": "FAIL"},
+        {"rule_id": "PAYMENT_NOT_BRIDGED", "status": "PASS"},
+        {"rule_id": "RECEIVABLE_COVERAGE", "status": "PASS"},
+        {"rule_id": "CAPITAL_AVAILABLE", "status": "PASS"},
+        {"rule_id": "SPEND_ALLOWED", "status": "PASS"},
+        {"rule_id": "REGIME_TIER_ALLOWED", "status": "PASS"}
+      ],
+      "provenance": "Synthetic case changes only prior customer exposure from eligible; run-specific shortfall and payment IDs are generated in Task E."
+    },
+    {
+      "scenario_id": "missing_receivable_dates",
+      "customer_id": "acct_nova001",
+      "account_id": "acct_nova001",
+      "card_id": "card_synthetic_nova001",
+      "expected_status": "REVIEW_REQUIRED",
+      "principal_cents": 700000,
+      "term_days": 30,
+      "estimated_fee_cents": 19000,
+      "total_due_cents": 719000,
+      "customer_limit_cents": 2000000,
+      "existing_exposure_cents": 1200000,
+      "post_funding_exposure_cents": 1919000,
+      "free_receivables_cents": 800000,
+      "expected_rules": [
+        {"rule_id": "INPUT_FRESH", "status": "PASS"},
+        {"rule_id": "CUSTOMER_ACTIVE", "status": "PASS"},
+        {"rule_id": "HISTORY_SUFFICIENT", "status": "PASS"},
+        {"rule_id": "NO_OVERDUE_OR_DEFAULT", "status": "PASS"},
+        {"rule_id": "CUSTOMER_CAPACITY", "status": "PASS"},
+        {"rule_id": "PAYMENT_NOT_BRIDGED", "status": "PASS"},
+        {"rule_id": "RECEIVABLE_COVERAGE", "status": "UNKNOWN"},
+        {"rule_id": "CAPITAL_AVAILABLE", "status": "PASS"},
+        {"rule_id": "SPEND_ALLOWED", "status": "PASS"},
+        {"rule_id": "REGIME_TIER_ALLOWED", "status": "PASS"}
+      ],
+      "receivable_due_on": null,
+      "due_date_verified": false,
+      "provenance": "Synthetic case changes only invoice due-date verification from eligible; run-specific shortfall and payment IDs are generated in Task E."
+    }
+  ]
+}
