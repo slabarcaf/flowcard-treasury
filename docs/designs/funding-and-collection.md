@@ -942,13 +942,16 @@ full accounting reports and AWS deployment. Live gates remain named blockers.
 
 ## Verification boundary
 
-At implementation end, add at most three focused Go test functions, with a
-few representative cases per critical feature: money/terms/guards; HTTP/auth/
-idempotency/progress; isolated PostgreSQL lifecycle/concurrency/recovery.
-Exercise fee-first partial settlement and uncertain-send restart in the last
-journey. Inject clock, fixture provider and upstream HTTP. No live-funds tests.
+Use focused, independently runnable Go tests for money/terms/guards,
+HTTP/auth/idempotency/progress and isolated PostgreSQL financial transitions.
+Keep one concise lifecycle smoke journey; exercise concurrency, cancellation,
+uncertain-send restart and accounting edge cases in separate focused tests.
+Each scenario owns its mutable state. Reuse typed fixtures and inject clock,
+provider and upstream HTTP boundaries. Ramil removed the fixed test-count cap
+on November 15, 2026; coverage follows concrete behavioral risks.
 Report local fixture results separately from provider acceptance. The detailed
-plan lists exact files and acceptance checks; no tests run in this design task.
+plan records completed checks and the remaining joined-runtime acceptance.
+No live-funds tests are part of this verification.
 The same final database journey must drive normal API commands through durable
 operations, actual worker, actual Go Airwallex HTTP adapter, local HTTP double,
 GET reconciliation and ledger/collection reads. A standalone adapter test plus
