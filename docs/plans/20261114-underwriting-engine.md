@@ -306,7 +306,9 @@ formatting/Compose checks passed. The isolated PostgreSQL journey used the
 existing port 54329 test instance, verified restricted permissions and actual
 host/container API/demo flows, and removed only its marker-owned database/login.
 The pre-existing PostgreSQL and Docker containers remained running. Independent
-lead source review remains pending.
+F source review by a separate actor was unavailable in the child session; prior
+A-E source reviews stand, and no additional F source-review verdict is claimed.
+Lead owns final integration.
 
 Required final commands from the service directory:
 
