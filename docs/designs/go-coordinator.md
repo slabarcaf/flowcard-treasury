@@ -3,7 +3,9 @@
 Reviewed design for a separate Go service that investigates shortfalls with a
 bounded agent, requests saved deterministic assessments and reviews collection
 progress. Runtime database/HTTP/model/provider acceptance remains a separate
-gate from implementation.
+gate from implementation. The local joined DEMO source/closure slice is
+accepted; it does not establish real provider acceptance or live financial
+integration.
 
 [TOC]
 
@@ -18,11 +20,12 @@ Underwriting HTTP is committed at `e608a4556f83dde4c45e51d389d7d24da32835bd`
 and merged into lead `develop` at `1d3eee57eb490ff45a10fa4d404474639155255d`.
 The coordinator consumes its saved-evaluation and customer-context APIs; it
 does not import the underwriting policy package or change its policy. The
-underwriting runtime is separately lead-owned, and combined HTTP acceptance
-remains in G. The committed owner handoff is recorded in
+underwriting runtime remains lead-owned; its actual HTTP API was exercised by
+the accepted joined DEMO run in G. The committed owner handoff is recorded in
 `docs/demo/underwriting-local.md` at `ae02dc5d1de098993ab62a7753410057636d3492`.
-Funding interfaces have an accepted owner contract; its runtime and publisher
-acceptance are also separate gates.
+Funding interfaces have an accepted owner contract. The local joined DEMO
+service/publisher slice is evidenced below; actual provider acceptance and
+broader Funding/browser acceptance remain separate gates.
 
 The combined local DEMO profile uses coordinator API `127.0.0.1:8090`, the
 coordinator-owned synthetic shortfall list/detail adapter at `127.0.0.1:8092`,
@@ -226,8 +229,9 @@ engine REVIEW_REQUIRED result. DB failure is 503 and retries as an outage.
 Stale/incomplete context remains readable with explicit flags; its presence
 never establishes current completeness. Pin its exact version on the run.
 The coordinator receives no SQL grants on underwriting tables and has no
-snapshot write API. The HTTP service is committed; runtime freshness and
-combined calls remain part of G.
+snapshot write API. The committed underwriting HTTP/context API was exercised
+by the accepted joined G run; source and financial freshness remain explicit
+runtime flags, not a consequence of that acceptance.
 
 ### Attributed evidence and validation boundary
 
@@ -305,9 +309,10 @@ source said something; they do not establish financial truth.
 ## Collection progress monitoring
 
 Funding and Collection owns the servicing ledger and every movement/consent
-guard. The feed and read DTOs below are owner-accepted contracts; actual service
-availability and publisher consistency still require G proof. The first
-coordinator slice reads,
+guard. The feed and read DTOs below are owner-accepted contracts; the local
+joined run below proves service availability and publisher consistency for
+the demonstrated DEMO slice. It does not establish actual provider acceptance.
+The first coordinator slice reads,
 investigates and recommends next steps; it issues no money-movement command.
 No new service, Node adapter or generic workflow layer is introduced.
 
@@ -338,7 +343,8 @@ Persist the returned checkpoint only after validating its relation to the last
 item; follow `has_more` without waiting the normal poll interval, subject to
 scheduler fairness. A retention gap holds discovery for explicit reconciliation.
 
-Owner-accepted routing contract; runtime acceptance remains separate:
+Owner-accepted routing contract; its joined local DEMO source-emission path was
+verified in G, while real provider acceptance remains false:
 `resource_type` is
 OFFER/BRIDGE/OPERATION; each item carries `customer_id`, internal `account_ref`,
 `bridge_id` and parent `bridge_version` when a bridge exists, plus exact
@@ -376,8 +382,9 @@ offer/bridge/operation reads and changes. It proves no ownership, consent,
 approval or financial authority. The initial agent has no write tool. Before
 linking, the coordinator validates its own case, saved evaluation, customer,
 private raw-account relation, alias and source binding/mode. Funding owns the
-field publication and money guards; G must verify the actual publisher through
-its committed HTTP service, not a fake success route.
+field publication and money guards. The accepted joined G artifacts evidence
+the exact source-emitted origin references through the actual local Funding
+HTTP service, not a fake success route.
 
 Use the same serial scheduler, alternating shortfall discovery, servicing
 change pages and one case step. Each due feed gets one page before another
@@ -857,9 +864,7 @@ committed underwriting API/import CLI, a read-only shortfall list/detail
 adapter over the exact prepared bundle, and the deterministic agent/source
 fixtures. The `8092` adapter preserves the run's shortfall records, IDs,
 anchor and provenance; it does not evaluate or fabricate a financial result.
-Funding remains an owner-supplied HTTP dependency until its runtime and linked
-publisher are ready. No contract double can establish that publisher
-acceptance. No shared database reset or root `.env` copy.
+No shared database reset or root `.env` copy.
 
 Use two distinct Bloom cases, both preserving the canonical $9,000 attempt,
 $2,000 observed balance and $7,000 shortfall. Bloom-A has complete synthetic
@@ -900,21 +905,70 @@ visible row is found on backfill, restart after remote POST reuses its saved
 decision, stale lease cannot publish, and wrong-customer/injected tool calls
 are denied. Document exactly which components were real versus fixture doubles.
 Final verification is limited to three focused test functions, described in
-the [implementation plan](/docs/plans/20261114-go-coordinator.md).
+the [implementation plan](/docs/plans/completed/20261114-go-coordinator.md).
+
+### Accepted joined DEMO evidence
+
+The lead-owned joined run `da3bc19b-085d-4ff3-80c4-33b570b4896a`, anchored at
+`2026-11-15T19:22:03.586696Z`, demonstrated a source-emitted funding chain
+through coordinator monitoring. Shortfall case
+`14227972-3985-87f7-b846-9da5dfd99860` linked its saved evaluation
+`d521b3f0-4916-4418-81dd-2fadf1322f0a` and offer
+`3c832fab-2218-41b5-b3a8-dfb477cc1c09` to bridge
+`913cd3df-ff6e-49d4-8640-c708ac4da638` and collection case
+`91511fc3-c895-8a3b-bba8-c881cef988e4`. The verified alias was
+`customer:acct_bloom001` under DEMO binding `flowcard-integration-20261114`.
+
+The joined feed proof recorded 58 contiguous events through checkpoint 58,
+with exact origin/evaluation/offer references. The final bridge was REPAID
+version 28, the coordinator collection case was CLOSED version 28, and
+`refresh_needed` was false. Source debt buckets and holds were zero/empty; all
+four operations were SETTLED with positive operation versions. Three
+settlement allocations were fee 10,000 cents, fee 9,000 cents, and principal
+700,000 cents. The Funding result retained principal 700,000 cents, fee 19,000
+cents, and 30-day term. The Funding-owned local provider double recovered its
+reply; actual provider acceptance remained false.
+
+The missing-date case retained saved assessment
+`5721c62d-5dee-40ed-8a2f-4438d94dd5f9` as REVIEW_REQUIRED with
+`funding_authorized=false`. Evidence
+`ae0f7896-913e-4ca9-9fe2-7cb8ab5b0e03` remained pending and unverified. The
+coordinator restart comparison preserved assessment, runs, evidence, and
+bridge version. Artifacts are under the main ignored runtime: Funding
+`joint-funding-result.json`, `bridge-final.json`, `verified-allocations.json`,
+and `selected-run.json`; Coordinator `selected-profile.json`,
+`capture/joined-feed-proof.json`, `capture/restart-proof.json`, and the
+after-restart case captures. The exact run and artifact paths are recorded in
+`/tmp/rootie3-final-joined-artifact-verdict.txt`.
+
+This proves the demonstrated local source-read/monitoring/closure/restart slice,
+not every collection-agent response. The actual collection case contained an
+empty `runs` array, an empty `recommendations` array, and
+`investigation:null`; held/uncertain agent commentary was not observed and is
+not inferred from Funding-side events. Older refused-book and 422 response
+history remains unchanged under the Funding `retired-books` directories; the
+joined run does not rewrite or replace those records. Post-expiry historical
+API reads remained available with `service_ready:true`, while shortfall
+freshness and `workflow_ready` were false; servicing freshness/monitoring
+remained true. Historical reads do not renew source freshness. Browser
+acceptance remains lead-owned. Task 14, live model/CRM/provider acceptance,
+and actual provider acceptance are not established by this DEMO.
 
 ## Review points and exclusions
 
 The 30-day term, underwriting HTTP/context DTO and auth, account alias/private
 scope, servicing feed/read DTO, operation version, source binding and optional
-origin carrier are owner-approved contracts. Their runtime behavior still
-requires the evidence listed in G. Live model/data/spend approval, supported
-Airwallex decline extraction, and the concrete read-only CRM mapping remain
-separate gates.
+origin carrier are owner-approved contracts. The joined DEMO slice verifies
+the case/evaluation/origin chain and servicing feed through source-confirmed
+closure. Actual provider acceptance remains false. Live model/data/spend
+approval, supported Airwallex decline extraction, and the concrete read-only
+CRM mapping remain separate gates.
 
-No live provider call, subscription change, deployment, automatic publication,
-CRM write, arbitrary browsing, human credit-approval system, funding, offers,
-UI, Node cutover or later automatic reevaluation is included. These drafts
-do not expand implementation authorization.
+The coordinator has no funding command, offer authority, automatic publication,
+CRM write, arbitrary browsing, human credit-approval system, UI, Node cutover or
+later automatic reevaluation. The joined DEMO used the separate Funding-owned
+local provider double; no real provider call, subscription change or deployment
+occurred. These drafts do not expand implementation authorization.
 
 ## References
 
