@@ -1,7 +1,8 @@
 # Legacy UI and repository cleanup
 
 Implemented locally on November 15, 2026 in `chore/legacy-ui-cleanup`, based
-on develop `569ced2`. Source changes remain uncommitted and unmerged.
+on develop `569ced2`. Source commit `3877772` was merged into local develop
+at `9e3ec34`. The Go gateway delivery was then merged at `6a499b6`.
 
 [TOC]
 
@@ -47,7 +48,7 @@ archives and integration evidence were preserved. No process was stopped.
 ## Verification
 
 - Baseline: 160 tests in twelve files passed; frontend build passed.
-- Final retained scope: 235 tests in 26 files passed. One existing shared-DB
+- Pre-merge retained scope: 235 tests in 26 files passed. One existing shared-DB
   forwarding concurrency test was deliberately excluded, not claimed passing.
 - Frontend and Node server production builds passed.
 - Current UI, onboarding, Go and retained Node source: 448 file hashes match
@@ -57,6 +58,10 @@ archives and integration evidence were preserved. No process was stopped.
   matches the actual main checkout inventory.
 - OpenTofu format check, scoped Oxlint and diff checks passed. No Terraform
   initialization, plan, apply or cloud request was performed.
+- Combined develop verification passed 251 TypeScript tests in 29 files,
+  gateway race tests (15 top-level tests and 18 HTTP subtests), Go build/vet,
+  Node build and both frontend modes. One shared-DB Node test was excluded;
+  no gateway scenario was skipped.
 
 Logs are retained at `/tmp/flowcard-cleanup-retained-tests.log`,
 `/tmp/flowcard-cleanup-frontend-build.log`,
@@ -64,5 +69,6 @@ Logs are retained at `/tmp/flowcard-cleanup-retained-tests.log`,
 `/tmp/flowcard-cleanup-tofu-format.log`. The worktree's ignored `.dev/cleanup/`
 contains the execution checklist and preserved-source hash inventory.
 
-No credential, database, provider, model, active-agent or deployed-service
-change, commit, merge or remote publication was performed.
+No credential, existing-database, provider, model or deployed-service change,
+runtime restart or remote publication was performed. Gateway verification
+used owned disposable databases and cleaned them after testing.

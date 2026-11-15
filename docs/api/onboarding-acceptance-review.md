@@ -10,7 +10,7 @@ account capability. No provider request or account creation was performed.
 
 | Area | Local evidence | External evidence or remaining gate | Next action |
 | --- | --- | --- | --- |
-| Company/application CRUD | Go DTOs, UI serializers and saved-draft/person PATCH journey implemented | This does not create an activated provider account | Repeat through real operator login and the Go gateway |
+| Company/application CRUD | Real operator login, Go gateway and owned production-handler/DB draft/person PATCH journey verified | This does not create an activated provider account | Complete remaining provider acceptance separately |
 | Submission revisions | Latest locked Company/Application are revalidated and frozen; application revision checked | Earlier revision-policy deferral is superseded | Preserve semantics and same-key retries through gateway |
 | US business payload | Supported profile/person/contact/document mapping implemented | Complete entity/role/document matrix and account capability still require verification | Record field-by-field official sources before changing forms |
 | Agreements | Sandbox omission of uncollected agreements is implemented; partial/non-sandbox records gated | Real acceptance metadata must not be invented; activation requirements remain | Keep real consent collection backlogged |

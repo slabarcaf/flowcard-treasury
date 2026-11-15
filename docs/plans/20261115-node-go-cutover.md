@@ -54,10 +54,13 @@ Ramil selected real customer/operator login on November 15, 2026. Follow
   PostgreSQL, preserving actor attribution and same-draft person IDs.
 - [x] Implement C: operator-only Coordinator/Funding reads, exact cents and
   versions, no financial writes or silent fixture fallback. See the
-  [financial reads plan](/docs/plans/20261115-browser-financial-reads.md).
+  [financial reads plan](/docs/plans/completed/20261115-browser-financial-reads.md).
 - [ ] Complete D: trusted customer bindings and actor-bound financial writes.
 
-A-C are verified locally in the opt-in Go workspace. The normal legacy preview
+A-C were merged at `6a499b6` and verified together with UI cleanup `9e3ec34`.
+The integration checks and limits are recorded in
+[the merge note](/docs/demo/browser-gateway-integration.md).
+The normal legacy preview
 remains unchanged unless explicitly started with the Go gateway flag. Existing
 manual services, root environment and user records were not modified. No real
 provider/model call, customer consent or financial write is inferred.

@@ -14,9 +14,9 @@ Implement from a worktree based on develop under .worktrees/. Preserve user
 changes, the existing backend and roster. No deployment, platform writes,
 commits or pushes are authorized by this document alone.
 
-Use Planning Exec when execution is authorized. Repository instructions require
-Agterm coding sessions instead of spawned subagents. Apply Go style when writing
-Go, keep checks fixture-based, and add tests with each behavioral task.
+When execution is authorized, the addressed agent owns implementation and
+verification. Delegate only when Ramil explicitly requests it. Apply Go style
+when writing Go, keep checks fixture-based and cover meaningful failure paths.
 
 ## Progress tracking
 

@@ -48,11 +48,15 @@ not a scheduler/underwriting execution or financial transition acceptance.
 Evidence and complete path inventory:
 `.dev/browser-auth/task-c-report.md`.
 
+Local integration is complete: source commit `249024d`, develop merge
+`6a499b6`. The combined verification and its limits are recorded in
+[the integration note](/docs/demo/browser-gateway-integration.md).
+
 ## Acceptance boundaries
 
 Use fixture-backed local HTTP and uniquely marker-owned PostgreSQL targets.
 Read-only production handlers may run in bounded test harnesses; no scheduler,
 worker, provider or model is started. Label synthetic source data and process
 versus handler evidence. Preserve existing shared roles and all manual data.
-No new dependencies, root env copy, commit, merge, push, deploy or team-lead
-reporting. Task D remains separate.
+No new dependencies, root env copy, push, deploy or real provider/model call.
+Task D remains separate.

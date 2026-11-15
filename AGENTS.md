@@ -164,14 +164,15 @@ schema. The Node compatibility and onboarding APIs use health ports 8000 and 808
   changes to agreed behavior.
 - Use brainstorming guidance for ideation, architecture, or product requirements.
 - Prepare an implementation plan with the Planning Make skill when available.
-- Use `agents-skills:rootie-mailbox-chat` for back-and-forth peer coordination
-  with Rootie in the other agterm pane. It is for peer chat, not a one-shot task
-  handoff or a read-only second opinion.
-- For planned execution, follow Planning Exec in a new Codex session in this
-  workspace via agterm. Pass `AGTERM_WORKSPACE_ID`, use the Rootie mailbox for
-  lead communication, require the implementer's report in the lead pane plus
-  notification, and independently review each task before advancing. Do not
-  spawn subagents.
+- The agent Ramil addresses owns the task end to end: planning, implementation,
+  verification and reporting. Execute the work directly in that agent's session.
+- Delegate work, spawn subagents or start another agent session only when Ramil
+  explicitly requests delegation or parallel agent work. A plan or execution
+  skill does not authorize delegation by itself.
+- When Ramil requests delegation through agterm, pass `AGTERM_WORKSPACE_ID`,
+  use `agents-skills:rootie-mailbox-chat` for peer coordination, require the
+  implementer's report in the requesting agent's pane plus notification, and
+  follow the review checkpoints specified for that task.
 - Create new worktrees from `develop` under `.worktrees/<branch-name>`; never
   base one on another worktree. Do not copy the root `.env` into a worktree.
 - For Codex, run `codex plugin marketplace upgrade` in the repo to download the
