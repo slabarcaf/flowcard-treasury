@@ -135,13 +135,22 @@ schema. The ledger and onboarding API health endpoints use ports 8000 and 8080.
   `go -C services/company-onboarding run ./cmd/openapi`.
 - See the [API documentation](docs/api/README.md) for contracts and details.
 
-## Testing limits
+## Testing approach
 
-- Add at most three focused test cases for changed behavior.
-- Reuse existing test frameworks and fixtures. Do not add test dependencies, infrastructure, or unrelated coverage.
-- Do not test trivial getters, framework behavior, or unchanged code.
-- If more than three cases appear necessary, explain why and ask first.
-- Run independent routine checks concurrently where possible; do not use live services for fixture-based tests.
+- Add focused tests for changed behavior and meaningful failure paths. Choose
+  coverage based on risk; there is no fixed cap on test cases or functions.
+- Prefer small, independently runnable tests organized by behavior or failure
+  boundary. Each test must own its mutable state and run without relying on
+  another test's execution order.
+- Keep end-to-end journeys concise. Exercise recovery and edge cases in focused
+  tests, using shared typed setup helpers where useful.
+- Reuse existing test frameworks and fixtures. Ask before adding test
+  dependencies or infrastructure, or expanding into unrelated coverage.
+- Avoid tests of trivial getters, framework behavior, or unchanged code unless
+  needed to reproduce a concrete regression. Preserve meaningful assertions
+  when splitting or reorganizing tests.
+- Run checks appropriate to the change. Run independent routine checks
+  concurrently where safe; do not use live services for fixture-based tests.
 
 ## Agent workflow
 

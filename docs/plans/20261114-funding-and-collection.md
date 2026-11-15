@@ -1,24 +1,63 @@
 # Funding and collection implementation plan
 
-Proposed for review, November 14, 2026. Implement the separate Go service in
-[the design](/docs/designs/funding-and-collection.md) through the reviewed
-task sequence. This document records scope and current status.
+Updated November 15, 2026. The separate Go service in
+[the design](/docs/designs/funding-and-collection.md) is implemented and
+component-tested. This document distinguishes completed source work from
+remaining joined-runtime acceptance and later cutover.
 
 [TOC]
 
 ## Independent review status
 
-November 14, 2026: Rootie 7 (GPT-6.1 SOL, Medium reasoning) independently
-pressure-tested both documents and rereviewed the financial/contract fixes.
-Final bounded verdict: ready for delegation of the scoped known-empty DEMO
-fixture and Go HTTP-adapter delivery. Pricing metadata was subsequently
-released in public policy commit `d2aeb7ff1987fb7ae6ac4c47fc40e5ca8bae3766`;
-Task 7A source was accepted and Task 7B is in lead review.
+November 14, 2026: independent review accepted the bounded known-empty DEMO
+implementation plan. Subsequent source reviews accepted Tasks 1–12 and the
+Task 13 component candidate. The public evaluator and pricing accessor are
+integrated from `d2aeb7ff1987fb7ae6ac4c47fc40e5ca8bae3766`.
 
-Provider acceptance and live-operation authorization remain separate gates.
-The opening-day payoff convention remains proposed/disclosed. Real dispatch
-and later Node cutover retain separate gates. Three focused final test
-functions remain the limit. Coordinator owner was notified of WAIT_FOR_ACCRUAL.
+November 15, 2026: component implementation `9a687ca`, scope correction
+`e8d68a2`, Ramil-authorized test cleanup `1d82beb`, and standalone provider
+balance fix `ae90c96` are integrated into local `develop` at `edbcebf`.
+All seven Funding tests passed on the integrated tree; build and vet passed.
+Task 13 joined Underwriting/Coordinator/Funding acceptance remains open.
+
+The first actual joined run created a linked offer and acceptance, then saved
+422 `PROVIDER_READ_HELD` before funding. The standalone provider double had
+encoded a numeric balance as a JSON string. The adapter correctly held it;
+`ae90c96` fixes the double's wire encoding. Its regression fails before the
+fix and passes afterward. Payment reads already use fresh observation times;
+no timestamp or freshness bypass was needed. The failed book and receipts
+are preserved; the corrected journey uses new owned books and a fresh window.
+
+The next actual run reached the funding guard and saved
+`SYSTEM_ACTOR_UNAVAILABLE` before money movement. Commit `004494b` adds the
+missing synthetic SYSTEM audit actor to prepared imports. Commit `5d3c06b`
+adds the invoice's exact source reference to the built-in customer provenance
+list, fixing `RECEIVABLE_COVERAGE_UNKNOWN` during component preparation.
+Both preparation modes now pass their focused regression. These follow-ups
+retain all real authority, policy and freshness guards.
+
+Evidence available in this execution environment:
+
+- `/tmp/funding-component-verification.md`: original component proof.
+- `/tmp/funding-provider-read-before.json`: standalone regression reproduction.
+- `/tmp/funding-provider-read-after.json`: seven-test suite after correction.
+- `/tmp/funding-joined-provider-fix-report.txt`: source paths, exact SHAs and
+  commands/results.
+- `/tmp/funding-joint-final-focused-tests.json`: fourteen top-level test
+  functions passed after the preparation and remaining guard corrections.
+- `/tmp/funding-system-actor-before.json` and
+  `/tmp/funding-system-actor-after.json`: system-actor regression reproduction
+  and corrected result.
+- `/tmp/funding-prepare-both-profiles.json`: both preparation modes pass.
+- Main checkout `.dev/integration/20261114/funding-corrected-merged-tests.json`:
+  independent integrated seven-test PASS, with zero skips.
+
+These ignored/local artifacts support component acceptance; they do not prove
+a completed joined journey. Source checkboxes below mean implemented and
+source-accepted. Demonstration and verification checkboxes require the stated
+runtime or test evidence. Task 14 and live acceptance remain separate scope.
+Ramil removed the numeric test cap: prefer isolated focused tests and concise
+journeys, preserve assertions, and reuse existing fixtures and dependencies.
 
 ## Scope, dependencies and execution boundary
 
@@ -38,23 +77,22 @@ One API, one serial worker, existing PostgreSQL, standard library and already
 approved pgx. No Node service dependency or new dependency approval inferred.
 Include a concrete Go Airwallex HTTP adapter, tested against local HTTP doubles
 and disabled for real dispatch until live gates clear.
-No provider simulations, live funds, model calls, AWS, public auth, card
-controls, notifications, automatic refunds or frontend integration.
+Provider doubles are explicitly synthetic DEMO fixtures. Live funds, model
+calls, AWS, public auth, card controls, notifications, automatic refunds and
+frontend integration are outside this delivery.
 
-The reviewed plan is now being implemented only in the assigned
-`feat/funding-collection` worktree from `develop`. The main checkout and its
-source documents remain untouched. Preserve user files, existing runtime
-processes and database volumes. Do not copy or read root `.env`. Never mark
-tasks complete for planned code.
+Implementation and follow-up edits use the assigned `feat/funding-collection`
+worktree. The lead integrated accepted commits into local `develop` and owns
+the shared runtime launches and source refresh. Preserve user files, existing
+runtime processes and database volumes. Do not copy or read root `.env`.
+Never mark tasks complete for planned code.
 
-Implementation uses regular code-first delivery, with final focused tests at
-the end as Ramil requested. Offline compile-only builds with cached dependencies
-are permitted for a stable source task; they do not replace final tests.
-Task-level acceptance below is source review until
-Task 13, which ends the first delivery. Task 14 is a separately authorized
-later migration phase. No tests per function or exhaustive permutations,
-and no live acceptance
-disguised as mocks. New source follows Go style and explicit typed boundaries.
+Source review and component verification are complete for the delivered
+service. Task 13 closes the first delivery after joined-runtime acceptance
+and resolution of the explicitly unverified checks below. Task 14 remains a
+separately authorized later migration phase. Use focused behavior and failure
+scenarios rather than exhaustive permutations. New source follows Go style
+and explicit typed boundaries; fixture results never imply live acceptance.
 
 ## Context and integration contracts
 
@@ -70,7 +108,9 @@ USD and ledger-owned facility capacity. Do not preserve legacy due-only
 collection or 5-bps/day fee. Funding settlement precedes card retry; no retry
 implementation in this plan.
 
-The following need reviewed upstream contracts before real integration:
+The following contracts are implemented for the local DEMO boundary; their
+shared-runtime linkage remains to be proved in Task 13. SANDBOX authority and
+real provider extraction remain live acceptance requirements:
 
 - Public pure Go underwriting `policy` package usable outside its module's
   `internal` tree, stable normalized facts and policy hash.
@@ -81,9 +121,10 @@ The following need reviewed upstream contracts before real integration:
 - Coordinator servicing change feed, expected-version actions and case links.
 - Customer delegation and actual collection authority for SANDBOX.
 
-Upstream files belong to other sessions. Task 1 specifies integration contracts
-and awaits owners' implementation, or uses explicit fixtures. This plan does
-not authorize changing underwriting/coordinator/shortfall files in this session.
+Upstream files belong to their respective owners. The public policy and
+local upstream contracts are integrated; synthetic provider facts remain
+explicitly identified. This plan does not authorize changing underwriting,
+coordinator or shortfall files in this session.
 
 ## Proposed file map
 
@@ -146,18 +187,18 @@ capacity or money command. Unresolved live contracts remain named blockers.
 **Files:** module files, `cmd/{api,worker,migrate}/main.go`,
 `internal/config/config.go`, `internal/provider/{provider,unsupported}.go`.
 
-- [x] Pin Go 1.27.3 and pgx v5.12.0 without upgrades. Policy module
-  replacement is intentionally omitted until reviewed public module exists.
+- [x] Pin Go 1.27.3 and pgx v5.12.0 without upgrades. The policy module
+  replacement uses the reviewed sibling public underwriting module.
 - [x] Implement exact configuration names, default loopback address 8085,
   distinct role keys, mode/endpoint validation, timeout and source binding.
-  Listener/occupied-port behavior remains for API startup wiring.
+  API startup binds the configured loopback listener and fails on conflicts.
 - [x] Reject mode/endpoint/key mismatches; require provider execution disabled
   unless explicit accepted contract and mode prerequisites exist.
 - [x] Define minimal typed provider methods for fresh payment/balance facts,
   deposit retrieval, create and lookup, returning certainty and evidence.
 - [x] Supply typed controlled errors for unsupported provider capabilities.
-  Concrete parser/replay controls and HTTP adapter endpoints remain later
-  tasks. Commands do not start an API or worker; create stays disabled.
+  Concrete parser/replay controls and the HTTP adapter are implemented in
+  Task 8. API/worker commands are wired; real provider creates stay disabled.
 
 Acceptance: API/worker cannot silently select a live provider or claim live
 readiness. The migration command is separate from runtime startup.
@@ -194,10 +235,10 @@ readiness. The migration command is separate from runtime startup.
 Acceptance: source review demonstrates one SQL boundary for reservations,
 settlements, allocation and corresponding coordinator changes; no runtime DDL.
 
-Task 3 source contains schema, migration and ledger/feed primitives. Worker
-lease transitions and webhook inbox processing remain in Tasks 8 and 9;
-Task 3 does not claim those runtime methods are implemented. SQL execution and
-end-to-end readiness verification remain in Task 13.
+Task 3 schema, migration and ledger/feed primitives are source-accepted.
+Worker leases and webhook inbox processing were completed in Tasks 8 and 9.
+The component tests executed migrations against uniquely owned databases;
+joined-runtime acceptance remains in Task 13.
 
 ### Task 4: Implement controlled fixture/facility/receivable imports
 
@@ -301,8 +342,8 @@ version requires new bindings. No queueing funds from an evaluation alone.
   allocations, placeholder and payment duplicate. Retain every other hold.
   `ValidateSourceLiquidity` separately excludes only that operation's local
   debit while checking all other source holds.
-- [ ] Task 8 must call both projections in the actual first-send guard and
-  verify the locked placeholder/allocation identities; no worker exists yet.
+- [x] Task 8 calls both projections in the actual first-send guard and
+  verifies the locked placeholder and allocation identities.
 - [x] Refuse TIGHT/CRITICAL with SCARCE_CAPITAL_RANKING_UNSUPPORTED; do not
   implement an invented score or arrival-order scarce allocation. Reserve
   facility principal, customer principal-plus-fee and full principal-plus-fee
@@ -325,37 +366,37 @@ reservation. A failed check cannot leave an orphan operation or allocation.
 `internal/domain/operation.go`,
 `internal/provider/{airwallex,auth,transfers,fixture}.go`.
 
-- [ ] Implement server-side token exchange with login headers, explicit account
+- [x] Implement server-side token exchange with login headers, explicit account
   context and in-memory expires-at cache. Use sandbox host allowlist, bounded
   response bodies, context timeouts and no credentialed redirects.
-- [ ] Implement CA transfer create with saved request ID, mapped destination,
+- [x] Implement CA transfer create with saved request ID, mapped destination,
   exact decimal USD amount, reviewed reason and bridge reference. Bind source
   to configured funding connected account A via `x-on-behalf-of`; destination
   is borrower B. No agent selects either account. Reject missing source scope.
-- [ ] Implement separate fee/principal repayment CA transfers with scope B and
+- [x] Implement separate fee/principal repayment CA transfers with scope B and
   destination A, reviewed purpose and borrower mandate. Persist direction and
   refuse swapped/self/remapped accounts. No Charges adapter is required.
-- [ ] Read source and borrower USD available balances in their correct account
+- [x] Read source and borrower USD available balances in their correct account
   contexts before dispatch. Source must cover transfer plus known provider
   fees, alongside ledger/reservation checks; unknown fee/balance semantics
   block dispatch. Verify mapped ACTIVE/KYC prerequisites.
-- [ ] Implement retrieve-by-ID and request-ID filtered list lookups for both
+- [x] Implement retrieve-by-ID and request-ID filtered list lookups for both
   directions, original account scope, bounded pagination and strict
   identity/amount/currency/status matching. Preserve fee and receipt timestamps.
 
-- [ ] Implement one serial worker, one-second polling, 60-second fenced
+- [x] Implement one serial worker, one-second polling, 60-second fenced
   leases, ten-second provider timeout, bounded retry schedules and hold codes.
-- [ ] Require expected state +token +unexpired DB-clock lease on each finish
+- [x] Require expected state +token +unexpired DB-clock lease on each finish
   CAS. Claim/finish obey facility-first locks; expiry never applies a stale
   worker's observation or starts a second unknown create.
-- [ ] Before first send repeat fresh financial/mapping/authority guards;
+- [x] Before first send repeat fresh financial/mapping/authority guards;
   mark DISPATCHING and commit before I/O. Refuse changed full shortfall.
-- [ ] Store same operation/request identity and payload across retry; restart
+- [x] Store same operation/request identity and payload across retry; restart
   from DISPATCHING enters UNKNOWN and lookup-only recovery.
-- [ ] Match complete retrieved provider identity/accounts/amount/USD/status;
+- [x] Match complete retrieved provider identity/accounts/amount/USD/status;
   absent lookup cannot authorize resend. Keep live replay unsupported until
   provider deduplication contract/retention is verified.
-- [ ] Reconcile PENDING/UNKNOWN with bounded reads; permission/schema/mismatch
+- [x] Reconcile PENDING/UNKNOWN with bounded reads; permission/schema/mismatch
   holds immediately. Cancellation/release requires never-sent or verified
   no-movement/returned evidence. Manual requests schedule lookup only.
 
@@ -367,16 +408,16 @@ for the same funding. No success is guessed when provider certainty is absent.
 **Files:** `internal/http/webhook.go`,
 `internal/postgres/settlements.go`, `internal/domain/bridge.go`.
 
-- [ ] Port exact shortfall raw-body signature/body-bound/timestamp rules to
+- [x] Port exact shortfall raw-body signature/body-bound/timestamp rules to
   the dedicated servicing route with durable mode/event deduplication.
-- [ ] Normalize deposit/transfer wakeups behind verified parser
+- [x] Normalize deposit/transfer wakeups behind verified parser
   interfaces; fixtures inject explicit contracts, SANDBOX remains unsupported.
-- [ ] Retrieve authoritative state outside transactions, retain protected
+- [x] Retrieve authoritative state outside transactions, retain protected
   provider observations and reject mismatched or incomplete settlement facts.
-- [ ] Lock/apply one unique settlement effect: funding converts reservation
+- [x] Lock/apply one unique settlement effect: funding converts reservation
   to principal and books contracted fee atomically; duplicate/out-of-order
   events cannot regress state or book a second obligation.
-- [ ] Preserve pending/unknown commitments; hold terminal conflicts and record
+- [x] Preserve pending/unknown commitments; hold terminal conflicts and record
   verified return/reversal with compensating postings, source and audit refs.
 
 Acceptance: HTTP success or a webhook name alone cannot book debt. Provider
@@ -387,33 +428,33 @@ event duplication and settlement duplication are separate deduplication keys.
 **Files:** `internal/domain/collection.go`,
 `internal/postgres/collections.go`, `internal/worker/collections.go`.
 
-- [ ] Verify canonical net settled USD credit after funding and fresh available
+- [x] Verify canonical net settled USD credit after funding and fresh available
   balance. Exclude pending/internal/bridge/refund/unclassified credits.
-- [ ] Require reviewed account-specific collection authority, purpose and
+- [x] Require reviewed account-specific collection authority, purpose and
   limits. Missing mandate/product/fee semantics leaves a visible blocked item.
-- [ ] Serialize one unresolved debit per customer/account; reserve against
+- [x] Serialize one unresolved debit per customer/account; reserve against
   remaining deposit budget, debt and mandate limit. Unknown operations consume
   budget until reconciled, preventing retry-driven overcollection.
-- [ ] Queue fee before principal as separate operations; only settled fee
+- [x] Queue fee before principal as separate operations; only settled fee
   completion permits principal, after refreshed available-balance check.
   Store immutable late/contract fee split. Follow the design's collection
   first-send lock/guard procedure, re-accruing before debt/waterfall checks.
-- [ ] For first-send checks project out only this proven-unsent operation's
+- [x] For first-send checks project out only this proven-unsent operation's
   deposit/mandate/debt/local-liquidity holds and its ID from unresolved checks.
   Keep all other and unknown commitments; never add to actual provider balance.
-- [ ] Cancel only NEVER_SENT operations when a changed cap/split/authority
+- [x] Cancel only NEVER_SENT operations when a changed cap/split/authority
   invalidates intent; release exact holds and allow bounded fresh replanning
   under the design's three-per-deposit/day limit. Never resize UNKNOWN.
-- [ ] Release invoice backing on every settled original fee/principal debt
+- [x] Release invoice backing on every settled original fee/principal debt
   reduction in original allocation order; late fees are unbacked servicing
   debt. Closure asserts zero allocations, debt and debit reservations.
-- [ ] Restore reversal backing only if still free; record deficit/hold rather
+- [x] Restore reversal backing only if still free; record deficit/hold rather
   than overallocate. Reopened old debt after another bridge opens remains
   visible as REOPENED_HELD and counts against exposure.
-- [ ] Record actual cash, debt allocation and principal capacity replenishment;
+- [x] Record actual cash, debt allocation and principal capacity replenishment;
   fee income does not enlarge facility. Oversized debit creates refund payable
   and hold; confirmed reversals restore debt and block new funding.
-- [ ] Close only zero finalized debt with no uncertain/refund/reversal work.
+- [x] Close only zero finalized debt with no uncertain/refund/reversal work.
   Retry only with fresh evidence and bounded attempt policy; never repeatedly
   charge unchanged insufficient balance or reset deposit consumed totals.
 
@@ -426,28 +467,28 @@ untouched. A timeout reserves the debit until resolved.
 **Files:** `internal/http/{bridges,operations,changes}.go`,
 `internal/worker/delinquency.go`, `internal/postgres/changes.go`.
 
-- [ ] Implement bridge/collection/operation reads and exposure/history/invoice
+- [x] Implement bridge/collection/operation reads and exposure/history/invoice
   state, with source mode/version and bounded sanitized evidence references.
-- [ ] Include stable obligation/bridge ID, source binding, internal account
+- [x] Include stable obligation/bridge ID, source binding, internal account
   alias, debt/USD/due date, last attempt/outcome, authority/actor guard
   statuses, provider observation time and next eligible retry. Keep flags
   distinct
   from movement authority and expose controlled recommendation codes.
-- [ ] Publish ascending transactional changes for offer decisions, funding,
+- [x] Publish ascending transactional changes for offer decisions, funding,
   partial collection, holds, due/overdue/default and closure, 25 per page.
-- [ ] Type resources as OFFER/BRIDGE/OPERATION, include exact parent bridge
+- [x] Type resources as OFFER/BRIDGE/OPERATION, include exact parent bridge
   ID/version whenever created, customer/account aliases and nullable case/
   evaluation/offer refs. Increment parent bridge version for every operation,
   authority, settlement, debt or hold change affecting allowed actions, in the
   same transaction as its feed row. Never reuse operation version as bridge
   version; coordinator checkpoints refresh targets and fences stale output.
-- [ ] Validate cursor mode and numeric range; replay from zero remains valid
+- [x] Validate cursor mode and numeric range; replay from zero remains valid
   for the retained installation lifetime. Never skip uncommitted lower changes.
-- [ ] Add version-guarded collection-review and operation-reconcile commands;
+- [x] Add version-guarded collection-review and operation-reconcile commands;
   use exact expected-version target and receipt from the pinned design.
   Neither route accepts amounts/accounts. Implement pinned history ordering
   and bridge-version cursor, plus accrual-current/as-of staleness fields.
-- [ ] Scan once per minute, catch up overdue fees/stages after restart, record
+- [x] Scan once per minute, catch up overdue fees/stages after restart, record
   default once and publish reminder/escalation/card-control requirements as
   pending work. Never mark an external notification/control as executed.
 
@@ -463,30 +504,34 @@ holding debt state or selecting its own monetary commands.
 `internal/http/server.go`, `Dockerfile`, `README.md`, API/design/plan docs and
 `docs/demo/funding-and-collection-local.md`.
 
-- [ ] Provide API/worker/import/migrate/demo-actor commands with private
+- [x] Provide API/worker/import/migrate/demo-actor commands with private
   loopback settings and no root `.env` access. Document unused-port selection.
-- [ ] Bundle synthetic offer/evaluation/mapping/payment/deposit/authority
+- [x] Bundle synthetic offer/evaluation/mapping/payment/deposit/authority
   fixtures plus fixture upstream HTTP/provider adapters. No provider IDs.
-- [ ] Implement pinned `cmd/demo prepare|serve-provider|run` commands and
+- [x] Implement pinned `cmd/demo prepare|serve-provider|run` commands and
   manifest with current relative dates, known-empty scope and synthetic actors.
   The real Go worker/HTTP adapter must produce the demonstrated lifecycle,
   not injected final ledger results. Refuse stale runs and nonloopback mocks.
-- [ ] Demonstrate explicit actor steps, reservation, pending/settled funding,
-  partial fee/principal collection, held timeout and same-identity
-  reconciliation.
-- [ ] Expose liveness separately from DB/migration/policy/mode readiness;
+- [x] Demonstrate component actor steps, reservation, confirmed funding,
+  partial fee/principal collection, dropped-receipt recovery and same-identity
+  reconciliation through the real API/worker/HTTP adapter.
+- [ ] Complete the standalone joined-process demonstration with actual saved
+  Underwriting evaluation and Coordinator case, partial collections, recovery
+  and linked Coordinator readback. Retain pending/held observations if seen.
+- [x] Expose liveness separately from DB/migration/policy/mode readiness;
   disclose FIXTURE_ONLY and funding/collection gates even when runtime is ready.
-- [ ] Expose supported regimes ABUNDANT/NORMAL and unsupported scarce
+- [x] Expose supported regimes ABUNDANT/NORMAL and unsupported scarce
   execution. Demonstrate human-approval guarding in a separate TIGHT offer,
-  followed by unsupported ranking and zero provider calls, not disbursement.
-- [ ] Document metadata-only operation inspection, restart, bounded review,
+  followed by unsupported ranking and zero provider creates. The HTTP
+  contract test proves the refusal and identical saved-422 replay.
+- [x] Document metadata-only operation inspection, restart, bounded review,
   unknown-state escalation and one-writer cutover requirements. No database
   reset/cleanup recipe or success override command.
 
 Acceptance: presenter can show the full deterministic lifecycle and coordinator
 read models without credentials, a model, Node service or live provider calls.
 
-#### Task 12A checkpoint
+#### Historical Task 12A source checkpoint
 
 Source-only preparation, provider-double, runtime-budget and packaging work is
 implemented in the assigned `feat/funding-collection` worktree. The fresh
@@ -497,7 +542,7 @@ commands and synthetic provenance. The `cmd/demo run` journey, lifecycle
 proof and presenter walkthrough remain Task 12B. No tests, database, app,
 provider or network operations are part of this checkpoint.
 
-#### Task 12B source checkpoint
+#### Historical Task 12B source checkpoint
 
 `cmd/demo run` now uses the actual saved Underwriting evaluation and the normal
 authenticated funding API routes. It records fixture customer acceptance,
@@ -506,76 +551,131 @@ funding, synthetic deposit control and fee-first collection readback. It
 asserts the TIGHT scarce-capital 422 has no new provider transfer, then checks
 the abundant profile's same-request timeout recovery, settlement allocations,
 zero debt/backing/holds and final provider balances. The runner rejects stale
-inputs and mismatched policy, mode, database name or source identities. An
-claims. It binds generated SQL, migration/import invocations, API readiness
-and the runner to an explicit owner-prefixed database name. The actual-profile
+inputs and mismatched policy, mode, database name or source identities. It
+binds generated SQL, migration/import invocations, API readiness and the
+runner to an explicit owner-prefixed database name. The actual-profile
 path reads a fresh owner-prepared known-empty Underwriting manifest without
 changing its source facts; the host supplies the saved assessment ID and
-matching coordinator case ID. No tests, database access, service starts,
-fixture execution or provider calls were performed. Task 12 source review and
-Task 13 runtime verification remain open.
+matching coordinator case ID. This checkpoint originally covered source
+only. Task 12 source review and Task 13 component verification subsequently
+passed; the corrected standalone joined journey remains open.
 
 ### Task 13: Final focused verification and review report
 
 **Files:** `internal/domain/servicing_test.go`,
-`internal/http/contract_test.go`, `internal/acceptance/journey_test.go`,
-`internal/testutil/{database,provider,upstream}.go`, final runbook/plan status.
+`internal/http/contract_test.go`, `internal/acceptance/*_test.go`,
+`cmd/demo/serve_provider_test.go`, `internal/testutil/`, final runbook/plan.
 
-- [ ] Add exactly three focused functions: `TestTermsAndGuards`,
-  `TestServicingContract`, `TestServicingJourney`. Use a few representative
-  scenarios per critical behavior, not exhaustive combinations or trivial
-  getter/framework tests. No additional test functions without Ramil approval.
-- [ ] In terms/guards, check chosen-term price/binding, full-or-zero current
-  rule refusal including fee-inclusive customer capacity, and daily overdue
-  accrual across a principal part-payment/catch-up. Include same-offer midnight
-  supersession and unsupported scarce execution within representative cases.
-- [ ] In HTTP contract, check unauthorized agent acceptance/approval, matching
-  versus changed-body command replay/version conflict, raw signed durable
-  receipt and ascending progress replay. Reuse fixtures across checks.
-- [ ] In the isolated DB journey, exercise concurrent fitting reservations,
-  uncertain send plus lease/restart reconciliation with the SAME identity,
-  duplicate settled funding/deposit effects, two partial fee-first deposits
-  and zero-debt/zero-allocation closure. Assert fee payments release backing,
-  late fees do not invent backing, self-reservation recheck passes all five
-  projected inputs, and lower fresh collection cap cancels only unsent intent.
-- [ ] In that same journey verify an unchanged $100 fee intent sends once
-  despite its own reservation, and VOID_UNFUNDED frees a fresh-offer attempt
-  without fake repayment history; ever-funded payment remains blocked.
-  Use a second held/mismatch branch for no guessed
-  settlement/overcollection and backdated correction review.
-- [ ] In the same HTTP/journey test functions, use a local Airwallex HTTP
-  double to exercise actual adapter login, source headers, exact amount/body,
-  A-to-B/B-to-A transfer creation/retrieval, held status and timed-out receipt
-  recovery. Verify no new create on ambiguous lookup; no extra test functions.
-- [ ] Make TestServicingJourney exercise API -> committed operation -> actual
-  worker -> actual HTTP adapter -> local provider double -> GET reconciliation
-  -> ledger/collections reads in the same run. Provider fixture controls may
-  change provider state or drop receipts, never inject final application
-  settlements. DEMO mock creates must work with live dispatch disabled.
-- [ ] Guard the test database helper to explicit loopback disposable names;
-  refuse runtime/manual DB targets. Use unique isolated schema/database and
-  synthetic mapping definitions. Never reset existing tables or volume.
-- [ ] Run the three-function service suite, build/vet and formatting checks;
-  run routine independent checks concurrently where possible. No live provider
-  tests or broad unrelated repository test sweep. Record actual skipped checks.
-- [ ] Review design/contract/runbook consistency, file diff scope and all live
-  gates. Report commands/results, changed files, unresolved upstream contracts,
-  fixture status and provider acceptance separately. Leave execution artifacts
-  and plan status accurate; no automatic commit, merge, push or deployment.
+- [x] Add focused terms/guards, HTTP contract and end-to-end smoke coverage.
+  Ramil subsequently authorized independent cancellation, uncertain-send
+  recovery and reversal/accrual scenarios plus typed shared setup. The
+  standalone provider correction adds its own focused handler regression.
+- [x] Check selected-term pricing/hash binding, fee-inclusive full-or-zero
+  customer capacity, scarce-capital refusal and cumulative daily accrual.
+  Verify persisted UTC-day basis, numerator, assessed debt/cursor and replay
+  after verified principal reversal in the collection scenario.
+- [x] Check actor role refusals, same-body versus changed-body command replay,
+  stale decision versions, signed durable raw webhook receipts, event-body
+  conflict and ascending scoped servicing changes in the HTTP contract test.
+- [x] Exercise concurrent fitting reservations, dropped funding receipt,
+  worker restart and original-identity GET recovery without another create.
+- [x] Verify duplicate deposit wake delivery, two partial fee-first deposits,
+  exact original/reversal debt allocations, zero-debt/zero-backing closure,
+  reopened held debt, and unsupported webhook held handling.
+- [x] Verify proven-unsent cancellation releases capacity without funded
+  history, permits fresh accepted terms/reservation, and an ever-funded
+  payment remains blocked after repayment.
+- [x] Exercise actual adapter login, source account header, exact funding
+  amount/destination/request identity, fee/principal transfer settlement and
+  recovery against a local provider double.
+- [x] Keep `TestServicingJourney` on the real API -> committed operation ->
+  worker -> HTTP adapter -> local double -> verified settlement/read path.
+  Fixture controls change provider facts only; no application settlements are
+  injected, and DEMO creates work with live dispatch disabled.
+- [x] Guard disposable databases to explicit loopback, uniquely named and
+  marked owned targets and restricted runtime logins. Never reset a shared
+  database, table or volume. Actual migrations ran in the component suite.
+- [x] Reproduce the standalone provider balance encoding hold before the
+  source fix and pass the regression afterward. Check borrower/facility
+  balances, fresh payment reads, known-zero changed need and unchanged event
+  facts against the actual command-serving handlers.
+- [x] Run the original seven integrated service tests and the expanded
+  fourteen-function suite with `-p 1`, build, vet, formatting and diff checks.
+  No critical skips. Lead independently reran the original integrated suite.
+  Optional `golangci-lint` could not run with its older Go build; no new lint
+  dependency was installed.
+- [x] Close the original uncovered checks with isolated fixtures:
+  `TestDispatchOfferRejectsNextUTCDay` and
+  `TestMidnightCancellationReleasesAcceptedFunding` prove rollover denial and
+  persisted cancellation; `TestNeverSentProjectionPreservesOtherCommitments`
+  checks all five projected groups and preserves unrelated holds;
+  `TestCollectionChangedCapCancelsOnlyUnsentIntent` verifies cancellation
+  without resizing, booking debt or touching settled funding;
+  `TestAmbiguousLookupPreservesFundingHolds` proves repeated ambiguous reads
+  retain commitments without resend. `TestFundingRecovery` now proves one
+  funding ledger effect after a duplicate terminal wake.
+  `TestBackdatedReversalHoldsFrozenAccrual` proves a late principal reversal
+  holds without rewriting frozen zero-principal accrual days.
+- [x] Test prepared system-actor presence and invoice provenance using both
+  external and built-in materialization, preserving real shared-policy checks.
+- [ ] Complete the corrected shared Underwriting/Coordinator/Funding process
+  journey on fresh uniquely owned books, preserving the first failed 422.
+  Capture exact case/evaluation/offer/bridge links, $7000 funding, $100 then
+  $7090 deposits, $190 fee-first repayment, zero debt/backing/holds and actual
+  Coordinator feed/detail progress through closure and uncertain recovery.
+- [ ] Review joined evidence and final contract/design/runbook consistency,
+  record actual remaining limitations, and close this delivery. Do not archive
+  or claim live/provider acceptance from component-only evidence.
 
-Suggested final commands from the future service directory:
+Commands used from the service directory, with cached dependencies and a
+privately supplied `FUNDING_TEST_ADMIN_URL_FILE` for isolated databases:
 
 ```sh
-go test ./... -count=1
+go test -json -p 1 ./... -count=1
 go build ./...
 go vet ./...
 gofmt -l .
 ```
 
-The test helper supplies isolated synthetic configuration. These commands
-must not fall back to root environment settings or a live provider adapter.
-If more than three focused functions or substantially more representative
-cases become necessary, explain the uncovered risk and ask Ramil first.
+The original seven tests are `TestTermsAndGuards`, `TestServicingContract`,
+`TestUnsentFundingCancellation`, `TestFundingRecovery`,
+`TestCollectionReversalAndAccrual`, `TestServicingJourney` and
+`TestStandaloneProviderReads`. The additional focused tests are named above.
+Each acceptance scenario can run independently.
+There is no fixed test-count cap. Keep new coverage tied to a concrete risk
+and reuse typed fixtures; new dependencies/infrastructure need approval.
+
+#### Corrected joined journey completion proposal
+
+1. Confirm the single shared runtime owner has all corrected binaries,
+   restricted DB profiles, source preparation and launch commands ready.
+   Funding must include `ae90c96`; accepted unchanged components can reuse
+   their verified binaries. Check listener ownership before starting anything.
+2. Use fresh uniquely owned Funding and Coordinator books. Preserve the
+   failed attempt's database, provider state, command receipts and consumed
+   Coordinator checkpoints. Prepare imports/mappings with the existing guarded
+   tooling; perform no shared reset or source rebinding.
+3. Refresh the known-empty Underwriting source bundle once, only after all
+   consumers are ready. Launch the prepared consumers together within the
+   valid source window. Let the real Coordinator discover/evaluate the actual
+   shortfall and supply its saved case/evaluation pair.
+4. Run normal Funding demo commands with that exact pair: create offer,
+   synthetic customer acceptance, guarded reservation and worker dispatch.
+   Exercise the existing local double's dropped collection reply and recovery
+   with the same operation/request identity. Publish the two deposits in
+   sequence and let the worker apply settlement and repayment.
+5. Capture sanitized command receipts, provider-request counts, bridge and
+   collection reads, allocations, balances, Coordinator linked feed/checkpoint
+   progress and final closure. Re-read historical results after source expiry
+   with honest degraded readiness; expired facts cannot authorize decisions.
+6. Compare evidence with the completion assertions above. Fix only observed
+   defects, rerun affected checks, and start a new owned window if freshness
+   expires before a required decision. Review the focused-assertion evidence
+   and final joined captures before marking Task 13 done.
+
+The lead already owns this coordinated runtime continuation. Do not launch a
+second process set or independently refresh its source bundle. No live
+provider/model calls, deployment, Node cutover or financial-state injection.
 
 ## Later separately authorized migration phase
 
