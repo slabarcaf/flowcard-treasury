@@ -136,7 +136,14 @@ func materializeFundingRun(outputRelative, stage, runID string, anchor time.Time
 	customers := make([]domain.FacilityCustomerImport, 0, len(profiles))
 	receivables := make([]domain.ReceivableImport, 0, len(profiles))
 	authorities := make([]domain.AuthorityImport, 0, len(profiles))
-	actors := make([]domain.ActorImport, 0, len(profiles)*2)
+	actors := make([]domain.ActorImport, 0, len(profiles)*2+1)
+	// Automatic approval still needs one imported service actor for its audit
+	// identity. It is shared across profiles, rather than duplicated per customer.
+	systemID := "system-" + uuidCompact(runID)[:12]
+	actors = append(actors, domain.ActorImport{ActorID: systemID, ActorType: "SYSTEM",
+		AuthenticationSubject: "system:funding-collection", Active: true,
+		SourceRef: domain.SourceRef{System: "synthetic-demo", RecordID: systemID,
+			Version: runID, EffectiveAt: anchor.UTC()}})
 	providerData := providerState{SchemaVersion: fixtureVersion, RunID: runID, Provenance: "Synthetic DEMO provider facts only; app ledger state is never written by this fixture.", FundingAccountRef: fundingAccount, Accounts: map[string]int64{fundingAccount: fundingOpeningCents}, Payments: map[string]providerPayment{}, Deposits: map[string]providerDeposit{}, Transfers: map[string]providerTransfer{}, RequestIndex: map[string]string{}, DropFirstCollectionFeeReply: true}
 	for _, built := range profiles {
 		customers = append(customers, built.fundingCustomer)
