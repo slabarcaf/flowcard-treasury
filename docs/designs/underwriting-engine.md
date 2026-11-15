@@ -538,7 +538,7 @@ snapshot/evidence write API is introduced by this integration boundary.
 
 ## See also
 
-- [Implementation plan](/docs/plans/20261114-underwriting-engine.md)
+- [Completed implementation plan](/docs/plans/completed/20261114-underwriting-engine.md)
 - [DTO/API/demo contract](/docs/api/underwriting-contract.md)
 - [Current product policy](/docs/designs/bridge-capital-policy-spec.md)
 - [Product requirements](/docs/requirements/README.md)

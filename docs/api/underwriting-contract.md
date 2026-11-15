@@ -1,9 +1,9 @@
 # Underwriting contract
 
-Proposed implementation contract for the Go underwriting demo. Read alongside
+Pinned implementation contract for the Go underwriting service. Read alongside
 [the rule design](/docs/designs/underwriting-engine.md) and
-[the task plan](/docs/plans/20261114-underwriting-engine.md). This pins choices
-before delegation; none of these underwriting endpoints are implemented yet.
+[the task plan](/docs/plans/completed/20261114-underwriting-engine.md). The
+service is implemented against this field and API baseline.
 
 [TOC]
 
