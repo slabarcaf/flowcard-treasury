@@ -34,6 +34,7 @@ export function CompanyApplicationStep({ value, onChange, savedCompany, allowPro
   const profile = value.business_profile;
   const profileSaved = Boolean(savedCompany?.business_profile);
   const registeredAddressSaved = Boolean(savedCompany?.business_profile?.registered_address);
+  const operatingAddressSaved = Boolean(savedCompany?.business_profile?.operating_address);
   const registrations = value.registration_identifiers ?? [];
   const entityTypeSelection = value.entity_type === 'OTHER' || value.entity_type_other
     ? 'OTHER'
@@ -64,6 +65,7 @@ export function CompanyApplicationStep({ value, onChange, savedCompany, allowPro
         <textarea required={!allowProfileValueClears} maxLength={2000} rows={4} aria-invalid={fieldIssues.some(issue => issue.field === 'company.business_profile.description')} className="revolut-input w-full" value={profile?.description ?? ''} onChange={e => onChange({ ...value, business_profile: { ...profile!, description: e.target.value } })} />
         {fieldIssues.filter(issue => issue.field === 'company.business_profile.description').map((issue, index) => <p key={index} role="alert" className="text-xs text-red-200">{issue.message}</p>)}
       </label>
+      <TextField label="Goods and services" apiField="company.business_profile.products" fieldIssues={fieldIssues} optional maxLength={500} value={profile?.products ?? ''} onChange={e => onChange({ ...value, business_profile: { ...profile!, products: e.target.value } })} />
       <OptionalSection title="Registered address" checked={Boolean(profile?.registered_address)} disabled={registeredAddressSaved}
         help={registeredAddressSaved ? 'The current API cannot remove a saved registered address.' : undefined}
         onChange={enabled => onChange({
@@ -75,6 +77,31 @@ export function CompanyApplicationStep({ value, onChange, savedCompany, allowPro
       })}>
         {profile?.registered_address && <AddressFields usOnly fieldPrefix="company.business_profile.registered_address" fieldIssues={fieldIssues} value={profile.registered_address} onChange={address => onChange({ ...value, business_profile: { ...profile!, registered_address: address } })} />}
       </OptionalSection>
+      <OptionalSection title="Operating address" checked={Boolean(profile?.operating_address)} disabled={operatingAddressSaved}
+        help={operatingAddressSaved ? 'The current API cannot remove a saved operating address.' : 'Airwallex needs the real business operating address before submission. Keep this separate from the registered address when they differ.'}
+        onChange={enabled => onChange({
+          ...value,
+          business_profile: {
+            ...profile!,
+            operating_address: enabled ? profile?.operating_address ?? { ...emptyAddress(), country: 'US' } : undefined,
+          },
+        })}>
+        {profile?.operating_address && <AddressFields usOnly requireState fieldPrefix="company.business_profile.operating_address" fieldIssues={fieldIssues} value={profile.operating_address} onChange={address => onChange({ ...value, business_profile: { ...profile!, operating_address: address } })} />}
+      </OptionalSection>
+      <label className="block text-sm text-slate-300 space-y-2">
+        <span>Countries where the business operates (select all that apply)</span>
+        <select multiple size={6} aria-invalid={fieldIssues.some(issue => issue.field === 'company.business_profile.operating_countries')} className="revolut-select w-full" value={profile?.operating_countries ?? []} onChange={event => onChange({
+          ...value,
+          business_profile: {
+            ...profile!,
+            operating_countries: Array.from(event.currentTarget.selectedOptions, option => option.value),
+          },
+        })}>
+          {COUNTRY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <FieldIssueMessages issues={fieldIssues} field="company.business_profile.operating_countries" />
+        <span className="block text-xs text-slate-400">Select actual operating countries. Incorporation country is not copied automatically.</span>
+      </label>
     </OptionalSection>
 
     <section className="rounded-xl border border-slate-700 p-5 space-y-4">

@@ -159,7 +159,7 @@ func buildHandlerWithDependencies(ctx context.Context, cfg *config.Config, opAut
 	}
 
 	// 3. Platform contract gate: external gates fail closed
-	gate := validation.UnverifiedPlatformContractGate{}
+	gate := validation.VerifiedUSBusinessContractGate{}
 
 	server := internalHttp.NewServer(repo, opAuth, gate, store)
 
@@ -176,7 +176,7 @@ func buildHandlerWithDependencies(ctx context.Context, cfg *config.Config, opAut
 }
 
 func newHandler() http.Handler {
-	server := internalHttp.NewServer(nil, internalHttp.DenyAllAuthenticator{}, validation.UnverifiedPlatformContractGate{}, storage.NewUnavailableStore("storage not configured"))
+	server := internalHttp.NewServer(nil, internalHttp.DenyAllAuthenticator{}, validation.VerifiedUSBusinessContractGate{}, storage.NewUnavailableStore("storage not configured"))
 	return server.Routes()
 }
 

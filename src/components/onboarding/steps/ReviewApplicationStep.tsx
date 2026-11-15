@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import type { AddressInput, CompanyInput, DocumentUpload, FieldIssue, OnboardingDetailsInput, PersonInput, ReadinessResult } from '../../../services/onboarding/contracts.js';
-import { COUNTRY_OPTIONS, CURRENCY_OPTIONS, DOCUMENT_TYPES, IDENTIFICATION_TYPES, PLATFORM_ROLE_OPTIONS, PRODUCT_OPTIONS, US_STATES } from '../../../services/onboarding/options.js';
+import { COUNTRY_OPTIONS, CURRENCY_OPTIONS, DOCUMENT_TYPES, IDENTIFICATION_TYPES, isBusinessDocumentType, PLATFORM_ROLE_OPTIONS, PRODUCT_OPTIONS, US_STATES } from '../../../services/onboarding/options.js';
 import { useIndustryOptions } from '../../../hooks/useIndustryOptions.js';
 import { SelectField } from '../ApplicationFields.js';
 
@@ -79,7 +79,11 @@ export function ReviewApplicationStep({ company, details, uploads, onUploadsChan
         <dt className="text-slate-400">State of incorporation</dt><dd>{(US_STATES.find(option => option.value === company.registration_state)?.label ?? company.registration_state?.trim()) || 'Not provided'}</dd>
         <dt className="text-slate-400">Business website</dt><dd className="break-all">{profile?.website.trim() || 'Not provided'}</dd>
         <dt className="text-slate-400">Business description</dt><dd>{profile?.description.trim() || 'Not provided'}</dd>
+        <dt className="text-slate-400">Goods and services</dt><dd>{profile?.products?.trim() || 'Not provided'}</dd>
         <dt className="text-slate-400">Registered address</dt><dd>{showAddress(profile?.registered_address)}</dd>
+        <dt className="text-slate-400">Operating address</dt><dd>{showAddress(profile?.operating_address)}</dd>
+        <dt className="text-slate-400">Operating countries</dt>
+        <dd>{profile?.operating_countries?.map(code => COUNTRY_OPTIONS.find(option => option.value === code)?.label ?? code).join(', ') || 'Not provided'}</dd>
       </dl>
       <h3 className="text-sm font-medium">Registration identifiers</h3>
       {company.registration_identifiers?.length ? <ul className="space-y-1 text-sm">{company.registration_identifiers.map(identifier => <li key={identifier.client_id}>
@@ -142,7 +146,7 @@ export function ReviewApplicationStep({ company, details, uploads, onUploadsChan
           <div className="flex justify-between gap-3"><span className="text-sm break-all">{upload.file.name}{isUploaded(upload.key) ? ' · Uploaded' : ''}</span><button type="button" className="revolut-link" onClick={() => onUploadsChange(uploads.filter(item => item.key !== upload.key))}>Remove</button></div>
           <p className="text-xs text-slate-400">{documentType}{linkedPerson ? ` · ${linkedPerson.first_name} ${linkedPerson.last_name}` : ''}{linkedIdentification ? ` · ${identificationLabel(linkedIdentification)}` : ''}</p>
           <SelectField label="Document type" options={DOCUMENT_TYPES} value={upload.type} onChange={e => updateUpload(upload.key, { type: e.target.value, person_id: undefined, identification_id: undefined })} />
-          {upload.type !== 'BUSINESS_DOCUMENT' && <SelectField label="Who does this document belong to?" options={people.map(person => ({ value: person.id, label: `${person.first_name} ${person.last_name}` }))} value={upload.person_id ?? ''} onChange={e => updateUpload(upload.key, { person_id: e.target.value || undefined, identification_id: undefined })} />}
+          {!isBusinessDocumentType(upload.type) && <SelectField label="Who does this document belong to?" options={people.map(person => ({ value: person.id, label: `${person.first_name} ${person.last_name}` }))} value={upload.person_id ?? ''} onChange={e => updateUpload(upload.key, { person_id: e.target.value || undefined, identification_id: undefined })} />}
           {upload.person_id && upload.type !== 'PERSON_PURPORTING_TO_ACT_AUTHORISATION_LETTER' && <SelectField label="Identification" options={(people.find(person => person.id === upload.person_id)?.identifications ?? []).filter(ident => ident.id).map(ident => ({ value: ident.id!, label: identificationLabel(ident) }))} value={upload.identification_id ?? ''} onChange={e => updateUpload(upload.key, { identification_id: e.target.value || undefined })} />}
         </fieldset>;
       })}
@@ -169,13 +173,20 @@ function PersonSummary({ person, details, revealedIDs, onToggleID }: {
   const personDetails = details.people?.find(item => item.person_id === person.id);
   const roles = personDetails?.platform_roles ?? [];
   const residentialAddress = personDetails?.residential_address;
+  const primaryID = person.identifications?.find(item => item.id === personDetails?.primary_identification_id);
+  const secondaryID = person.identifications?.find(item => item.id === personDetails?.secondary_identification_id);
 
   return <article className="rounded-xl border border-slate-700 p-4 space-y-3">
     <h3 className="font-medium">{`${person.first_name.trim()} ${person.last_name.trim()}`.trim() || 'Person'}</h3>
     <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-2 text-sm">
       <dt className="text-slate-400">Job title</dt><dd>{person.role.trim() || 'Not provided'}</dd>
+      <dt className="text-slate-400">Nationality</dt><dd>{(COUNTRY_OPTIONS.find(option => option.value === person.nationality)?.label ?? person.nationality) || 'Not provided'}</dd>
+      <dt className="text-slate-400">Email</dt><dd>{person.email?.trim() || 'Not provided'}</dd>
+      <dt className="text-slate-400">Phone</dt><dd>{person.phone?.trim() || 'Not provided'}</dd>
       <dt className="text-slate-400">Date of birth</dt><dd>{person.date_of_birth || 'Not provided'}</dd>
       <dt className="text-slate-400">Platform roles</dt><dd>{roles.length ? roles.map(role => PLATFORM_ROLE_OPTIONS.find(option => option.value === role)?.label ?? role).join(', ') : 'Not provided'}</dd>
+      <dt className="text-slate-400">Primary ID</dt><dd>{primaryID ? `${identificationLabel(primaryID)} · ending ${primaryID.number.slice(-4) || '—'}` : 'Not provided'}</dd>
+      <dt className="text-slate-400">Secondary ID</dt><dd>{secondaryID ? `${identificationLabel(secondaryID)} · ending ${secondaryID.number.slice(-4) || '—'}` : 'Not provided'}</dd>
       <dt className="text-slate-400">Residential address</dt><dd>{formatAddress(residentialAddress)}</dd>
     </dl>
     <h4 className="text-sm font-medium">Identifications</h4>

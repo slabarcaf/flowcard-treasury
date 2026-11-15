@@ -41,6 +41,14 @@ func MapSubmissionToAccountCreateRequest(sub domain.Submission) (*AccountCreateR
 	}
 
 	profile := comp.BusinessProfile()
+	businessAddress, err := mapOperatingAddress(profile.OperatingAddress)
+	if err != nil {
+		return nil, err
+	}
+	operatingCountries, err := mapOperatingCountries(profile.OperatingCountries)
+	if err != nil {
+		return nil, err
+	}
 	street1 := strings.TrimSpace(profile.RegisteredAddress.Line1)
 	if street1 == "" {
 		return nil, fmt.Errorf("%w: registered address line 1 is required", ErrIncompleteSubmissionMapping)
@@ -53,26 +61,16 @@ func MapSubmissionToAccountCreateRequest(sub domain.Submission) (*AccountCreateR
 		return nil, fmt.Errorf("%w: registration address country must be US, got %q", ErrIncompleteSubmissionMapping, country)
 	}
 
-	revenueEst := mapRevenueEstimate(details.EstimatedRevenue)
-	productRef := strings.Join(details.IntendedProducts, ",")
-	var accountUsage *AccountUsage
-	if revenueEst != nil || productRef != "" {
-		accountUsage = &AccountUsage{
-			EstimatedMonthlyRevenue: revenueEst,
-			ProductReference:        productRef,
-		}
-	}
-
-	var opCountries []string
-	if len(profile.OperatingCountries) > 0 {
-		opCountries = append([]string(nil), profile.OperatingCountries...)
-	} else if regCountry := comp.RegistrationCountry(); regCountry != "" {
-		opCountries = []string{regCountry}
+	accountUsage, err := mapAccountUsage(details.EstimatedRevenue, details.IntendedProducts)
+	if err != nil {
+		return nil, err
 	}
 
 	businessDetails := BusinessDetails{
-		BusinessName:      comp.LegalName(),
-		BusinessStructure: businessStructure,
+		BusinessName:                 comp.LegalName(),
+		BusinessStructure:            businessStructure,
+		DescriptionOfGoodsOrServices: strings.TrimSpace(profile.Products),
+		IndustryCategoryCode:         strings.TrimSpace(details.IndustryCategoryCode),
 		BusinessIdentifiers: []BusinessIdentifier{
 			{
 				CountryCode: "US",
@@ -88,39 +86,42 @@ func MapSubmissionToAccountCreateRequest(sub domain.Submission) (*AccountCreateR
 			Postcode:     postalCode,
 			CountryCode:  country,
 		},
-		OperatingCountry: opCountries,
+		BusinessAddress:  businessAddress,
+		OperatingCountry: operatingCountries,
 		AccountUsage:     accountUsage,
 	}
 
-	// 2. Customer agreements: strictly verify frozen consent (never fabricate agreed_at from CreatedAt or force FULL)
+	// 2. Include customer agreements only when the frozen application records complete acceptance.
 	tc := details.CustomerAgreements.TermsAndConditions
-	if tc == nil {
-		return nil, fmt.Errorf("%w: terms and conditions agreement record is required", ErrIncompleteSubmissionMapping)
-	}
-	if tc.AgreedAt.IsZero() {
-		return nil, fmt.Errorf("%w: terms and conditions agreement timestamp is required", ErrIncompleteSubmissionMapping)
-	}
-	serviceAgreementType := strings.TrimSpace(tc.ServiceAgreementType)
-	if serviceAgreementType == "" {
-		return nil, fmt.Errorf("%w: terms service agreement type is required", ErrIncompleteSubmissionMapping)
-	}
-
-	var devData *DeviceData
-	if tc.DeviceData != nil && (tc.DeviceData.IPAddress != "" || tc.DeviceData.UserAgent != "") {
-		devData = &DeviceData{
-			IPAddress: tc.DeviceData.IPAddress,
-			UserAgent: tc.DeviceData.UserAgent,
+	var agreements *CustomerAgreements
+	customerAgreements := details.CustomerAgreements
+	hasAgreementData := customerAgreements.AgreedToTermsAndConditions || customerAgreements.AgreedToDataUsage || tc != nil
+	if hasAgreementData {
+		if !customerAgreements.AgreedToTermsAndConditions || !customerAgreements.AgreedToDataUsage || tc == nil || tc.AgreedAt.IsZero() {
+			return nil, fmt.Errorf("%w: customer agreement record is incomplete", ErrIncompleteSubmissionMapping)
 		}
-	}
+		serviceAgreementType := strings.TrimSpace(tc.ServiceAgreementType)
+		if serviceAgreementType == "" {
+			return nil, fmt.Errorf("%w: terms service agreement type is required", ErrIncompleteSubmissionMapping)
+		}
 
-	agreements := CustomerAgreements{
-		AgreedToDataUsage:          details.CustomerAgreements.AgreedToDataUsage,
-		AgreedToTermsAndConditions: details.CustomerAgreements.AgreedToTermsAndConditions,
-		TermsAndConditions: TermsAndConditions{
-			AgreedAt:             tc.AgreedAt.UTC().Format(time.RFC3339),
-			ServiceAgreementType: serviceAgreementType,
-			DeviceData:           devData,
-		},
+		var devData *DeviceData
+		if tc.DeviceData != nil && (tc.DeviceData.IPAddress != "" || tc.DeviceData.UserAgent != "") {
+			devData = &DeviceData{
+				IPAddress: tc.DeviceData.IPAddress,
+				UserAgent: tc.DeviceData.UserAgent,
+			}
+		}
+
+		agreements = &CustomerAgreements{
+			AgreedToDataUsage:          customerAgreements.AgreedToDataUsage,
+			AgreedToTermsAndConditions: customerAgreements.AgreedToTermsAndConditions,
+			TermsAndConditions: TermsAndConditions{
+				AgreedAt:             tc.AgreedAt.UTC().Format(time.RFC3339),
+				ServiceAgreementType: serviceAgreementType,
+				DeviceData:           devData,
+			},
+		}
 	}
 
 	// 3. Primary contact (email and mobile only)
@@ -172,6 +173,14 @@ func MapSubmissionToAccountUpdateRequest(
 	if err != nil {
 		return nil, err
 	}
+	businessAddress, err := mapOperatingAddress(profile.OperatingAddress)
+	if err != nil {
+		return nil, err
+	}
+	operatingCountries, err := mapOperatingCountries(profile.OperatingCountries)
+	if err != nil {
+		return nil, err
+	}
 
 	var einValue string
 	for _, rid := range comp.RegistrationIdentifiers() {
@@ -197,22 +206,21 @@ func MapSubmissionToAccountUpdateRequest(
 		if personID == "" {
 			// Company-level attachment
 			if fileID, ok := docFileIDs[docID]; ok && fileID != "" {
+				tag, err := mapBusinessDocumentTag(docTypeMap[docID])
+				if err != nil {
+					return nil, err
+				}
 				businessDocs = append(businessDocs, BusinessAttachment{
 					FileID: fileID,
-					Tag:    "BUSINESS_DOCUMENT",
+					Tag:    tag,
 				})
 			}
 		}
 	}
 
-	revenueEst := mapRevenueEstimate(details.EstimatedRevenue)
-	productRef := strings.Join(details.IntendedProducts, ",")
-	var accountUsage *AccountUsage
-	if revenueEst != nil || productRef != "" {
-		accountUsage = &AccountUsage{
-			EstimatedMonthlyRevenue: revenueEst,
-			ProductReference:        productRef,
-		}
+	accountUsage, err := mapAccountUsage(details.EstimatedRevenue, details.IntendedProducts)
+	if err != nil {
+		return nil, err
 	}
 
 	var businessAttachments *BusinessAttachments
@@ -222,19 +230,13 @@ func MapSubmissionToAccountUpdateRequest(
 		}
 	}
 
-	var opCountries []string
-	if len(profile.OperatingCountries) > 0 {
-		opCountries = append([]string(nil), profile.OperatingCountries...)
-	} else if regCountry := comp.RegistrationCountry(); regCountry != "" {
-		opCountries = []string{regCountry}
-	}
-
 	businessDetails := BusinessDetails{
 		BusinessName:                 comp.LegalName(),
 		BusinessStructure:            businessStructure,
 		DescriptionOfGoodsOrServices: products,
 		IndustryCategoryCode:         details.IndustryCategoryCode,
-		OperatingCountry:             opCountries,
+		BusinessAddress:              businessAddress,
+		OperatingCountry:             operatingCountries,
 		AccountUsage:                 accountUsage,
 		Attachments:                  businessAttachments,
 		RegistrationAddress: Address{
@@ -254,13 +256,18 @@ func MapSubmissionToAccountUpdateRequest(
 
 	// 2. Business person details with platform roles and identity file attachments
 	var businessPersonDetails []PersonDetails
-	for _, p := range comp.People() {
-		pd, _ := details.FindPersonDetails(p.ID)
-
-		if len(p.Identifications) > 1 {
-			// Minimal safe scope per review: single identification maps primary; multiple require explicit
-			// application-owned primary/secondary identification IDs (or fail closed >1 until that mapping exists), no silent ordering.
-			return nil, fmt.Errorf("%w: person %q has %d identifications; ambiguous ordering without explicit primary/secondary designation (fail closed >1)", ErrIncompleteSubmissionMapping, p.ID, len(p.Identifications))
+	seenPeople := make(map[string]struct{}, len(details.People))
+	for _, pd := range details.People {
+		p, found := comp.Person(pd.PersonID)
+		if !found {
+			return nil, fmt.Errorf("%w: platform person %q is missing from submission company copy", ErrIncompleteSubmissionMapping, pd.PersonID)
+		}
+		if _, seen := seenPeople[pd.PersonID]; seen {
+			return nil, fmt.Errorf("%w: platform person %q is listed more than once", ErrIncompleteSubmissionMapping, pd.PersonID)
+		}
+		seenPeople[pd.PersonID] = struct{}{}
+		if len(pd.PlatformRoles) == 0 {
+			return nil, fmt.Errorf("%w: platform roles are required for person %q", ErrIncompleteSubmissionMapping, pd.PersonID)
 		}
 
 		// Find documents belonging to this person
@@ -277,16 +284,9 @@ func MapSubmissionToAccountUpdateRequest(
 		}
 
 		consumedDocIDs := make(map[string]bool)
-		var personIdents *PersonIdentifications
-
-		if len(p.Identifications) == 1 {
-			primaryItem, err := mapIdentificationItem(p.Identifications[0], p.ID, personDocs, docFileIDs, consumedDocIDs)
-			if err != nil {
-				return nil, err
-			}
-			personIdents = &PersonIdentifications{
-				Primary: primaryItem,
-			}
+		personIdents, err := mapPersonIdentifications(p, pd, personDocs, docFileIDs, consumedDocIDs)
+		if err != nil {
+			return nil, err
 		}
 
 		// Map remaining unconsumed documents as supplemental person documents
@@ -322,16 +322,13 @@ func MapSubmissionToAccountUpdateRequest(
 			}
 		}
 
-		var resAddr *Address
-		if pd.ResidentialAddress.Line1 != "" {
-			resAddr = &Address{
-				AddressLine1: pd.ResidentialAddress.Line1,
-				AddressLine2: pd.ResidentialAddress.Line2,
-				Suburb:       pd.ResidentialAddress.City,
-				State:        pd.ResidentialAddress.State,
-				Postcode:     pd.ResidentialAddress.PostalCode,
-				CountryCode:  pd.ResidentialAddress.Country,
-			}
+		resAddr := &Address{
+			AddressLine1: pd.ResidentialAddress.Line1,
+			AddressLine2: pd.ResidentialAddress.Line2,
+			Suburb:       pd.ResidentialAddress.City,
+			State:        pd.ResidentialAddress.State,
+			Postcode:     pd.ResidentialAddress.PostalCode,
+			CountryCode:  pd.ResidentialAddress.Country,
 		}
 
 		businessPersonDetails = append(businessPersonDetails, PersonDetails{
@@ -365,8 +362,8 @@ func mapBusinessStructure(entityType string) (string, error) {
 		return "CORPORATION", nil
 	case "PARTNERSHIP":
 		return "PARTNERSHIP", nil
-	case "SOLE_PROPRIETORSHIP", "INDIVIDUAL":
-		return "SOLE_PROPRIETORSHIP", nil
+	case "SOLE_PROPRIETORSHIP", "SOLE_PROPRIETOR", "INDIVIDUAL":
+		return "SOLE_PROPRIETOR", nil
 	default:
 		// Finding 6: never default missing entityType to LLC; fail incomplete mapping
 		return "", fmt.Errorf("%w: unsupported or empty entity type %q", ErrIncompleteSubmissionMapping, entityType)
@@ -380,6 +377,152 @@ func mapRevenueEstimate(re domain.RevenueEstimate) *RevenueEstimate {
 	return &RevenueEstimate{
 		Amount:   re.Amount,
 		Currency: re.Currency,
+	}
+}
+
+func mapPersonIdentifications(
+	person domain.Person,
+	personDetails domain.PersonPlatformDetails,
+	documents []domain.Document,
+	docFileIDs map[string]string,
+	consumedDocIDs map[string]bool,
+) (*PersonIdentifications, error) {
+	if len(person.Identifications) == 0 {
+		return nil, fmt.Errorf("%w: person %q requires an identification", ErrIncompleteSubmissionMapping, person.ID)
+	}
+	primary, found := findIdentification(person.Identifications, personDetails.PrimaryIdentificationID)
+	if personDetails.PrimaryIdentificationID == "" && len(person.Identifications) == 1 {
+		primary = &person.Identifications[0]
+		found = true
+	}
+	if !found {
+		return nil, fmt.Errorf("%w: person %q must select a primary identification", ErrIncompleteSubmissionMapping, person.ID)
+	}
+	secondary, secondaryFound := findIdentification(person.Identifications, personDetails.SecondaryIdentificationID)
+	if personDetails.SecondaryIdentificationID != "" && !secondaryFound {
+		return nil, fmt.Errorf("%w: person %q selected a missing secondary identification", ErrIncompleteSubmissionMapping, person.ID)
+	}
+	if secondary != nil && secondary.ID == primary.ID {
+		return nil, fmt.Errorf("%w: person %q selected the same primary and secondary identification", ErrIncompleteSubmissionMapping, person.ID)
+	}
+	for _, identification := range person.Identifications {
+		if identification.ID != primary.ID && (secondary == nil || identification.ID != secondary.ID) {
+			return nil, fmt.Errorf("%w: person %q has an identification without an explicit primary or secondary designation", ErrIncompleteSubmissionMapping, person.ID)
+		}
+	}
+
+	primaryItem, err := mapIdentificationItem(*primary, person.ID, documents, docFileIDs, consumedDocIDs)
+	if err != nil {
+		return nil, err
+	}
+	identifications := &PersonIdentifications{Primary: primaryItem}
+	if secondary != nil {
+		secondaryItem, err := mapIdentificationItem(*secondary, person.ID, documents, docFileIDs, consumedDocIDs)
+		if err != nil {
+			return nil, err
+		}
+		identifications.Secondary = secondaryItem
+	}
+	return identifications, nil
+}
+
+func findIdentification(identifications []domain.Identification, id string) (*domain.Identification, bool) {
+	if id == "" {
+		return nil, false
+	}
+	for i := range identifications {
+		if identifications[i].ID == id {
+			return &identifications[i], true
+		}
+	}
+	return nil, false
+}
+
+func mapOperatingAddress(address *domain.Address) (*Address, error) {
+	if address == nil {
+		return nil, fmt.Errorf("%w: business operating address is required", ErrIncompleteSubmissionMapping)
+	}
+	country := strings.ToUpper(strings.TrimSpace(address.Country))
+	if country != "US" {
+		return nil, fmt.Errorf("%w: business operating address country must be US", ErrIncompleteSubmissionMapping)
+	}
+	if strings.TrimSpace(address.Line1) == "" || strings.TrimSpace(address.City) == "" || strings.TrimSpace(address.State) == "" || strings.TrimSpace(address.PostalCode) == "" {
+		return nil, fmt.Errorf("%w: business operating address requires street, city, state, and postal code", ErrIncompleteSubmissionMapping)
+	}
+	return &Address{
+		AddressLine1: strings.TrimSpace(address.Line1),
+		AddressLine2: strings.TrimSpace(address.Line2),
+		Suburb:       strings.TrimSpace(address.City),
+		State:        strings.TrimSpace(address.State),
+		Postcode:     strings.TrimSpace(address.PostalCode),
+		CountryCode:  country,
+	}, nil
+}
+
+func mapOperatingCountries(countries []string) ([]string, error) {
+	if len(countries) == 0 {
+		return nil, fmt.Errorf("%w: at least one actual operating country is required", ErrIncompleteSubmissionMapping)
+	}
+	result := make([]string, 0, len(countries))
+	seen := make(map[string]struct{}, len(countries))
+	for _, country := range countries {
+		code := strings.ToUpper(strings.TrimSpace(country))
+		if len(code) != 2 || code[0] < 'A' || code[0] > 'Z' || code[1] < 'A' || code[1] > 'Z' {
+			return nil, fmt.Errorf("%w: operating countries must be 2-letter ISO codes", ErrIncompleteSubmissionMapping)
+		}
+		if _, duplicate := seen[code]; duplicate {
+			return nil, fmt.Errorf("%w: operating country %q is listed more than once", ErrIncompleteSubmissionMapping, code)
+		}
+		seen[code] = struct{}{}
+		result = append(result, code)
+	}
+	return result, nil
+}
+
+func mapAccountUsage(revenue domain.RevenueEstimate, products []string) (*AccountUsage, error) {
+	revenueEstimate := mapRevenueEstimate(revenue)
+	if revenueEstimate == nil || strings.TrimSpace(revenueEstimate.Currency) == "" {
+		return nil, fmt.Errorf("%w: estimated monthly revenue amount and currency are required", ErrIncompleteSubmissionMapping)
+	}
+	if len(products) == 0 {
+		return nil, fmt.Errorf("%w: at least one intended Airwallex product is required", ErrIncompleteSubmissionMapping)
+	}
+
+	productReferences := make([]string, 0, len(products))
+	seen := make(map[string]struct{}, len(products))
+	for _, product := range products {
+		code := strings.ToUpper(strings.TrimSpace(product))
+		if !isSupportedProductReference(code) {
+			return nil, fmt.Errorf("%w: unsupported intended product %q", ErrIncompleteSubmissionMapping, code)
+		}
+		if _, duplicate := seen[code]; duplicate {
+			return nil, fmt.Errorf("%w: intended product %q is listed more than once", ErrIncompleteSubmissionMapping, code)
+		}
+		seen[code] = struct{}{}
+		productReferences = append(productReferences, code)
+	}
+	return &AccountUsage{
+		EstimatedMonthlyRevenue: revenueEstimate,
+		ProductReference:        productReferences,
+	}, nil
+}
+
+func isSupportedProductReference(code string) bool {
+	switch code {
+	case "ACCEPT_ONLINE_PAYMENTS", "COLLECT_MARKETPLACE_PROCEEDS", "RECEIVE_TRANSFERS", "GET_PAID", "CONVERT_FUNDS", "MAKE_TRANSFERS", "CREATE_CARDS", "MANAGE_EXPENSES", "USE_AWX_API", "TRANSFER_CNY_INBOUND":
+		return true
+	default:
+		return false
+	}
+}
+
+func mapBusinessDocumentTag(raw string) (string, error) {
+	tag := strings.ToUpper(strings.TrimSpace(raw))
+	switch tag {
+	case "ACRA_COMPANY_PROFILE_DOCUMENT", "ANNUAL_REPORT", "ANNUAL_RETURN", "ARTICLES_OF_ASSOCIATION", "ASIC_CURRENT_COMPANY_EXTRACT", "ASSUMED_NAME_CERTIFICATE", "AUTHORIZED_SIGNATORY_DISCLOSURE", "BUSINESS_LICENSE", "CERTIFICATE_OF_INCORPORATION", "CERTIFICATION_REGISTRATION", "COMPANY_CERTIFICATE", "COMPANY_CONSTITUTION", "COMPANY_PROFILE", "CONFIRMATION_STATEMENT", "DIRECTOR_LIST", "EIN_LETTER", "LEGAL_NAME_AND_ADDRESS", "OPERATING_AGREEMENT", "PARTNERSHIP_AGREEMENT", "REGISTRATION_CERTIFICATE", "SHAREHOLDING_STRUCTURE_CHART", "SUPPORTIVE_OTHER", "TRUST_DEED", "UNIT_HOLDER_REGISTER", "UBO_SUPPORTIVE", "THIRD_PARTY_SHAREHOLDING_DOCUMENT":
+		return tag, nil
+	default:
+		return "", fmt.Errorf("%w: unsupported Airwallex business document tag %q", ErrIncompleteSubmissionMapping, tag)
 	}
 }
 

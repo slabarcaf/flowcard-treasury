@@ -472,6 +472,9 @@
                                 },
                                 "type": "array"
                               },
+                              "primary_identification_id": {
+                                "type": "string"
+                              },
                               "residential_address": {
                                 "properties": {
                                   "city": {
@@ -494,6 +497,9 @@
                                   }
                                 },
                                 "type": "object"
+                              },
+                              "secondary_identification_id": {
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -1017,6 +1023,9 @@
                           },
                           "type": "array"
                         },
+                        "primary_identification_id": {
+                          "type": "string"
+                        },
                         "residential_address": {
                           "properties": {
                             "city": {
@@ -1039,6 +1048,9 @@
                             }
                           },
                           "type": "object"
+                        },
+                        "secondary_identification_id": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -1692,6 +1704,10 @@
                       },
                       "type": "array"
                     },
+                    "primary_identification_id": {
+                      "maxLength": 64,
+                      "type": "string"
+                    },
                     "residential_address": {
                       "properties": {
                         "city": {
@@ -1732,6 +1748,10 @@
                         "object",
                         "null"
                       ]
+                    },
+                    "secondary_identification_id": {
+                      "maxLength": 64,
+                      "type": "string"
                     }
                   },
                   "type": "object"
@@ -1763,6 +1783,61 @@
             "properties": {
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "operating_address": {
+                "properties": {
+                  "city": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "country": {
+                    "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                    "maxLength": 2,
+                    "minLength": 2,
+                    "pattern": "^[A-Z]{2}$",
+                    "type": "string"
+                  },
+                  "line_1": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "line_2": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "postal_code": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city",
+                  "country",
+                  "line_1",
+                  "postal_code"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "operating_countries": {
+                "items": {
+                  "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                  "maxLength": 2,
+                  "minLength": 2,
+                  "pattern": "^[A-Z]{2}$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "products": {
+                "maxLength": 500,
                 "type": "string"
               },
               "registered_address": {
@@ -1812,10 +1887,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "description",
-              "website"
-            ],
             "type": [
               "object",
               "null"
@@ -1838,6 +1909,28 @@
                   "format": "date",
                   "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                   "type": "string"
+                },
+                "email": {
+                  "anyOf": [
+                    {
+                      "format": "email",
+                      "type": "string"
+                    },
+                    {
+                      "enum": [
+                        ""
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "maxLength": 254,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "first_name": {
                   "maxLength": 100,
@@ -1888,6 +1981,22 @@
                 "last_name": {
                   "maxLength": 100,
                   "type": "string"
+                },
+                "nationality": {
+                  "description": "Empty string clears this optional field; otherwise use an ISO 3166-1 alpha-2 uppercase country code",
+                  "maxLength": 2,
+                  "pattern": "^(?:[A-Z]{2})?$",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "phone": {
+                  "maxLength": 50,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "role": {
                   "maxLength": 100,
@@ -2076,6 +2185,10 @@
                       },
                       "type": "array"
                     },
+                    "primary_identification_id": {
+                      "maxLength": 64,
+                      "type": "string"
+                    },
                     "residential_address": {
                       "properties": {
                         "city": {
@@ -2116,6 +2229,10 @@
                         "object",
                         "null"
                       ]
+                    },
+                    "secondary_identification_id": {
+                      "maxLength": 64,
+                      "type": "string"
                     }
                   },
                   "type": "object"
@@ -2140,6 +2257,68 @@
           "business_profile": {
             "properties": {
               "description": {
+                "maxLength": 2000,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "operating_address": {
+                "properties": {
+                  "city": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "country": {
+                    "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                    "maxLength": 2,
+                    "minLength": 2,
+                    "pattern": "^[A-Z]{2}$",
+                    "type": "string"
+                  },
+                  "line_1": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "line_2": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "postal_code": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city",
+                  "country",
+                  "line_1",
+                  "postal_code"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "operating_countries": {
+                "items": {
+                  "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                  "maxLength": 2,
+                  "minLength": 2,
+                  "pattern": "^[A-Z]{2}$",
+                  "type": "string"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "products": {
+                "maxLength": 500,
                 "type": [
                   "string",
                   "null"
@@ -2187,6 +2366,8 @@
                 ]
               },
               "website": {
+                "format": "uri",
+                "maxLength": 500,
                 "type": [
                   "string",
                   "null"
@@ -2222,6 +2403,28 @@
                   "format": "date",
                   "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                   "type": "string"
+                },
+                "email": {
+                  "anyOf": [
+                    {
+                      "format": "email",
+                      "type": "string"
+                    },
+                    {
+                      "enum": [
+                        ""
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "maxLength": 254,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "first_name": {
                   "maxLength": 100,
@@ -2272,6 +2475,22 @@
                 "last_name": {
                   "maxLength": 100,
                   "type": "string"
+                },
+                "nationality": {
+                  "description": "Empty string clears this optional field; otherwise use an ISO 3166-1 alpha-2 uppercase country code",
+                  "maxLength": 2,
+                  "pattern": "^(?:[A-Z]{2})?$",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "phone": {
+                  "maxLength": 50,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "role": {
                   "maxLength": 100,
@@ -2845,6 +3064,9 @@
                       },
                       "type": "array"
                     },
+                    "primary_identification_id": {
+                      "type": "string"
+                    },
                     "residential_address": {
                       "properties": {
                         "city": {
@@ -2867,6 +3089,9 @@
                         }
                       },
                       "type": "object"
+                    },
+                    "secondary_identification_id": {
+                      "type": "string"
                     }
                   },
                   "required": [

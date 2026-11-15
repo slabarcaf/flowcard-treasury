@@ -75,8 +75,9 @@ and calls `/submit` only after `VALIDATION_PASSED`. The server requires
 `Idempotency-Key`, checks readiness under the submission transaction, and
 returns a 202 receipt when queued. The UI keeps the receipt separate from
 application status and provider approval; uncertain retries reuse the same key
-and request revision. It does not call Airwallex synchronously. Current
-provider-data and consent gaps still prevent this form from passing readiness.
+and request revision. It does not call Airwallex synchronously. Sandbox demo
+submissions may omit customer agreements; no flags or timestamps are created
+without an actual acceptance.
 No funding rule or customer-to-admin navigation is introduced.
 
 ## Remaining backend contracts
@@ -90,20 +91,19 @@ This is not yet fully supported by the existing backend:
 
 - Customer-scoped identity, ownership, intake submission, status reads and resume
   are missing. Existing gateway writes require an internal operator session.
-- Provider readiness still requires product/service description and person
-  email and phone, but the current write DTOs do not accept those fields. The
-  frontend must not collect and silently discard them or send unsupported JSON
-  keys. These write DTOs remain unchanged in this integration.
-- Correct terms/data-use text and agreement type must be supplied before explicit
-  acceptance can be recorded. Current flags remain false; no consent/timestamp is
-  fabricated, and no consent acceptance flow is implemented.
+- The frontend and Go write DTOs now carry the supported US business and
+  person fields required by provider readiness. This is offline contract
+  coverage only; the sandbox account's capabilities and scopes remain unchecked.
+- Customer-facing consent collection is deferred for the hackathon demo.
+  Sandbox requests omit `customer_agreements` when no acceptance exists;
+  production still requires actual agreement evidence. Airwallex may request
+  terms acceptance before activation.
 - The existing application status model remains authoritative. This integration
   adds no internal-review endpoint, `PENDING_REVIEW` status, or review migration.
 - `/submit` requires `Idempotency-Key` and atomically queues the frozen
   submission, idempotency response, and worker job after saved-data readiness
-  passes. The default `/verify` and submit readiness gate still fails closed
-  while the provider contract, US regulated-role rules, document requirements,
-  and required consent remain unverified.
+  passes. The supported US contract is checked offline; live sandbox account
+  access, scopes, provider responses, and activation remain unverified.
 - The Node environment loader supports `ONBOARDING_SERVICE_URL` and
   `ONBOARDING_SERVICE_SECRET` together. A configured, running backend is still
   needed to exercise the proxy.

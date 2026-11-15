@@ -55,14 +55,14 @@ func (s *Server) WithWebhookHandler(handler http.Handler, auth Authenticator) *S
 
 // NewServer initializes a new Server with required dependencies.
 // If auth is nil, defaults to DenyAllAuthenticator.
-// If gate is nil, defaults to UnverifiedPlatformContractGate.
+// If gate is nil, defaults to VerifiedUSBusinessContractGate.
 // If store is nil, defaults to storage.NewUnavailableStore.
 func NewServer(repo *postgres.Repository, auth Authenticator, gate validation.PlatformContractValidator, store storage.ObjectStore) *Server {
 	if auth == nil {
 		auth = DenyAllAuthenticator{}
 	}
 	if gate == nil {
-		gate = validation.UnverifiedPlatformContractGate{}
+		gate = validation.VerifiedUSBusinessContractGate{}
 	}
 	if store == nil {
 		store = storage.NewUnavailableStore("storage not configured")
@@ -265,10 +265,24 @@ func (s *Server) handleCreateCompany(w http.ResponseWriter, r *http.Request) {
 				Country:    req.BusinessProfile.RegisteredAddress.Country,
 			}
 		}
+		var operatingAddress *domain.Address
+		if req.BusinessProfile.OperatingAddress != nil {
+			operatingAddress = &domain.Address{
+				Line1:      req.BusinessProfile.OperatingAddress.Line1,
+				Line2:      req.BusinessProfile.OperatingAddress.Line2,
+				City:       req.BusinessProfile.OperatingAddress.City,
+				State:      req.BusinessProfile.OperatingAddress.State,
+				PostalCode: req.BusinessProfile.OperatingAddress.PostalCode,
+				Country:    req.BusinessProfile.OperatingAddress.Country,
+			}
+		}
 		if err := comp.UpdateProfile(domain.BusinessProfile{
-			Website:           req.BusinessProfile.Website,
-			Description:       req.BusinessProfile.Description,
-			RegisteredAddress: addr,
+			Website:            req.BusinessProfile.Website,
+			Description:        req.BusinessProfile.Description,
+			Products:           req.BusinessProfile.Products,
+			RegisteredAddress:  addr,
+			OperatingAddress:   operatingAddress,
+			OperatingCountries: req.BusinessProfile.OperatingCountries,
 		}); err != nil {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Code: "DOMAIN_ERROR", Message: err.Error()})
 			return
@@ -327,6 +341,9 @@ func (s *Server) handleCreateCompany(w http.ResponseWriter, r *http.Request) {
 			ID:              pID,
 			FirstName:       p.FirstName,
 			LastName:        p.LastName,
+			Nationality:     optionalString(p.Nationality),
+			Email:           optionalString(p.Email),
+			Phone:           optionalString(p.Phone),
 			Role:            p.Role,
 			DateOfBirth:     domain.Date(p.DateOfBirth),
 			Identifications: idents,
@@ -448,6 +465,9 @@ func (s *Server) handleEditCompany(w http.ResponseWriter, r *http.Request) {
 		if req.BusinessProfile.Description != nil {
 			profile.Description = *req.BusinessProfile.Description
 		}
+		if req.BusinessProfile.Products != nil {
+			profile.Products = *req.BusinessProfile.Products
+		}
 		if req.BusinessProfile.RegisteredAddress != nil {
 			profile.RegisteredAddress = domain.Address{
 				Line1:      req.BusinessProfile.RegisteredAddress.Line1,
@@ -457,6 +477,19 @@ func (s *Server) handleEditCompany(w http.ResponseWriter, r *http.Request) {
 				PostalCode: req.BusinessProfile.RegisteredAddress.PostalCode,
 				Country:    req.BusinessProfile.RegisteredAddress.Country,
 			}
+		}
+		if req.BusinessProfile.OperatingAddress != nil {
+			profile.OperatingAddress = &domain.Address{
+				Line1:      req.BusinessProfile.OperatingAddress.Line1,
+				Line2:      req.BusinessProfile.OperatingAddress.Line2,
+				City:       req.BusinessProfile.OperatingAddress.City,
+				State:      req.BusinessProfile.OperatingAddress.State,
+				PostalCode: req.BusinessProfile.OperatingAddress.PostalCode,
+				Country:    req.BusinessProfile.OperatingAddress.Country,
+			}
+		}
+		if req.BusinessProfile.OperatingCountries != nil {
+			profile.OperatingCountries = append([]string(nil), (*req.BusinessProfile.OperatingCountries)...)
 		}
 		if err := comp.UpdateProfile(profile); err != nil {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Code: "DOMAIN_ERROR", Message: err.Error()})
@@ -542,11 +575,23 @@ func (s *Server) handleEditCompany(w http.ResponseWriter, r *http.Request) {
 				ID:              pID,
 				FirstName:       p.FirstName,
 				LastName:        p.LastName,
+				Nationality:     optionalString(p.Nationality),
+				Email:           optionalString(p.Email),
+				Phone:           optionalString(p.Phone),
 				Role:            p.Role,
 				DateOfBirth:     domain.Date(p.DateOfBirth),
 				Identifications: idents,
 			}
-			if _, exists := comp.Person(pID); exists {
+			if existingPerson, exists := comp.Person(pID); exists {
+				if p.Nationality == nil {
+					personObj.Nationality = existingPerson.Nationality
+				}
+				if p.Email == nil {
+					personObj.Email = existingPerson.Email
+				}
+				if p.Phone == nil {
+					personObj.Phone = existingPerson.Phone
+				}
 				_ = comp.UpdatePerson(personObj)
 			} else {
 				_ = comp.AddPerson(personObj)
@@ -564,6 +609,13 @@ func (s *Server) handleEditCompany(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, toCompanyResponse(comp))
+}
+
+func optionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (s *Server) handleArchiveCompany(w http.ResponseWriter, r *http.Request) {
@@ -1107,9 +1159,11 @@ func convertDetailsDTO(dto PlatformOnboardingDetailsDTO) domain.PlatformOnboardi
 			}
 		}
 		people = append(people, domain.PersonPlatformDetails{
-			PersonID:           pd.PersonID,
-			PlatformRoles:      pd.PlatformRoles,
-			ResidentialAddress: resAddr,
+			PersonID:                  pd.PersonID,
+			PlatformRoles:             pd.PlatformRoles,
+			ResidentialAddress:        resAddr,
+			PrimaryIdentificationID:   pd.PrimaryIdentificationID,
+			SecondaryIdentificationID: pd.SecondaryIdentificationID,
 		})
 	}
 

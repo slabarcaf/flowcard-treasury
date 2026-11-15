@@ -43,7 +43,10 @@ export function serializeCompanyRequest(company: CompanyInput): CreateCompanyReq
       business_profile: {
         website: profile.website.trim(),
         description: profile.description.trim(),
+        ...(profile.products !== undefined ? { products: profile.products.trim() } : {}),
         ...(profile.registered_address ? { registered_address: serializeAddress(profile.registered_address) } : {}),
+        ...(profile.operating_address ? { operating_address: serializeAddress(profile.operating_address) } : {}),
+        ...(profile.operating_countries !== undefined ? { operating_countries: [...profile.operating_countries] } : {}),
       },
     } : {}),
     ...(identifiers.length ? {
@@ -62,6 +65,9 @@ export function serializeCompanyRequest(company: CompanyInput): CreateCompanyReq
         id: person.id,
         first_name: person.first_name.trim(),
         last_name: person.last_name.trim(),
+        ...(person.nationality !== undefined ? { nationality: person.nationality.trim() } : {}),
+        ...(person.email !== undefined ? { email: person.email.trim() } : {}),
+        ...(person.phone !== undefined ? { phone: person.phone.trim() } : {}),
         role: person.role.trim(),
         date_of_birth: person.date_of_birth.trim(),
         ...(person.identifications?.length ? {
@@ -107,8 +113,15 @@ export function serializeCompanyUpdateRequest(
       business_profile: {
         website: company.business_profile.website.trim(),
         description: company.business_profile.description.trim(),
+        ...(company.business_profile.products !== undefined ? { products: company.business_profile.products.trim() } : {}),
         ...(company.business_profile.registered_address
           ? { registered_address: serializeAddress(company.business_profile.registered_address) }
+          : {}),
+        ...(company.business_profile.operating_address
+          ? { operating_address: serializeAddress(company.business_profile.operating_address) }
+          : {}),
+        ...(company.business_profile.operating_countries !== undefined
+          ? { operating_countries: [...company.business_profile.operating_countries] }
           : {}),
       },
     } : {}),
@@ -137,6 +150,12 @@ export function unsupportedCompanyClearIssues(
       code: 'unsupported_clear',
       message: 'The current API cannot remove a saved registered address. Keep the address section enabled to preserve the saved value.',
     });
+  } else if (previous.business_profile?.operating_address && !current.business_profile?.operating_address) {
+    issues.push({
+      field: 'business_profile.operating_address',
+      code: 'unsupported_clear',
+      message: 'The current API cannot remove a saved operating address. Keep the address section enabled to preserve the saved value.',
+    });
   }
   return issues;
 }
@@ -151,7 +170,8 @@ export function serializeApplicationDetails(
     const platformRoles = (person.platform_roles ?? [])
       .map(role => role.trim())
       .filter(Boolean);
-    if (!platformRoles.length && !person.residential_address) return [];
+    if (!platformRoles.length && !person.residential_address &&
+        !person.primary_identification_id && !person.secondary_identification_id) return [];
 
     return [{
       person_id: person.person_id,
@@ -159,6 +179,8 @@ export function serializeApplicationDetails(
       ...(person.residential_address
         ? { residential_address: serializeAddress(person.residential_address) }
         : {}),
+      ...(person.primary_identification_id ? { primary_identification_id: person.primary_identification_id } : {}),
+      ...(person.secondary_identification_id ? { secondary_identification_id: person.secondary_identification_id } : {}),
     }];
   });
 

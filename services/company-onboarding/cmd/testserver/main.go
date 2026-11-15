@@ -69,7 +69,7 @@ func main() {
 		repo = postgres.NewRepository(pool)
 	}
 
-	gate := validation.UnverifiedPlatformContractGate{}
+	gate := validation.VerifiedUSBusinessContractGate{}
 	store := storage.NewUnavailableStore("test storage unconfigured")
 	server := internalHttp.NewServer(repo, opAuth, gate, store)
 

@@ -6,15 +6,15 @@ This manifest documents the documentation sources, date consulted, version limit
 
 ## 1. Environment & API Versioning Limitations
 
-- **Date Read:** 2026-11-06
+- **Date Read:** 2026-11-14
 - **Base URLs:**
   - Production: `https://api.airwallex.com/api/v1/`
   - Sandbox: `https://api.sandbox.airwallex.com/api/v1/` (confirmed host; `api-demo` rejected as unconfirmed)
   - Files: `https://files.airwallex.com/api/v1/` (Sandbox: `https://files.sandbox.airwallex.com/api/v1/`)
-- **API Version Status:** **PROVISIONAL**.
+- **API Version Status:** **DOCUMENTATION-VERIFIED, SANDBOX-UNVERIFIED**.
   - Airwallex uses date-based versioning (`x-api-version: YYYY-MM-DD`).
-  - Existing FlowCard codebase specifies `2026-08-21` for issuing simulations (`AIRWALLEX_ISSUING_API_VERSION` in `server/src/config.ts`).
-  - The exact date version required for Connected Accounts native onboarding in sandbox has not been confirmed via live Docs MCP or sandbox schema response. `2024-06-01` was withdrawn as unsupported.
+  - Airwallex's current API versioning documentation identifies `2026-08-21` as the latest version; the onboarding client uses it. This does not establish that Ramil's sandbox account is enabled or that a live request succeeds. `2024-06-01` was withdrawn as unsupported.
+  - The Connected Accounts create documentation describes `customer_agreements` as optional and documents deferred terms acceptance as an activation requirement. The hackathon sandbox path omits this field when no acceptance exists. No agreement is synthesized, and no sandbox request was made. See `https://www.airwallex.com/docs/api/scale/accounts/create` and `https://www.airwallex.com/docs/api/scale/accounts/changelog`.
 
 ---
 

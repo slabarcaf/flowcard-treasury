@@ -41,16 +41,26 @@ type PlatformContractValidator interface {
 	ValidatePlatformContract(comp *domain.Company, app *domain.OnboardingApplication) error
 }
 
-// ErrPlatformContractIncomplete is returned when required platform rules remain unverified.
-var ErrPlatformContractIncomplete = errors.New("platform contract incomplete: US regulated roles and country document requirement matrix remain unverified pending external platform evidence")
+// ErrPlatformContractIncomplete is returned for a country or entity type outside the implemented contract.
+var ErrPlatformContractIncomplete = errors.New("platform contract incomplete: this runtime does not support the requested country or entity type")
 
-// UnverifiedPlatformContractGate is the default production gate enforcing Task 1 external gates:
-// US regulated roles and country-specific document requirement matrix remain unverified.
+// UnverifiedPlatformContractGate explicitly blocks all platform operations and is retained for tests.
 type UnverifiedPlatformContractGate struct{}
 
-// ValidatePlatformContract always returns ErrPlatformContractIncomplete by default.
+// ValidatePlatformContract always returns ErrPlatformContractIncomplete.
 func (UnverifiedPlatformContractGate) ValidatePlatformContract(comp *domain.Company, app *domain.OnboardingApplication) error {
 	return ErrPlatformContractIncomplete
+}
+
+// VerifiedUSBusinessContractGate enables only supported US business structures mapped by the Airwallex adapter.
+type VerifiedUSBusinessContractGate struct{}
+
+// ValidatePlatformContract checks the country and legal structure supported by the verified native API contract.
+func (VerifiedUSBusinessContractGate) ValidatePlatformContract(comp *domain.Company, app *domain.OnboardingApplication) error {
+	if comp == nil || app == nil || !isSupportedUSBusinessStructure(comp.EntityType()) || !strings.EqualFold(strings.TrimSpace(comp.RegistrationCountry()), "US") {
+		return ErrPlatformContractIncomplete
+	}
+	return nil
 }
 
 // Validator wraps go-playground validator with JSON tag name awareness and custom rules.
@@ -78,6 +88,14 @@ func NewValidator() *Validator {
 	_ = v.RegisterValidation("iso3166_alpha2", func(fl validator.FieldLevel) bool {
 		s := strings.TrimSpace(fl.Field().String())
 		return iso3166Alpha2Regex.MatchString(strings.ToUpper(s))
+	})
+	_ = v.RegisterValidation("iso3166_alpha2_or_empty", func(fl validator.FieldLevel) bool {
+		value := fl.Field().String()
+		return value == "" || v.Var(value, "iso3166_alpha2") == nil
+	})
+	_ = v.RegisterValidation("email_or_empty", func(fl validator.FieldLevel) bool {
+		value := fl.Field().String()
+		return value == "" || v.Var(value, "email") == nil
 	})
 
 	// Custom validation for calendar date YYYY-MM-DD in the past
@@ -127,6 +145,12 @@ func (v *Validator) FormatValidationErrors(err error) []FieldError {
 	for _, fe := range valErrs {
 		fieldPath := cleanFieldNamespace(fe.Namespace())
 		rule := fe.Tag()
+		switch rule {
+		case "iso3166_alpha2_or_empty":
+			rule = "iso3166_alpha2"
+		case "email_or_empty":
+			rule = "email"
+		}
 		param := fe.Param()
 
 		msg := ruleMessage(rule, param)
@@ -174,12 +198,11 @@ func ruleMessage(rule, param string) string {
 	}
 }
 
-// VerifyOnboardingReadiness performs local completeness validation on saved Company,
-// Application, and Documents, followed by an explicit PlatformContractValidator gate.
+// VerifyOnboardingReadiness checks saved Company, Application, and Documents against the supported US contract.
 // Returns VALIDATION_PASSED (200), VALIDATION_FAILED (422), or PLATFORM_CONTRACT_INCOMPLETE (422).
 func VerifyOnboardingReadiness(comp *domain.Company, app *domain.OnboardingApplication, gate PlatformContractValidator) *ValidationResult {
 	if gate == nil {
-		gate = UnverifiedPlatformContractGate{}
+		gate = VerifiedUSBusinessContractGate{}
 	}
 
 	if comp == nil {
@@ -330,21 +353,28 @@ func VerifyOnboardingReadiness(comp *domain.Company, app *domain.OnboardingAppli
 			if strings.TrimSpace(p.Email) == "" {
 				errs = append(errs, FieldError{Field: "platform.onboarding_details.primary_contact.email", Code: "required", Message: "primary contact email is required"})
 			}
-			if strings.TrimSpace(p.Phone) == "" {
-				errs = append(errs, FieldError{Field: "platform.onboarding_details.primary_contact.phone", Code: "required", Message: "primary contact phone number is required"})
-			}
+		}
+	}
+	if requiresUSPrimaryContactMobile(details.IntendedProducts) && details.PrimaryContactPersonID != "" {
+		if person, ok := comp.Person(details.PrimaryContactPersonID); ok && strings.TrimSpace(person.Phone) == "" {
+			errs = append(errs, FieldError{Field: "platform.onboarding_details.primary_contact.phone", Code: "required", Message: "primary contact mobile is required for the selected Airwallex products"})
 		}
 	}
 
 	agreements := details.CustomerAgreements
-	if !agreements.AgreedToTermsAndConditions {
-		errs = append(errs, FieldError{Field: "platform.onboarding_details.customer_agreements.agreed_to_terms_and_conditions", Code: "required", Message: "terms and conditions must be explicitly agreed to"})
-	}
-	if !agreements.AgreedToDataUsage {
-		errs = append(errs, FieldError{Field: "platform.onboarding_details.customer_agreements.agreed_to_data_usage", Code: "required", Message: "data usage policy must be explicitly agreed to"})
-	}
-	if agreements.TermsAndConditions == nil || agreements.TermsAndConditions.AgreedAt.IsZero() {
-		errs = append(errs, FieldError{Field: "platform.onboarding_details.customer_agreements.terms_and_conditions.agreed_at", Code: "required", Message: "agreement timestamp is required"})
+	hasAgreementData := agreements.AgreedToTermsAndConditions || agreements.AgreedToDataUsage || agreements.TermsAndConditions != nil
+	if !strings.EqualFold(strings.TrimSpace(app.Platform().Environment), "sandbox") || hasAgreementData {
+		if !agreements.AgreedToTermsAndConditions {
+			errs = append(errs, FieldError{Field: "platform.onboarding_details.customer_agreements.agreed_to_terms_and_conditions", Code: "required", Message: "terms and conditions must be explicitly agreed to"})
+		}
+		if !agreements.AgreedToDataUsage {
+			errs = append(errs, FieldError{Field: "platform.onboarding_details.customer_agreements.agreed_to_data_usage", Code: "required", Message: "data usage policy must be explicitly agreed to"})
+		}
+		if agreements.TermsAndConditions == nil || agreements.TermsAndConditions.AgreedAt.IsZero() {
+			errs = append(errs, FieldError{Field: "platform.onboarding_details.customer_agreements.terms_and_conditions.agreed_at", Code: "required", Message: "agreement timestamp is required"})
+		} else if strings.TrimSpace(agreements.TermsAndConditions.ServiceAgreementType) == "" {
+			errs = append(errs, FieldError{Field: "platform.onboarding_details.customer_agreements.terms_and_conditions.service_agreement_type", Code: "required", Message: "Airwallex service agreement type is required"})
+		}
 	}
 
 	// 3. Document format checks for any uploaded documents (path: documents...)
@@ -354,6 +384,7 @@ func VerifyOnboardingReadiness(comp *domain.Company, app *domain.OnboardingAppli
 			errs = append(errs, FieldError{Field: dPrefix, Code: "invalid_document", Message: "document fails local format or size policy"})
 		}
 	}
+	errs = append(errs, validateUSConnectedAccountData(comp, app)...)
 
 	// 4. Fail closed on unsupported platform checks
 	platformName := strings.ToUpper(strings.TrimSpace(app.Platform().Name))
@@ -372,8 +403,6 @@ func VerifyOnboardingReadiness(comp *domain.Company, app *domain.OnboardingAppli
 	}
 
 	// 5. Injected PlatformContractValidator gate
-	// Default gate enforces Task 1 external gates: US regulated roles and country-specific
-	// document matrix remain unverified, so verification cannot claim success.
 	if err := gate.ValidatePlatformContract(comp, app); err != nil {
 		return &ValidationResult{
 			Code:                "PLATFORM_CONTRACT_INCOMPLETE",

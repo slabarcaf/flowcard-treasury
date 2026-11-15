@@ -16,6 +16,22 @@ import (
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/platform/airwallex"
 )
 
+type localAirwallexRoundTripper struct {
+	targetHost string
+	requested  *[]string
+}
+
+func (t localAirwallexRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	*t.requested = append(*t.requested, request.URL.Host)
+	copyRequest := request.Clone(request.Context())
+	copyURL := *request.URL
+	copyURL.Scheme = "http"
+	copyURL.Host = t.targetHost
+	copyRequest.URL = &copyURL
+	copyRequest.Host = t.targetHost
+	return http.DefaultTransport.RoundTrip(copyRequest)
+}
+
 func TestNewClient_Validation(t *testing.T) {
 	t.Parallel()
 
@@ -186,6 +202,7 @@ func TestClient_CreateAccount_Scenarios(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
+		createRequest := make(chan map[string]any, 1)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/api/v1/authentication/login" {
 				w.Header().Set("Content-Type", "application/json")
@@ -196,6 +213,12 @@ func TestClient_CreateAccount_Scenarios(t *testing.T) {
 				return
 			}
 			if r.URL.Path == "/api/v1/accounts/create" {
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				createRequest <- body
 				if r.Header.Get("Authorization") != "Bearer jwt" {
 					w.WriteHeader(http.StatusUnauthorized)
 					return
@@ -213,9 +236,10 @@ func TestClient_CreateAccount_Scenarios(t *testing.T) {
 		defer server.Close()
 
 		client, err := airwallex.NewClient(airwallex.ClientConfig{
-			BaseURL:  server.URL,
-			ClientID: "cid",
-			APIKey:   "key",
+			BaseURL:             server.URL,
+			ClientID:            "cid",
+			APIKey:              "key",
+			PlatformEnvironment: "sandbox",
 		})
 		if err != nil {
 			t.Fatalf("NewClient failed: %v", err)
@@ -227,6 +251,66 @@ func TestClient_CreateAccount_Scenarios(t *testing.T) {
 		}
 		if resp.ID != "acct_sandbox_test001" || resp.Status != "CREATED" {
 			t.Fatalf("unexpected response: %+v", resp)
+		}
+		body := <-createRequest
+		if _, ok := body["customer_agreements"]; ok {
+			t.Errorf("sandbox create payload included uncollected customer agreements: %v", body["customer_agreements"])
+		}
+
+		partialAgreements := &airwallex.CustomerAgreements{AgreedToDataUsage: true}
+		_, err = client.CreateAccount(context.Background(), airwallex.AccountCreateRequest{CustomerAgreements: partialAgreements})
+		if !errors.Is(err, airwallex.ErrIncompleteSubmissionMapping) {
+			t.Fatalf("partial sandbox agreements error = %v, want incomplete agreement error", err)
+		}
+	})
+
+	t.Run("production requires agreements before authentication", func(t *testing.T) {
+		var requestCount int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&requestCount, 1)
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		client, err := airwallex.NewClient(airwallex.ClientConfig{
+			BaseURL:             server.URL,
+			ClientID:            "cid",
+			APIKey:              "key",
+			PlatformEnvironment: "production",
+		})
+		if err != nil {
+			t.Fatalf("NewClient() production: %v", err)
+		}
+
+		for _, req := range []airwallex.AccountCreateRequest{
+			{},
+			{CustomerAgreements: &airwallex.CustomerAgreements{AgreedToDataUsage: true}},
+			{CustomerAgreements: &airwallex.CustomerAgreements{
+				AgreedToDataUsage:          true,
+				AgreedToTermsAndConditions: true,
+				TermsAndConditions: airwallex.TermsAndConditions{
+					AgreedAt:             "0001-01-01T00:00:00Z",
+					ServiceAgreementType: "FULL",
+				},
+			}},
+		} {
+			if _, err := client.CreateAccount(context.Background(), req); !errors.Is(err, airwallex.ErrIncompleteSubmissionMapping) {
+				t.Errorf("CreateAccount() with missing or partial production agreements error = %v, want incomplete agreement error", err)
+			}
+		}
+		unspecifiedEnvironmentClient, err := airwallex.NewClient(airwallex.ClientConfig{
+			BaseURL:  server.URL,
+			ClientID: "cid",
+			APIKey:   "key",
+		})
+		if err != nil {
+			t.Fatalf("NewClient() unspecified environment: %v", err)
+		}
+		if _, err := unspecifiedEnvironmentClient.CreateAccount(context.Background(), airwallex.AccountCreateRequest{}); !errors.Is(err, airwallex.ErrIncompleteSubmissionMapping) {
+			t.Errorf("CreateAccount() with unspecified environment and missing agreements error = %v, want incomplete agreement error", err)
+		}
+		if got := atomic.LoadInt32(&requestCount); got != 0 {
+			t.Errorf("production missing/partial agreements made %d HTTP requests, want zero", got)
 		}
 	})
 
@@ -252,9 +336,10 @@ func TestClient_CreateAccount_Scenarios(t *testing.T) {
 		defer server.Close()
 
 		client, _ := airwallex.NewClient(airwallex.ClientConfig{
-			BaseURL:  server.URL,
-			ClientID: "cid",
-			APIKey:   "key",
+			BaseURL:             server.URL,
+			ClientID:            "cid",
+			APIKey:              "key",
+			PlatformEnvironment: "sandbox",
 		})
 
 		_, err := client.CreateAccount(context.Background(), airwallex.AccountCreateRequest{})
@@ -283,9 +368,10 @@ func TestClient_CreateAccount_Scenarios(t *testing.T) {
 		defer server.Close()
 
 		client, _ := airwallex.NewClient(airwallex.ClientConfig{
-			BaseURL:  server.URL,
-			ClientID: "cid",
-			APIKey:   "key",
+			BaseURL:             server.URL,
+			ClientID:            "cid",
+			APIKey:              "key",
+			PlatformEnvironment: "sandbox",
 		})
 
 		_, err := client.CreateAccount(context.Background(), airwallex.AccountCreateRequest{})
@@ -313,9 +399,10 @@ func TestClient_CreateAccount_Scenarios(t *testing.T) {
 		defer server.Close()
 
 		client, _ := airwallex.NewClient(airwallex.ClientConfig{
-			BaseURL:  server.URL,
-			ClientID: "cid",
-			APIKey:   "key",
+			BaseURL:             server.URL,
+			ClientID:            "cid",
+			APIKey:              "key",
+			PlatformEnvironment: "sandbox",
 		})
 
 		_, err := client.CreateAccount(context.Background(), airwallex.AccountCreateRequest{})
@@ -342,9 +429,10 @@ func TestClient_CreateAccount_Scenarios(t *testing.T) {
 		defer server.Close()
 
 		client, _ := airwallex.NewClient(airwallex.ClientConfig{
-			BaseURL:  server.URL,
-			ClientID: "cid",
-			APIKey:   "key",
+			BaseURL:             server.URL,
+			ClientID:            "cid",
+			APIKey:              "key",
+			PlatformEnvironment: "sandbox",
 			HTTPClient: &http.Client{
 				Timeout: 20 * time.Millisecond,
 			},
@@ -359,6 +447,7 @@ func TestClient_CreateAccount_Scenarios(t *testing.T) {
 
 func TestClient_UploadFile_Scenarios(t *testing.T) {
 	t.Parallel()
+	var requestedHosts []string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/authentication/login" {
@@ -374,7 +463,7 @@ func TestClient_UploadFile_Scenarios(t *testing.T) {
 				return
 			}
 			purpose := r.FormValue("purpose")
-			if purpose != "business_registration" {
+			if purpose != "" {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -403,9 +492,13 @@ func TestClient_UploadFile_Scenarios(t *testing.T) {
 	defer server.Close()
 
 	client, err := airwallex.NewClient(airwallex.ClientConfig{
-		BaseURL:  server.URL,
+		BaseURL:  "https://api.sandbox.airwallex.com",
 		ClientID: "cid",
 		APIKey:   "key",
+		HTTPClient: &http.Client{Transport: localAirwallexRoundTripper{
+			targetHost: strings.TrimPrefix(server.URL, "http://"),
+			requested:  &requestedHosts,
+		}},
 	})
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
@@ -417,6 +510,9 @@ func TestClient_UploadFile_Scenarios(t *testing.T) {
 	}
 	if resp.FileID != "file_sandbox_test001" {
 		t.Fatalf("expected file ID file_sandbox_test001, got %q", resp.FileID)
+	}
+	if len(requestedHosts) != 2 || requestedHosts[0] != "api.sandbox.airwallex.com" || requestedHosts[1] != "files.sandbox.airwallex.com" {
+		t.Errorf("request hosts = %v, want API and sandbox file-service hosts", requestedHosts)
 	}
 }
 
@@ -532,6 +628,10 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 				PostalCode: "94105",
 				Country:    "US",
 			},
+			OperatingAddress: &domain.Address{
+				Line1: "100 Market St", City: "San Francisco", State: "CA", PostalCode: "94105", Country: "US",
+			},
+			OperatingCountries: []string{"US"},
 		},
 		People: []domain.Person{
 			{
@@ -554,6 +654,9 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 		Status:      domain.SubmissionStatusPending,
 		CompanyCopy: comp,
 		OnboardingDetailsCopy: domain.PlatformOnboardingDetails{
+			IndustryCategoryCode:   "software_saas",
+			IntendedProducts:       []string{"CREATE_CARDS"},
+			EstimatedRevenue:       domain.RevenueEstimate{Amount: "100000", Currency: "USD"},
 			PrimaryContactPersonID: "person_001",
 			CustomerAgreements: domain.CustomerAgreements{
 				AgreedToDataUsage:          true,
@@ -593,14 +696,35 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 	if req.AccountDetails.BusinessDetails.RegistrationAddress.AddressLine2 != "Suite 400" {
 		t.Errorf("got address line 2 %q, want Suite 400", req.AccountDetails.BusinessDetails.RegistrationAddress.AddressLine2)
 	}
+	if req.AccountDetails.BusinessDetails.BusinessAddress == nil || req.AccountDetails.BusinessDetails.BusinessAddress.AddressLine1 != "100 Market St" {
+		t.Errorf("got business address %+v, want the explicitly saved operating address", req.AccountDetails.BusinessDetails.BusinessAddress)
+	}
+	if len(req.AccountDetails.BusinessDetails.AccountUsage.ProductReference) != 1 || req.AccountDetails.BusinessDetails.AccountUsage.ProductReference[0] != "CREATE_CARDS" {
+		t.Errorf("got product references %v, want [CREATE_CARDS]", req.AccountDetails.BusinessDetails.AccountUsage.ProductReference)
+	}
 	if req.PrimaryContact.Mobile != "+14155550199" {
 		t.Errorf("got mobile %q, want +14155550199", req.PrimaryContact.Mobile)
 	}
-	if !req.CustomerAgreements.AgreedToTermsAndConditions || !req.CustomerAgreements.AgreedToDataUsage {
+	if req.CustomerAgreements == nil || !req.CustomerAgreements.AgreedToTermsAndConditions || !req.CustomerAgreements.AgreedToDataUsage {
 		t.Errorf("expected customer agreements to be true")
 	}
-	if req.CustomerAgreements.TermsAndConditions.ServiceAgreementType != "FULL" {
+	if req.CustomerAgreements != nil && req.CustomerAgreements.TermsAndConditions.ServiceAgreementType != "FULL" {
 		t.Errorf("got service agreement type %q, want FULL", req.CustomerAgreements.TermsAndConditions.ServiceAgreementType)
+	}
+
+	// Sandbox demo submissions without customer acceptance omit the optional provider field.
+	noConsent := sub
+	noConsent.OnboardingDetailsCopy.CustomerAgreements = domain.CustomerAgreements{}
+	noConsentRequest, err := airwallex.MapSubmissionToAccountCreateRequest(noConsent)
+	if err != nil {
+		t.Fatalf("MapSubmissionToAccountCreateRequest() without consent: %v", err)
+	}
+	noConsentJSON, err := json.Marshal(noConsentRequest)
+	if err != nil {
+		t.Fatalf("json.Marshal() without consent: %v", err)
+	}
+	if strings.Contains(string(noConsentJSON), "customer_agreements") {
+		t.Errorf("sandbox request without acceptance included customer_agreements: %s", noConsentJSON)
 	}
 
 	if req.AccountDetails.BusinessDetails.RegistrationAddress.Suburb != "San Francisco" {
@@ -625,6 +749,9 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 	if strings.Contains(reqStr, `"first_name":`) {
 		t.Errorf("expected PrimaryContact not to contain first_name, got: %s", reqStr)
 	}
+	if !strings.Contains(reqStr, `"product_reference":["CREATE_CARDS"]`) {
+		t.Errorf("expected account usage product_reference to be an array, got: %s", reqStr)
+	}
 
 	// Test Update Request mapping with file IDs
 	docComp, _ := domain.ReconstituteCompany(domain.ReconstituteCompanyParams{
@@ -642,6 +769,10 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 			RegisteredAddress: domain.Address{
 				Line1: "100 Market St", City: "San Francisco", State: "CA", PostalCode: "94105", Country: "US",
 			},
+			OperatingAddress: &domain.Address{
+				Line1: "100 Market St", City: "San Francisco", State: "CA", PostalCode: "94105", Country: "US",
+			},
+			OperatingCountries: []string{"US"},
 		},
 		People: []domain.Person{
 			{
@@ -665,7 +796,7 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 	})
 	subWithDoc := sub
 	subWithDoc.CompanyCopy = docComp
-	subWithDoc.DocumentIDs = []string{"doc_comp_001", "doc_person_001"}
+	subWithDoc.DocumentIDs = []string{"doc_comp_001", "doc_person_001", "doc_operating_agreement"}
 	subWithDoc.OnboardingDetailsCopy.People = []domain.PersonPlatformDetails{
 		{
 			PersonID:      "person_001",
@@ -682,6 +813,10 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 			Type: "CERTIFICATE_OF_INCORPORATION",
 		},
 		{
+			ID:   "doc_operating_agreement",
+			Type: "OPERATING_AGREEMENT",
+		},
+		{
 			ID:               "doc_person_001",
 			PersonID:         "person_001",
 			IdentificationID: "ident_001",
@@ -690,8 +825,9 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 	}
 
 	updateReq, err := airwallex.MapSubmissionToAccountUpdateRequest(subWithDoc, appDocs, map[string]string{
-		"doc_comp_001":   "file_uploaded_001",
-		"doc_person_001": "file_person_uploaded_001",
+		"doc_comp_001":            "file_uploaded_001",
+		"doc_person_001":          "file_person_uploaded_001",
+		"doc_operating_agreement": "file_operating_agreement_001",
 	})
 	if err != nil {
 		t.Fatalf("MapSubmissionToAccountUpdateRequest failed: %v", err)
@@ -717,8 +853,14 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 	if !strings.Contains(updateStr, `"phone_number":"+14155550199"`) {
 		t.Errorf("expected wire JSON to contain 'phone_number', got: %s", updateStr)
 	}
-	if !strings.Contains(updateStr, `"business_documents":[{"file_id":"file_uploaded_001","tag":"BUSINESS_DOCUMENT"}]`) {
+	if !strings.Contains(updateStr, `"business_documents":[{"file_id":"file_uploaded_001","tag":"CERTIFICATE_OF_INCORPORATION"},{"file_id":"file_operating_agreement_001","tag":"OPERATING_AGREEMENT"}]`) {
 		t.Errorf("expected wire JSON to contain 'business_documents', got: %s", updateStr)
+	}
+	if !strings.Contains(updateStr, `"business_address":{"address_line1":"100 Market St"`) {
+		t.Errorf("expected wire JSON to contain the explicit business address, got: %s", updateStr)
+	}
+	if !strings.Contains(updateStr, `"product_reference":["CREATE_CARDS"]`) {
+		t.Errorf("expected wire JSON to encode product_reference as an array, got: %s", updateStr)
 	}
 	// Invariant: Structured identifications object (primary passport with front_file_id)
 	if !strings.Contains(updateStr, `"identifications":{"primary":{`) {
@@ -772,6 +914,10 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 			RegisteredAddress: domain.Address{
 				Line1: "123 Main", City: "SF", State: "CA", PostalCode: "94105", Country: "US",
 			},
+			OperatingAddress: &domain.Address{
+				Line1: "123 Main", City: "SF", State: "CA", PostalCode: "94105", Country: "US",
+			},
+			OperatingCountries: []string{"US"},
 		},
 		People: []domain.Person{
 			{
@@ -845,6 +991,10 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 			RegisteredAddress: domain.Address{
 				Line1: "123 Main", City: "SF", State: "CA", PostalCode: "94105", Country: "US",
 			},
+			OperatingAddress: &domain.Address{
+				Line1: "123 Main", City: "SF", State: "CA", PostalCode: "94105", Country: "US",
+			},
+			OperatingCountries: []string{"US"},
 		},
 		People: []domain.Person{
 			{
@@ -928,7 +1078,7 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 		t.Errorf("expected ErrIncompleteSubmissionMapping for generic TAX_ID, got: %v", err)
 	}
 
-	// Test multiple identifications (>1) fail closed so reversed list order cannot change selection unnoticed
+	// A tax ID and photo ID map to primary and secondary slots independent of input order.
 	multiIDComp1, _ := domain.ReconstituteCompany(domain.ReconstituteCompanyParams{
 		ID:                  "comp_multi_1",
 		Status:              domain.CompanyStatusActive,
@@ -944,6 +1094,10 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 			RegisteredAddress: domain.Address{
 				Line1: "123 Main", City: "SF", State: "CA", PostalCode: "94105", Country: "US",
 			},
+			OperatingAddress: &domain.Address{
+				Line1: "123 Main", City: "SF", State: "CA", PostalCode: "94105", Country: "US",
+			},
+			OperatingCountries: []string{"US"},
 		},
 		People: []domain.Person{
 			{
@@ -952,7 +1106,7 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 				LastName:    "Swift",
 				Nationality: "US",
 				Identifications: []domain.Identification{
-					{ID: "id_1", Type: "PASSPORT", IssuingCountry: "US", Number: "P1"},
+					{ID: "id_1", Type: "SSN", IssuingCountry: "US", Number: "123456789"},
 					{ID: "id_2", Type: "DRIVERS_LICENCE", IssuingCountry: "US", Number: "DL1"},
 				},
 			},
@@ -961,10 +1115,21 @@ func TestMapSubmissionToAccountCreateRequest(t *testing.T) {
 	subMulti1 := sub
 	subMulti1.CompanyCopy = multiIDComp1
 	subMulti1.OnboardingDetailsCopy.People = []domain.PersonPlatformDetails{
-		{PersonID: "person_multi_1", PlatformRoles: []string{"DIRECTOR"}},
+		{
+			PersonID:                  "person_multi_1",
+			PlatformRoles:             []string{"BENEFICIAL_OWNER"},
+			PrimaryIdentificationID:   "id_1",
+			SecondaryIdentificationID: "id_2",
+		},
 	}
-	if _, err := airwallex.MapSubmissionToAccountUpdateRequest(subMulti1, nil, nil); !errors.Is(err, airwallex.ErrIncompleteSubmissionMapping) {
-		t.Errorf("expected ErrIncompleteSubmissionMapping for >1 identifications (fail closed), got: %v", err)
+	updateMulti, err := airwallex.MapSubmissionToAccountUpdateRequest(subMulti1, nil, nil)
+	if err != nil {
+		t.Fatalf("MapSubmissionToAccountUpdateRequest with tax and photo IDs failed: %v", err)
+	}
+	primary := updateMulti.AccountDetails.BusinessPersonDetails[0].Identifications.Primary
+	secondary := updateMulti.AccountDetails.BusinessPersonDetails[0].Identifications.Secondary
+	if primary.IdentificationType != "TAX_ID" || primary.TaxID.Type != "SSN" || secondary.IdentificationType != "DRIVERS_LICENCE" {
+		t.Errorf("tax and photo IDs were not mapped to primary/secondary slots: primary=%+v secondary=%+v", primary, secondary)
 	}
 
 	// Test duplicate document ambiguity rejected (multiple front images for same identification)

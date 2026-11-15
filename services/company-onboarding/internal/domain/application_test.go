@@ -511,11 +511,10 @@ func TestApplicationSuccessLifecycle(t *testing.T) {
 		t.Errorf("Status() = %q, want DRAFT", app.Status())
 	}
 
-	// 1. Setup valid onboarding details and attach document
+	// 1. Setup sandbox onboarding details without collecting demo-only consent.
 	details := domain.PlatformOnboardingDetails{
 		IndustryCategoryCode: "FINANCIAL_SERVICES",
 		IntendedProducts:     []string{"PAYMENTS"},
-		CustomerAgreements:   helperValidConsent(),
 	}
 	if err := app.UpdateOnboardingDetails(details); err != nil {
 		t.Fatalf("UpdateOnboardingDetails() failed: %v", err)

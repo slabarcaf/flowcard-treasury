@@ -315,6 +315,15 @@ func createTestCompanyAndApp(t *testing.T, repo *postgres.Repository, store stor
 				PostalCode: "94105",
 				Country:    "US",
 			},
+			OperatingAddress: &domain.Address{
+				Line1:      "100 Market St",
+				Line2:      "Suite 400",
+				City:       "San Francisco",
+				State:      "CA",
+				PostalCode: "94105",
+				Country:    "US",
+			},
+			OperatingCountries: []string{"US"},
 		},
 		People: []domain.Person{
 			{
@@ -323,8 +332,12 @@ func createTestCompanyAndApp(t *testing.T, repo *postgres.Repository, store stor
 				LastName:    "Morgan",
 				Email:       "operator.contact@acme-innovations.example.com",
 				Phone:       "+14155550199",
+				Role:        "Director",
 				DateOfBirth: domain.Date("1985-06-15"),
 				Nationality: "US",
+				Identifications: []domain.Identification{{
+					ID: "ident_001", Type: "SSN", Number: "123456789", IssuingCountry: "US",
+				}},
 			},
 		},
 	})
@@ -344,6 +357,7 @@ func createTestCompanyAndApp(t *testing.T, repo *postgres.Repository, store stor
 	if err := app.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{
 		PrimaryContactPersonID: "person_001",
 		IndustryCategoryCode:   "5734",
+		IntendedProducts:       []string{"CREATE_CARDS"},
 		EstimatedRevenue: domain.RevenueEstimate{
 			Amount:   "100000",
 			Currency: "USD",
@@ -362,8 +376,9 @@ func createTestCompanyAndApp(t *testing.T, repo *postgres.Repository, store stor
 		},
 		People: []domain.PersonPlatformDetails{
 			{
-				PersonID:      "person_001",
-				PlatformRoles: []string{"DIRECTOR"},
+				PersonID:                  "person_001",
+				PlatformRoles:             []string{"AUTHORISED_PERSON", "BENEFICIAL_OWNER", "CONTROLLING_PERSON"},
+				PrimaryIdentificationID:   "ident_001",
 				ResidentialAddress: domain.Address{
 					Line1:      "100 Market St",
 					City:       "San Francisco",

@@ -51,8 +51,18 @@ export const PLATFORM_ROLE_OPTIONS: FormOption[] = [
 const currencyNames = new Intl.DisplayNames(['en'], { type: 'currency' });
 export const CURRENCY_OPTIONS: FormOption[] = Intl.supportedValuesOf('currency')
   .map(value => ({ value, label: `${value} — ${currencyNames.of(value) ?? value}` }));
+export const BUSINESS_DOCUMENT_TYPES: FormOption[] = [
+  { value: 'BUSINESS_DOCUMENT', label: 'Choose a company document type' },
+  { value: 'CERTIFICATE_OF_INCORPORATION', label: 'Certificate of incorporation' },
+  { value: 'PARTNERSHIP_AGREEMENT', label: 'Partnership agreement' },
+  { value: 'CONFIRMATION_STATEMENT', label: 'EIN confirmation statement' },
+  { value: 'EIN_LETTER', label: 'EIN letter' },
+  { value: 'ASSUMED_NAME_CERTIFICATE', label: 'Assumed name certificate' },
+  { value: 'OPERATING_AGREEMENT', label: 'Operating agreement' },
+  { value: 'SUPPORTIVE_OTHER', label: 'Other supporting business document' },
+];
 export const DOCUMENT_TYPES: FormOption[] = [
-  { value: 'BUSINESS_DOCUMENT', label: 'Company registration document' },
+  ...BUSINESS_DOCUMENT_TYPES,
   { value: 'PASSPORT_FRONT', label: 'Passport photo page' },
   { value: 'DRIVERS_LICENSE_FRONT', label: "Driver’s license — front" },
   { value: 'DRIVERS_LICENSE_BACK', label: "Driver’s license — back" },
@@ -60,3 +70,7 @@ export const DOCUMENT_TYPES: FormOption[] = [
   { value: 'NATIONAL_ID_BACK', label: 'National identity card — back' },
   { value: 'PERSON_PURPORTING_TO_ACT_AUTHORISATION_LETTER', label: 'Authorization letter' },
 ];
+
+export function isBusinessDocumentType(type: string): boolean {
+  return BUSINESS_DOCUMENT_TYPES.some(option => option.value === type);
+}

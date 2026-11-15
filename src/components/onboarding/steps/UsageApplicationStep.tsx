@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FieldIssue, OnboardingDetailsInput, PersonInput } from '../../../services/onboarding/contracts.js';
 import { emptyAddress } from '../../../services/onboarding/contracts.js';
-import { CURRENCY_OPTIONS, PLATFORM_ROLE_OPTIONS, PRODUCT_OPTIONS } from '../../../services/onboarding/options.js';
+import { CURRENCY_OPTIONS, IDENTIFICATION_TYPES, PLATFORM_ROLE_OPTIONS, PRODUCT_OPTIONS } from '../../../services/onboarding/options.js';
 import { clearIndustryCategoryCode } from '../../../services/onboarding/formRules.js';
 import { useIndustryOptions } from '../../../hooks/useIndustryOptions.js';
 import { AddressFields, CheckboxGroup, FieldIssueMessages, OptionalSection, SelectField, TextField } from '../ApplicationFields.js';
@@ -84,9 +84,13 @@ export function UsageApplicationStep({ value, people, onChange, onGoToPeople, fi
       const current = value.people?.find(item => item.person_id === person.id) ?? { person_id: person.id };
       const roles = current.platform_roles ?? [];
       const customRoles = roles.filter(role => !knownRoleCodes.has(role));
-      const persistedDetails = (value.people ?? []).filter(item => (item.platform_roles ?? []).some(role => role.trim()) || item.residential_address);
+      const persistedDetails = (value.people ?? []).filter(item => (item.platform_roles ?? []).some(role => role.trim()) || item.residential_address || item.primary_identification_id || item.secondary_identification_id);
       const personDetailsIndex = persistedDetails.findIndex(item => item.person_id === person.id);
       const personDetailsPath = `platform.onboarding_details.people[${personDetailsIndex < 0 ? people.indexOf(person) : personDetailsIndex}]`;
+      const identificationOptions = (person.identifications ?? []).filter(item => item.id).map(item => ({
+        value: item.id!,
+        label: `${IDENTIFICATION_TYPES.find(option => option.value === item.type)?.label ?? item.type} · ending ${item.number.slice(-4) || '—'}`,
+      }));
       return <section key={person.id} className="rounded-xl border border-slate-700 p-5 space-y-4">
         <h2 className="font-medium">{person.first_name} {person.last_name}</h2>
         <CheckboxGroup label="Relationship to the company" apiField={`${personDetailsPath}.platform_roles`} fieldIssues={fieldIssues} options={PLATFORM_ROLE_OPTIONS} value={roles}
@@ -103,6 +107,9 @@ export function UsageApplicationStep({ value, people, onChange, onGoToPeople, fi
         {customRoles.map(role => <div key={role} className="flex items-center gap-3 text-sm text-slate-300">
           <span>{role}</span><button type="button" className="revolut-link" onClick={() => updatePerson(person, { platform_roles: roles.filter(item => item !== role) })}>Remove</button>
         </div>)}
+        <p className="text-xs text-slate-400">Choose the identity record to send as primary. For a U.S. person, use their SSN or ITIN. A second photo ID is needed for some business operating states.</p>
+        <SelectField label="Primary identification" apiField={`${personDetailsPath}.primary_identification_id`} fieldIssues={fieldIssues} optional placeholder="Select the primary ID" options={identificationOptions} value={current.primary_identification_id ?? ''} onChange={e => updatePerson(person, { primary_identification_id: e.target.value || undefined })} />
+        <SelectField label="Secondary identification" apiField={`${personDetailsPath}.secondary_identification_id`} fieldIssues={fieldIssues} optional placeholder="No secondary ID selected" options={identificationOptions.filter(option => option.value !== current.primary_identification_id)} value={current.secondary_identification_id ?? ''} onChange={e => updatePerson(person, { secondary_identification_id: e.target.value || undefined })} />
         <OptionalSection title="Residential address" checked={Boolean(current.residential_address)} onChange={enabled => updatePerson(person, {
           residential_address: enabled ? current.residential_address ?? emptyAddress() : undefined,
         })}>

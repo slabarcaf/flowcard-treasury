@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { ApplicationRecord, SubmissionReceipt } from '../../../../services/onboarding/contracts.js';
+import type { ApplicationRecord, FieldIssue, SubmissionReceipt } from '../../../../services/onboarding/contracts.js';
 import { applicationStatus } from '../../../../services/onboarding/contracts.js';
 import { OnboardingApiClient, OnboardingApiError } from '../../../../services/onboarding/OnboardingApiClient.js';
 import { color, font, radius, space } from '../tokens.js';
@@ -27,6 +27,7 @@ export function ApplicationReviewActions({ application, onUpdated }: { applicati
   const [messages, setMessages] = useState({ request: '', reject: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [readinessIssues, setReadinessIssues] = useState<FieldIssue[]>([]);
   const [success, setSuccess] = useState('');
   const [uncertain, setUncertain] = useState(false);
   const [submissionReceipt, setSubmissionReceipt] = useState<SubmissionReceipt | null>(null);
@@ -55,6 +56,7 @@ export function ApplicationReviewActions({ application, onUpdated }: { applicati
     if (inFlight.current) return;
     dialog.current?.close(); setChoice(null);
     if (!uncertain) setError('');
+    if (!uncertain) setReadinessIssues([]);
     trigger.current?.focus();
   }
 
@@ -80,7 +82,7 @@ export function ApplicationReviewActions({ application, onUpdated }: { applicati
       setError(choice.key === 'request' ? 'Not sent. The backend does not yet support saving and delivering information requests. Your message is preserved here.' : 'Not rejected. The backend does not yet support internal rejection with a reason. Your reason is preserved here.');
       return;
     }
-    inFlight.current = true; setBusy(true); setError(''); setSuccess('');
+    inFlight.current = true; setBusy(true); setError(''); setReadinessIssues([]); setSuccess('');
     try {
       const attempt = submissionAttempt ?? {
         applicationId: application.id,
@@ -107,6 +109,7 @@ export function ApplicationReviewActions({ application, onUpdated }: { applicati
       trigger.current?.focus();
     } catch (caught) {
       const failure = caught instanceof OnboardingApiError ? caught : new OnboardingApiError(0, 'NETWORK_RESULT_UNKNOWN');
+      setReadinessIssues(failure.issues);
       const keepAttempt = failure.code === 'SUBMISSION_IN_PROGRESS' || failure.code === 'IDEMPOTENCY_CONFLICT' ||
         failure.code === 'INVALID_RESPONSE' || failure.status === 0 || failure.status >= 500 || failure.status === 401 || failure.status === 403;
       if (failure.code === 'REVISION_CONFLICT' || failure.code === 'APPLICATION_STATE_CONFLICT') {
@@ -150,7 +153,7 @@ export function ApplicationReviewActions({ application, onUpdated }: { applicati
           }
 
         }}>
-          {choices.map(action => <button key={action.key} className="review-option" onClick={() => { setChoice(action); setOpen(false); setError(''); }}>
+          {choices.map(action => <button key={action.key} className="review-option" onClick={() => { setChoice(action); setOpen(false); setError(''); setReadinessIssues([]); }}>
             <ActionIcon action={action} /><span><strong>{action.title}</strong><small>{action.description}</small></span><span aria-hidden="true">›</span>
           </button>)}
         </div>}
@@ -172,6 +175,9 @@ export function ApplicationReviewActions({ application, onUpdated }: { applicati
           <textarea className="review-textarea" required disabled={busy} rows={4} value={message} onChange={event => { const value = event.target.value; setMessages(current => ({ ...current, [choice.key]: value })); }} />
         </label>}
         {error && <p role="alert" style={{ color: color.critical, margin: 0 }}>{error}</p>}
+        {readinessIssues.length > 0 && <ul role="list" style={{ margin: 0, paddingLeft: space.xl, color: color.critical }}>
+          {readinessIssues.map((issue, index) => <li key={`${issue.field}-${index}`}><code>{issue.field}</code>: {issue.message}</li>)}
+        </ul>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: space.md }}>
           <Button onClick={close} disabled={busy}>Cancel</Button>
           <button type="submit" className="review-trigger" disabled={busy || Boolean(submissionReceipt) || (uncertain && (!submissionAttempt || !submissionAttempt.retryable)) || (choice.key !== 'submit' && !message.trim())} style={{ background: choice.key === 'reject' ? color.critical : color.accent, color: choice.key === 'reject' ? color.textInverse : color.text, borderRadius: radius.pill }}>{busy ? 'Submitting…' : uncertain && choice.key === 'submit' && submissionAttempt?.retryable ? 'Retry same submission' : choice.confirm}</button>

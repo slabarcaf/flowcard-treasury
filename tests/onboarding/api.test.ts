@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { OnboardingApiClient, OnboardingApiError, isAmbiguousSaveFailure } from '../../src/services/onboarding/OnboardingApiClient.js';
 import { SaveApplication } from '../../src/services/onboarding/SaveApplication.js';
 import { applicationStatus } from '../../src/services/onboarding/contracts.js';
+import { serializeCompanyUpdateRequest } from '../../src/services/onboarding/payloads.js';
 import type { CompanyInput, OnboardingDetailsInput } from '../../src/services/onboarding/contracts.js';
 
 const company = { id: 'comp_test', revision: 1, legal_name: 'Example Ltd', people: [] };
@@ -14,18 +15,44 @@ const spec = JSON.parse(readFileSync(new URL('../../docs/api/openapi.json', impo
 describe('onboarding browser integration', () => {
   it('saves company then application using only current DTO keys, without triggering Airwallex submission', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(response(company, 201)).mockResolvedValueOnce(response(application, 201));
-    const input: CompanyInput = { legal_name: 'Example Ltd', trading_name: 'Example', registration_country: 'US', entity_type: 'LLC', business_profile: { website: 'https://example.com', description: 'Software services' }, people: [{ id: 'person_a', first_name: 'Test', last_name: 'Person', role: 'Director', date_of_birth: '1990-01-01' }] };
+    const input: CompanyInput = {
+      legal_name: 'Example Ltd', trading_name: 'Example', registration_country: 'US', entity_type: 'LLC',
+      business_profile: {
+        website: 'https://example.com', description: 'Software services', products: 'Cloud treasury services',
+        operating_address: { line_1: '456 Market St', city: 'Wilmington', state: 'DE', postal_code: '19801', country: 'US' },
+        operating_countries: ['US'],
+      },
+      people: [{
+        id: 'person_a', first_name: 'Test', last_name: 'Person', nationality: 'US', email: 'person@example.test', phone: '+14155550123', role: 'Director', date_of_birth: '1990-01-01',
+        identifications: [{ id: 'ident_a', type: 'SSN', number: '123456789', issuing_country: 'US' }],
+      }],
+    };
+    const submissionDetails: OnboardingDetailsInput = {
+      ...details,
+      people: [{ person_id: 'person_a', platform_roles: ['BENEFICIAL_OWNER'], primary_identification_id: 'ident_a' }],
+    };
     const operation = new SaveApplication();
-    const result = await operation.run(new OnboardingApiClient(fetcher), input, details, [], vi.fn());
+    const result = await operation.run(new OnboardingApiClient(fetcher), input, submissionDetails, [], vi.fn());
     expect(result.status).toBe('DRAFT');
     expect(fetcher.mock.calls.map(call => call[0])).toEqual(['/api/companies', '/api/onboarding-applications']);
     for (const [, init] of fetcher.mock.calls) expect(init?.credentials).toBe('include');
     const postedCompany = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
     expect(Object.keys(postedCompany).every(key => key in spec.components.schemas.CreateCompanyRequest.properties)).toBe(true);
-    expect(Object.keys(postedCompany.people[0]).sort()).toEqual(['date_of_birth', 'first_name', 'id', 'last_name', 'role']);
+    expect(postedCompany.business_profile.products).toBe('Cloud treasury services');
+    expect(postedCompany.business_profile.operating_address).toMatchObject({ line_1: '456 Market St', country: 'US' });
+    expect(postedCompany.business_profile.operating_countries).toEqual(['US']);
+    expect(Object.keys(postedCompany.people[0]).sort()).toEqual(['date_of_birth', 'email', 'first_name', 'id', 'identifications', 'last_name', 'nationality', 'phone', 'role']);
+    expect(postedCompany.people[0]).toMatchObject({ nationality: 'US', email: 'person@example.test', phone: '+14155550123' });
+    expect(postedCompany.people[0].identifications[0]).toMatchObject({ id: 'ident_a', type: 'SSN', issuing_country: 'US' });
     expect(postedCompany).not.toHaveProperty('password');
+    const clearPersonFields = serializeCompanyUpdateRequest({
+      ...input,
+      people: input.people?.map(person => ({ ...person, nationality: '', email: '', phone: '' })),
+    }, 3);
+    expect(clearPersonFields.people?.[0]).toMatchObject({ nationality: '', email: '', phone: '' });
     const postedApplication = JSON.parse(String(fetcher.mock.calls[1][1]?.body));
-    expect(postedApplication).toMatchObject({ company_id: company.id, platform_name: 'AIRWALLEX', onboarding_details: details });
+    expect(postedApplication).toMatchObject({ company_id: company.id, platform_name: 'AIRWALLEX', onboarding_details: submissionDetails });
+    expect(postedApplication.onboarding_details.people[0]).toMatchObject({ primary_identification_id: 'ident_a' });
     expect(Object.keys(postedApplication).every(key => key in spec.components.schemas.CreateApplicationRequest.properties)).toBe(true);
   });
   it('does not create the company twice when the second request is rejected and retried', async () => {

@@ -146,9 +146,11 @@ type RevenueEstimate struct {
 // PersonPlatformDetails contains platform-specific person attributes owned by the Application.
 // Company Person does NOT store residential address or regulated platform roles.
 type PersonPlatformDetails struct {
-	PersonID           string   `json:"person_id"`
-	PlatformRoles      []string `json:"platform_roles,omitempty"`
-	ResidentialAddress Address  `json:"residential_address"`
+	PersonID                  string   `json:"person_id"`
+	PlatformRoles             []string `json:"platform_roles,omitempty"`
+	ResidentialAddress        Address  `json:"residential_address"`
+	PrimaryIdentificationID   string   `json:"primary_identification_id,omitempty"`
+	SecondaryIdentificationID string   `json:"secondary_identification_id,omitempty"`
 }
 
 // Clone returns a deep copy of PersonPlatformDetails.
@@ -892,9 +894,11 @@ func (a *OnboardingApplication) InitiateInitialSubmission(submissionID string, a
 		}
 	}
 
-	// Validate consent requirements
+	// Sandbox demos may defer customer agreements until Airwallex activation.
 	agreements := a.platform.OnboardingDetails.CustomerAgreements
-	if !agreements.AgreedToTermsAndConditions || !agreements.AgreedToDataUsage || agreements.TermsAndConditions == nil {
+	hasAgreementData := agreements.AgreedToTermsAndConditions || agreements.AgreedToDataUsage || agreements.TermsAndConditions != nil
+	if (!strings.EqualFold(strings.TrimSpace(a.platform.Environment), "sandbox") || hasAgreementData) &&
+		(!agreements.AgreedToTermsAndConditions || !agreements.AgreedToDataUsage || agreements.TermsAndConditions == nil) {
 		return nil, ErrConsentRequired
 	}
 

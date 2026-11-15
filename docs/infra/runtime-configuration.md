@@ -223,32 +223,19 @@ Go components:
 
 ## Deferred platform gates and unresolved contracts
 
-The demo deployment must accurately reflect existing application realities
-rather than presenting an idealized flow. The following application gates
-remain unresolved and deferred:
+The demo deployment must accurately reflect existing application realities.
+The mapped US sandbox path now validates saved data and can queue a submission
+without uncollected customer agreements. Production still requires recorded
+acceptance evidence. No deployment has verified the sandbox account's API
+access, credentials, or provider responses.
 
-1. **Onboarding Submission Revisions Gate**:
-   - **Status**: Deferred by Ramil in
-     `docs/backlog/onboarding-verification-submission-revisions.md`.
-   - **Reality**: `POST /api/onboarding-applications/{id}/submit` currently
-     fails closed with `422 Unprocessable Entity`
-     (`SUBMISSION_CONTRACT_BLOCKED`).
-   - **Requirement**: No deployment or infrastructure configuration can bypass
-     this gate. Submission remains blocked until Ramil approves a formal
-     revision conflict policy.
-2. **Platform Rule Validation**:
-   - **Status**: Production platform rules and US-specific fields/documents
-     remain unverified against live Airwallex sandbox requirements.
-   - **Reality**: Onboarding API currently injects
-     `UnverifiedPlatformContractGate`, which marks platform checks as
-     pending/unverified.
-3. **Text RFI Scope and Confirmation**:
+1. **Text RFI Scope and Confirmation**:
    - **Status**: Automated RFI responses in the onboarding domain model are
      strictly limited to **text inquiries** (`RFIQuestion` type `TEXT`).
      Documentary RFIs are not automated and require manual handling.
    - **Reality**: RFI resolution transitions require verified Airwallex sandbox
-     webhook testing in Task 9.
-4. **PostgreSQL 17 Minor Version Availability Gate**:
+     webhook testing.
+2. **PostgreSQL 17 Minor Version Availability Gate**:
    - **Status**: Pending regional live verification.
    - **Reality**: Engine version is parameterized with default `17.4` and
      `postgres17` parameter group. Because specific minor engine version

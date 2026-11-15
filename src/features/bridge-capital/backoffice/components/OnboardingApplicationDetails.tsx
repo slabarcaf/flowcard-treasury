@@ -259,11 +259,15 @@ function ApplicationDetails({
       <h4 style={{ margin: 0 }}>Application people</h4>
       {companyPeople.length ? companyPeople.map(person => {
         const applicationPerson = details?.people?.find(item => item.person_id === person.person_id);
+        const primaryID = person.identifications?.find(item => item.identification_id === applicationPerson?.primary_identification_id);
+        const secondaryID = person.identifications?.find(item => item.identification_id === applicationPerson?.secondary_identification_id);
         return (
           <article key={person.person_id} style={{ display: 'grid', gap: space.sm, borderTop: `1px solid ${color.border}`, paddingTop: space.md }}>
             <strong>{personName(person)}</strong>
             <span>Person ID: {person.person_id}</span>
             <span>Platform roles: {applicationPerson?.platform_roles?.map(role => PLATFORM_ROLE_OPTIONS.find(option => option.value === role)?.label ?? role).join(', ') || 'Not provided'}</span>
+            <span>Primary ID: {primaryID ? `${primaryID.type || 'Identification'} · ending ${primaryID.number?.slice(-4) || '—'}` : 'Not provided'}</span>
+            <span>Secondary ID: {secondaryID ? `${secondaryID.type || 'Identification'} · ending ${secondaryID.number?.slice(-4) || '—'}` : 'Not provided'}</span>
             <span>Residential address: {formatAddress(applicationPerson?.residential_address)}</span>
           </article>
         );

@@ -357,6 +357,17 @@ func TestRequestBodyLimitsAndUnknownFields(t *testing.T) {
 // 3. Company CRUD, Eligible Deletion vs Ineligible Deletion, and Partial Edits
 func TestCompanyCRUDAndPartialEdits(t *testing.T) {
 	_, handler := setupTestServer(t)
+	nationality := "US"
+	personEmail := "alice@example.test"
+	personPhone := "+14155550123"
+	products := "Enterprise cloud treasury"
+	operatingAddress := &internalhttp.AddressDTO{
+		Line1:      "456 Market St",
+		City:       "Wilmington",
+		State:      "DE",
+		PostalCode: "19801",
+		Country:    "US",
+	}
 
 	// A. Create Company
 	createReq := internalhttp.CreateCompanyRequest{
@@ -366,8 +377,11 @@ func TestCompanyCRUDAndPartialEdits(t *testing.T) {
 		RegistrationCountry: "US",
 		RegistrationState:   "DE",
 		BusinessProfile: &internalhttp.BusinessProfileDTO{
-			Website:     "https://acme-tech.example.com",
-			Description: "Enterprise cloud treasury",
+			Website:            "https://acme-tech.example.com",
+			Description:        "Enterprise cloud treasury",
+			Products:           products,
+			OperatingAddress:   operatingAddress,
+			OperatingCountries: []string{"US"},
 			RegisteredAddress: &internalhttp.AddressDTO{
 				Line1:      "123 Market St",
 				City:       "Wilmington",
@@ -383,6 +397,9 @@ func TestCompanyCRUDAndPartialEdits(t *testing.T) {
 			{
 				FirstName:   "Alice",
 				LastName:    "Smith",
+				Nationality: &nationality,
+				Email:       &personEmail,
+				Phone:       &personPhone,
 				Role:        "Director",
 				DateOfBirth: "1982-03-24",
 				Identifications: []internalhttp.IdentificationDTO{
@@ -408,7 +425,35 @@ func TestCompanyCRUDAndPartialEdits(t *testing.T) {
 	if created.ID == "" || created.LegalName != "Acme Technologies Inc." {
 		t.Fatalf("invalid created company: %+v", created)
 	}
+	if created.BusinessProfile.Products != products || created.BusinessProfile.OperatingAddress == nil || created.BusinessProfile.OperatingAddress.Line1 != operatingAddress.Line1 || len(created.BusinessProfile.OperatingCountries) != 1 || created.BusinessProfile.OperatingCountries[0] != "US" || len(created.People) != 1 || created.People[0].Nationality != nationality || created.People[0].Email != personEmail || created.People[0].Phone != personPhone {
+		t.Fatalf("provider-required company fields were not saved: profile products=%q people=%+v", created.BusinessProfile.Products, created.People)
+	}
 	compID := created.ID
+	makePersonPatch := func(nationality, email, phone *string) []internalhttp.PersonDTO {
+		person := created.People[0]
+		identifications := make([]internalhttp.IdentificationDTO, len(person.Identifications))
+		for i, identification := range person.Identifications {
+			identifications[i] = internalhttp.IdentificationDTO{
+				ID:             identification.ID,
+				Type:           identification.Type,
+				Number:         identification.Number,
+				IssuingCountry: identification.IssuingCountry,
+				IssuedOn:       string(identification.IssuedOn),
+				ExpiresOn:      string(identification.ExpiresOn),
+			}
+		}
+		return []internalhttp.PersonDTO{{
+			ID:              person.ID,
+			FirstName:       person.FirstName,
+			LastName:        person.LastName,
+			Nationality:     nationality,
+			Email:           email,
+			Phone:           phone,
+			Role:            person.Role,
+			DateOfBirth:     string(person.DateOfBirth),
+			Identifications: identifications,
+		}}
+	}
 
 	// B. Fetch Company
 	req = newAuthRequest("GET", "/api/companies/"+compID, nil)
@@ -420,10 +465,18 @@ func TestCompanyCRUDAndPartialEdits(t *testing.T) {
 
 	// C. Partial Edit (PATCH) allows partial fields without zeroing omitted fields
 	newTradingName := "Acme Global Treasury"
+	newProducts := "Cloud treasury and payment services"
+	peopleWithoutContactEdits := makePersonPatch(nil, nil, nil)
+	newOperatingCountries := []string{"US", "CA"}
 	editReq := internalhttp.EditCompanyRequest{
 		ExpectedRevision: created.Revision,
 		TradingName:      &newTradingName,
-		// LegalName, EntityType, BusinessProfile, People are omitted!
+		People:           &peopleWithoutContactEdits,
+		BusinessProfile: &internalhttp.EditBusinessProfileDTO{
+			Products:           &newProducts,
+			OperatingCountries: &newOperatingCountries,
+		},
+		// LegalName, EntityType, and other profile fields are omitted.
 	}
 	req = newAuthRequest("PATCH", "/api/companies/"+compID, editReq)
 	rec = httptest.NewRecorder()
@@ -444,8 +497,29 @@ func TestCompanyCRUDAndPartialEdits(t *testing.T) {
 	if edited.BusinessProfile.Website != "https://acme-tech.example.com" {
 		t.Errorf("website was zeroed out: %q", edited.BusinessProfile.Website)
 	}
+	if edited.BusinessProfile.Products != newProducts || len(edited.BusinessProfile.OperatingCountries) != 2 || edited.BusinessProfile.OperatingCountries[1] != "CA" || len(edited.People) != 1 || edited.People[0].Email != personEmail || edited.People[0].Phone != personPhone || edited.People[0].Nationality != nationality {
+		t.Errorf("partial profile edit lost provider fields: products=%q people=%+v", edited.BusinessProfile.Products, edited.People)
+	}
 	if len(edited.People) != 1 {
 		t.Errorf("people collection was wiped: len = %d", len(edited.People))
+	}
+
+	empty := ""
+	peopleWithClearedContact := makePersonPatch(&empty, &empty, &empty)
+	clearContactReq := internalhttp.EditCompanyRequest{
+		ExpectedRevision: edited.Revision,
+		People:           &peopleWithClearedContact,
+	}
+	req = newAuthRequest("PATCH", "/api/companies/"+compID, clearContactReq)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/companies/%s clearing optional person fields status = %d, want 200; body: %s", compID, rec.Code, rec.Body.String())
+	}
+	var cleared internalhttp.CompanyResponse
+	_ = json.NewDecoder(rec.Body).Decode(&cleared)
+	if len(cleared.People) != 1 || cleared.People[0].Nationality != "" || cleared.People[0].Email != "" || cleared.People[0].Phone != "" {
+		t.Errorf("explicit blank person fields were not persisted: %+v", cleared.People)
 	}
 
 	// D. Concurrent revision conflict returns 409
@@ -508,12 +582,21 @@ func TestDraftApplicationPatchUsesPersonAddedToLiveCompany(t *testing.T) {
 	}
 
 	const personID = "person_added_after_draft"
+	personNationality := "US"
+	personEmail := "ada@example.test"
+	personPhone := "+14155550123"
 	people := []internalhttp.PersonDTO{{
 		ID:          personID,
 		FirstName:   "Ada",
 		LastName:    "Lovelace",
+		Nationality: &personNationality,
+		Email:       &personEmail,
+		Phone:       &personPhone,
 		Role:        "Director",
 		DateOfBirth: "1985-01-01",
+		Identifications: []internalhttp.IdentificationDTO{{
+			ID: "ident_person", Type: "SSN", Number: "123456789", IssuingCountry: "US",
+		}},
 	}}
 	addPerson := internalhttp.EditCompanyRequest{
 		ExpectedRevision: company.Revision,
@@ -537,8 +620,9 @@ func TestDraftApplicationPatchUsesPersonAddedToLiveCompany(t *testing.T) {
 		ExpectedRevision: application.Revision,
 		OnboardingDetails: internalhttp.PlatformOnboardingDetailsDTO{
 			People: []internalhttp.PersonPlatformDetailsDTO{{
-				PersonID:      updatedCompany.People[0].ID,
-				PlatformRoles: []string{"BENEFICIAL_OWNER"},
+				PersonID:                updatedCompany.People[0].ID,
+				PlatformRoles:           []string{"BENEFICIAL_OWNER"},
+				PrimaryIdentificationID: "ident_person",
 			}},
 		},
 	}
@@ -554,6 +638,9 @@ func TestDraftApplicationPatchUsesPersonAddedToLiveCompany(t *testing.T) {
 	}
 	if got := updatedApplication.Platform.OnboardingDetails.People; len(got) != 1 || got[0].PersonID != updatedCompany.People[0].ID {
 		t.Fatalf("application person IDs = %v, want persisted Company person ID %q", got, updatedCompany.People[0].ID)
+	}
+	if got := updatedApplication.Platform.OnboardingDetails.People[0].PrimaryIdentificationID; got != "ident_person" {
+		t.Errorf("primary identification ID = %q, want ident_person", got)
 	}
 	if len(updatedApplication.Company.People) != 1 || updatedApplication.Company.People[0].ID != updatedCompany.People[0].ID {
 		t.Fatalf("updated application Company people = %v, want live person ID %q", updatedApplication.Company.People, updatedCompany.People[0].ID)
@@ -740,6 +827,14 @@ func TestVerifyApplicationEndpoint(t *testing.T) {
 			PostalCode: "19801",
 			Country:    "US",
 		},
+		OperatingAddress: &domain.Address{
+			Line1:      "500 Pine St",
+			City:       "Wilmington",
+			State:      "DE",
+			PostalCode: "19801",
+			Country:    "US",
+		},
+		OperatingCountries: []string{"US"},
 	})
 	_ = compReady.CorrectLegalIdentifiers(domain.LegalIdentifierCorrectionParams{
 		LegalName:           "Ready Treasury Corp",
@@ -754,6 +849,7 @@ func TestVerifyApplicationEndpoint(t *testing.T) {
 		ID:          "person_ceo",
 		FirstName:   "Carol",
 		LastName:    "Danvers",
+		Nationality: "US",
 		Email:       "carol.danvers@example.com",
 		Phone:       "+15551234567",
 		Role:        "CEO",
@@ -761,7 +857,7 @@ func TestVerifyApplicationEndpoint(t *testing.T) {
 		Identifications: []domain.Identification{
 			{
 				ID:             "id_passport",
-				Type:           "PASSPORT",
+				Type:           "SSN",
 				Number:         "P11223344",
 				IssuingCountry: "US",
 			},
@@ -775,15 +871,16 @@ func TestVerifyApplicationEndpoint(t *testing.T) {
 	_ = appReady.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{
 		PrimaryContactPersonID: "person_ceo",
 		IndustryCategoryCode:   "saas_software",
-		IntendedProducts:       []string{"commercial_card"},
+		IntendedProducts:       []string{"CREATE_CARDS"},
 		EstimatedRevenue: domain.RevenueEstimate{
 			Amount:   "250000",
 			Currency: "USD",
 		},
 		People: []domain.PersonPlatformDetails{
 			{
-				PersonID:      "person_ceo",
-				PlatformRoles: []string{"DIRECTOR"},
+				PersonID:                "person_ceo",
+				PlatformRoles:           []string{"AUTHORISED_PERSON", "BENEFICIAL_OWNER", "CONTROLLING_PERSON"},
+				PrimaryIdentificationID: "id_passport",
 				ResidentialAddress: domain.Address{
 					Line1:      "100 Sunset Blvd",
 					City:       "Wilmington",
@@ -804,7 +901,7 @@ func TestVerifyApplicationEndpoint(t *testing.T) {
 	})
 	_ = appReady.AttachDocument(domain.Document{
 		ID:          "doc_b1",
-		Type:        "BUSINESS_REGISTRATION",
+		Type:        "CERTIFICATE_OF_INCORPORATION",
 		FileName:    "de_cert.pdf",
 		ContentType: "application/pdf",
 		SizeBytes:   1024,
@@ -826,23 +923,23 @@ func TestVerifyApplicationEndpoint(t *testing.T) {
 	})
 	_ = repo.CreateApplication(ctx, appReady)
 
-	// B. Complete-looking app against default gate (UnverifiedPlatformContractGate) MUST return 422 PLATFORM_CONTRACT_INCOMPLETE
-	defaultGateServer := internalhttp.NewServer(repo, fakeTestAuthenticator{expectedToken: "valid_internal_test_token"}, nil, nil)
-	defaultGateHandler := defaultGateServer.Routes()
+	// B. The explicit unverified gate still blocks callers that request it.
+	unverifiedGateServer := internalhttp.NewServer(repo, fakeTestAuthenticator{expectedToken: "valid_internal_test_token"}, validation.UnverifiedPlatformContractGate{}, nil)
+	unverifiedGateHandler := unverifiedGateServer.Routes()
 	req = newAuthRequest("POST", "/api/onboarding-applications/"+appReadyID+"/verify", nil)
 	rec = httptest.NewRecorder()
-	defaultGateHandler.ServeHTTP(rec, req)
+	unverifiedGateHandler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("POST /verify with default gate status = %d, want 422; body: %s", rec.Code, rec.Body.String())
+		t.Fatalf("POST /verify with explicit unverified gate status = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
 	var gateResp validation.ValidationResult
 	_ = json.NewDecoder(rec.Body).Decode(&gateResp)
 	if gateResp.Code != "PLATFORM_CONTRACT_INCOMPLETE" {
-		t.Errorf("gateResp.Code = %q, want PLATFORM_CONTRACT_INCOMPLETE", gateResp.Code)
+		t.Errorf("unverified gate code = %q, want PLATFORM_CONTRACT_INCOMPLETE", gateResp.Code)
 	}
 	if len(gateResp.Errors) != 0 {
-		t.Errorf("expected 0 local field errors for complete data under default gate, got %d", len(gateResp.Errors))
+		t.Errorf("expected 0 local field errors for complete data under explicit unverified gate, got %d", len(gateResp.Errors))
 	}
 	if strings.Contains(rec.Body.String(), `"passed"`) {
 		t.Errorf("wire format contains forbidden 'passed' property: %s", rec.Body.String())
@@ -889,20 +986,31 @@ func TestSubmitApplicationRequiresIdempotencyKey(t *testing.T) {
 	}
 }
 
-func TestSubmitApplicationDefaultGateRejectsWithoutQueueing(t *testing.T) {
-	repo, _ := setupTestServer(t)
+func TestSubmitSandboxApplicationWithoutConsent(t *testing.T) {
+	repo, handler := setupTestServer(t)
 	ctx := context.Background()
 	company, err := domain.NewDraftCompany(fmt.Sprintf("comp_gate_%d", time.Now().UnixNano()), "Readiness Gate Company")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := company.UpdateProfile(domain.BusinessProfile{Website: "https://example.test", Description: "Payments", Products: "Treasury software", RegisteredAddress: domain.Address{Line1: "1 Main", City: "Wilmington", State: "DE", PostalCode: "19801", Country: "US"}}); err != nil {
+	if err := company.UpdateProfile(domain.BusinessProfile{
+		Website:     "https://example.test",
+		Description: "Payments",
+		Products:    "Treasury software",
+		RegisteredAddress: domain.Address{
+			Line1: "1 Main", City: "Wilmington", State: "DE", PostalCode: "19801", Country: "US",
+		},
+		OperatingAddress: &domain.Address{
+			Line1: "1 Main", City: "Wilmington", State: "DE", PostalCode: "19801", Country: "US",
+		},
+		OperatingCountries: []string{"US"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := company.CorrectLegalIdentifiers(domain.LegalIdentifierCorrectionParams{LegalName: "Readiness Gate Company", EntityType: "CORPORATION", RegistrationCountry: "US", RegistrationState: "DE", RegistrationIdentifiers: []domain.RegistrationIdentifier{{Type: "EIN", Value: "12-3456789", IssuingCountry: "US"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := company.AddPerson(domain.Person{ID: "person_gate", FirstName: "Synthetic", LastName: "Operator", Email: "operator@example.test", Phone: "+15555550100", Role: "Director", DateOfBirth: domain.Date("1985-01-01"), Identifications: []domain.Identification{{ID: "ident_gate", Type: "PASSPORT", Number: "P123456", IssuingCountry: "US"}}}); err != nil {
+	if err := company.AddPerson(domain.Person{ID: "person_gate", FirstName: "Synthetic", LastName: "Operator", Nationality: "US", Email: "operator@example.test", Phone: "+15555550100", Role: "Director", DateOfBirth: domain.Date("1985-01-01"), Identifications: []domain.Identification{{ID: "ident_gate", Type: "SSN", Number: "123456789", IssuingCountry: "US"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.CreateCompany(ctx, company); err != nil {
@@ -912,31 +1020,43 @@ func TestSubmitApplicationDefaultGateRejectsWithoutQueueing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := app.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{PrimaryContactPersonID: "person_gate", IndustryCategoryCode: "software_saas", IntendedProducts: []string{"card_issuing"}, EstimatedRevenue: domain.RevenueEstimate{Amount: "100000", Currency: "USD"}, People: []domain.PersonPlatformDetails{{PersonID: "person_gate", PlatformRoles: []string{"DIRECTOR"}, ResidentialAddress: domain.Address{Line1: "1 Main", City: "Wilmington", State: "DE", PostalCode: "19801", Country: "US"}}}, CustomerAgreements: domain.CustomerAgreements{AgreedToTermsAndConditions: true, AgreedToDataUsage: true, TermsAndConditions: &domain.TermsAndConditionsAgreement{AgreedAt: time.Now().UTC(), ServiceAgreementType: "FULL"}}}); err != nil {
+	if err := app.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{
+		PrimaryContactPersonID: "person_gate",
+		IndustryCategoryCode:   "software_saas",
+		IntendedProducts:       []string{"CREATE_CARDS"},
+		EstimatedRevenue:       domain.RevenueEstimate{Amount: "100000", Currency: "USD"},
+		People: []domain.PersonPlatformDetails{{
+			PersonID:                "person_gate",
+			PlatformRoles:           []string{"AUTHORISED_PERSON", "BENEFICIAL_OWNER", "CONTROLLING_PERSON"},
+			PrimaryIdentificationID: "ident_gate",
+			ResidentialAddress:      domain.Address{Line1: "1 Main", City: "Wilmington", State: "DE", PostalCode: "19801", Country: "US"},
+		}},
+	}); err != nil {
 		t.Fatal(err)
 	}
+	_ = app.AttachDocument(domain.Document{ID: "doc_gate", Type: "CERTIFICATE_OF_INCORPORATION", FileName: "certificate.pdf", ContentType: "application/pdf", SizeBytes: 1024, StorageKey: "keys/certificate.pdf", UploadedBy: "creator", UploadedAt: time.Now().UTC()})
 	if err := repo.CreateApplication(ctx, app); err != nil {
 		t.Fatal(err)
 	}
 
-	// A repository whose readiness callback models the production default gate.
-	defaultGate := internalhttp.NewServer(repo, fakeTestAuthenticator{expectedToken: "valid_internal_test_token"}, validation.UnverifiedPlatformContractGate{}, nil).Routes()
+	// The hackathon sandbox can defer customer agreements until Airwallex activation.
 	req := newAuthRequest("POST", "/api/onboarding-applications/"+app.ID()+"/submit", map[string]any{"expected_revision": app.Revision()})
 	req.Header.Set("Idempotency-Key", fmt.Sprintf("gate_%d", time.Now().UnixNano()))
 	rec := httptest.NewRecorder()
-	defaultGate.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "PLATFORM_CONTRACT_INCOMPLETE") {
-		t.Fatalf("submit with default gate status/body = %d %s, want 422 PLATFORM_CONTRACT_INCOMPLETE", rec.Code, rec.Body.String())
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("sandbox submit without consent status/body = %d %s, want 202", rec.Code, rec.Body.String())
 	}
 	latest, err := repo.GetApplication(ctx, app.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if latest.Status() != domain.ApplicationStatusDraft {
-		t.Fatalf("status = %s, want DRAFT", latest.Status())
+	if latest.Status() != domain.ApplicationStatusSubmissionPending {
+		t.Fatalf("status = %s, want SUBMISSION_PENDING", latest.Status())
 	}
-	if submissions, err := repo.ListSubmissions(ctx, app.ID()); err != nil || len(submissions) != 0 {
-		t.Fatalf("submissions = %d, err=%v, want none", len(submissions), err)
+	submissions, err := repo.ListSubmissions(ctx, app.ID())
+	if err != nil || len(submissions) != 1 || submissions[0].Status != domain.SubmissionStatusPending {
+		t.Fatalf("submissions = %+v, err=%v, want one pending submission", submissions, err)
 	}
 }
 

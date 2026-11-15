@@ -180,6 +180,17 @@ func SchemaCustomizer(name string, t reflect.Type, tag reflect.StructTag, schema
 							schema.Max = &val
 						}
 					}
+				case part == "iso3166_alpha2_or_empty":
+					u := uint64(2)
+					schema.MaxLength = &u
+					schema.Pattern = `^(?:[A-Z]{2})?$`
+					schema.Description = "Empty string clears this optional field; otherwise use an ISO 3166-1 alpha-2 uppercase country code"
+				case part == "email_or_empty":
+					schema.AnyOf = openapi3.SchemaRefs{
+						{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: "email"}},
+						{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Enum: []any{""}}},
+						{Value: &openapi3.Schema{Type: &openapi3.Types{"null"}}},
+					}
 				case part == "iso3166_alpha2":
 					u := uint64(2)
 					schema.MinLength = 2

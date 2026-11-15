@@ -1,7 +1,7 @@
 # Company onboarding service
 
 Agreed design from Ramil's November 2026 brainstorm and scenario review.
-This document describes planned behavior, not implemented capabilities.
+This document records the service design and current external acceptance limits.
 
 [TOC]
 
@@ -82,10 +82,11 @@ Identification-specific additions required by the platform belong here.
 
 Store `customer_agreements` with `agreed_to_data_usage`,
 `agreed_to_terms_and_conditions`, and `terms_and_conditions` containing
-`agreed_at`, optional `device_data` (IP and user agent), and agreement type.
-No accepting Person ID is stored. Device data represents the real acceptance
-occasion; omit when unknown. Never fabricate acceptance or default consent true.
-Biometrics and other conditional agreements require platform verification.
+`agreed_at`, optional `device_data` (IP and user agent), and agreement type
+when acceptance is collected. No accepting Person ID is stored. Device data
+represents the real acceptance occasion; omit when unknown. Never fabricate
+acceptance or default consent true. Biometrics and other conditional agreements
+require platform verification.
 
 ### Submission child entity
 
@@ -212,17 +213,28 @@ between verification and submission. Do not silently decide these in code.
 
 ### Platform contract specifications (Task 1 resolution)
 
-- **API version & endpoints:** Target version is provisional until verified in
-  Airwallex sandbox. Existing FlowCard integration uses `2026-08-21` for issuing
-  simulations (`AIRWALLEX_ISSUING_API_VERSION`); do not pin an unsupported date
-  without cited version-specific evidence. All calls target base path `/api/v1/`.
+- **API version & endpoints:** Airwallex documents `2026-08-21` as its latest
+  API version. The Go client uses that version and the native API base path
+  `/api/v1/`. This is documentation verification, not a successful sandbox
+  request. See [Airwallex API versioning](https://www.airwallex.com/docs/api/versioning).
   - Account creation: `POST /api/v1/accounts/create` returns account ID with status `CREATED`.
-  - File upload: `POST /api/v1/files/upload` on `files.airwallex.com` (max 20 MB provider limit, local policy 10 MiB) returns `file_id`.
+  - File upload: `POST /api/v1/files/upload` on
+    `https://files.sandbox.airwallex.com` returns `file_id`; provider limit is
+    20 MB and the local limit is 10 MiB. The Node/Go runtime must keep this
+    separate from the API host. See [Airwallex File Service](https://www.airwallex.com/docs/api/supporting_services/file_service).
   - Submission: `POST /api/v1/accounts/{id}/submit` transitions status to `SUBMITTED`.
-- **Consent payload contract:** Verified structure under `customer_agreements`:
+- **US business requirements:** The native API documents US roles, business
+  and operating addresses, operating countries, industry, product usage,
+  monthly revenue, business formation documents, and business-person identity
+  requirements. The Go readiness checks and mapper support the documented US
+  company, partnership, and registered sole-proprietor paths. See [US business
+  onboarding requirements](https://www.airwallex.com/docs/connected-accounts/onboarding/kyc-and-onboarding/native-api/business-kyc-requirements/united-states-%28us%29)
+  and the [Accounts API](https://www.airwallex.com/docs/api/scale/accounts/create).
+  No sandbox response has verified this code against Ramil's Airwallex account.
+- **Consent payload contract:** Verified optional structure under `customer_agreements`:
   `agreed_to_terms_and_conditions` (bool), `agreed_to_data_usage` (bool), and
   `terms_and_conditions` containing `agreed_at` (ISO timestamp), optional `device_data` (`ip_address`, `user_agent`), and `service_agreement_type: "FULL"`.
-  No accepting Person ID exists in the platform schema and is intentionally omitted locally.
+  No accepting Person ID exists in the platform schema and is intentionally omitted locally. For the hackathon sandbox demo, absent acceptance is omitted from the provider request; terms acceptance can be deferred until activation. Production readiness still requires complete, recorded acceptance. See the [Create Account API](https://www.airwallex.com/docs/api/scale/accounts/create) and [Accounts API changelog](https://www.airwallex.com/docs/api/scale/accounts/changelog).
 - **Webhook event catalog:**
   - `account.submitted`: Account details received for onboarding review.
   - `account.active`: Account active and verified; marks application `COMPLETED`.
@@ -234,13 +246,35 @@ between verification and submission. Do not silently decide these in code.
     reference structure; inner `accountDetails` and status payload remain provisional
     until verified against recorded webhook deliveries.
 
-### Unresolved external gates
+### Remaining external gates
 
-1. **Exact US legal structures and regulated roles:** Detailed entity type enums and FinCEN control/ownership role mappings remain gated on unavailable platform documentation evidence (e.g. via Airwallex Docs MCP or API schema inspection). Free-text roles are preserved locally without fabricated mappings.
-2. **Country-specific document requirement matrix:** Exact mandatory document sets per legal structure remain gated on unavailable platform documentation evidence. Local binary magic-byte sniffing validates PDF/JPEG/PNG container format, but cannot establish document authenticity.
-3. **Documentary RFI channels:** Email support is unverified (neither established absent nor confirmed). Follow-up document RFIs require manual handling in the Airwallex Console or Hosted UI. No automated document RFI API is assumed.
-4. **Uncertain-create recovery:** Lookup not verified in this investigation; manual hold until verified. Any timeout or network partition during `accounts/create` places the operation into a manual hold; blind creation replay is strictly prohibited.
-5. **Deferred submit revisions:** Policy for changes between operator verification and submission remains deferred in `docs/backlog/onboarding-verification-submission-revisions.md` and blocks the final submit request revision contract. Test fixtures in `services/company-onboarding/internal/platform/airwallex/testdata/` use synthetic placeholders with heuristic checks and provenance tracked in `testdata/PROVENANCE.md`.
+1. **Account access and API scopes:** Public documentation confirms the
+   endpoints, but the sandbox account's Connected Accounts capability and
+   `Connected Accounts Write` / `Files Write` permissions have not been checked.
+   Airwallex says Connected Accounts API access may require enablement by its
+   Sales team. See [sandbox environment overview](https://www.airwallex.com/docs/developer-tools/sandbox-environment/sandbox-environment-overview)
+   and [API key scopes](https://www.airwallex.com/docs/developer-tools/api/api-key-scopes).
+2. **Customer agreements:** Ramil deferred customer-facing consent collection
+   for the hackathon demo. Sandbox submissions may omit `customer_agreements`
+   when no acceptance was collected; the implementation never manufactures
+   flags or timestamps. Airwallex may require terms acceptance before account
+   activation. Production submissions remain blocked until complete acceptance
+   evidence is recorded.
+3. **Sandbox acceptance:** No Connected Account has been created or submitted
+   by this work. A real sandbox run still needs an authorized synthetic case,
+   verified account capability and scopes, and valid server-side credentials.
+4. **Documentary RFI channels:** Email support is unverified. Follow-up
+   document RFIs require manual handling in the Airwallex Console or Hosted UI.
+   No automated document RFI API is assumed.
+5. **Uncertain-create recovery:** Lookup remains unverified. Any timeout or
+   network partition during `accounts/create` places the operation into a
+   manual hold; blind creation replay is prohibited.
+6. **Submit revisions:** Ramil chose to revalidate and submit the latest saved
+   data. The API locks the current Company and Application, runs readiness
+   inside the transaction, and freezes that snapshot. `expected_revision`
+   remains an optimistic concurrency guard for stale Application requests.
+   Test fixtures in `services/company-onboarding/internal/platform/airwallex/testdata/`
+   are synthetic and do not prove provider acceptance.
 
 ## Packaging, Containerization, and Runtime Architecture (Task 10)
 
@@ -288,7 +322,7 @@ The entry points `cmd/api/main.go`, `cmd/worker/main.go`, and `cmd/migrate/main.
 - **Authentication**: Wires `DenyAllAuthenticator` (fails closed, default deny) unless injected.
 - **Object Storage**: Wires `storage.NewUnavailableStore` (returns 503 on file operations) when unconfigured.
 - **Platform Client**: Wires `airwallex.NewUnconfiguredClient` (fails closed on remote dispatch calls) when unconfigured.
-- **Platform Verification Gate**: Mounts `validation.UnverifiedPlatformContractGate` which blocks submissions until live integration gates are formally approved.
+- **Platform Verification Gate**: Mounts `validation.VerifiedUSBusinessContractGate` for the documented US business scope. Saved-data validation blocks incomplete applications; sandbox demos may omit uncollected customer agreements, while non-sandbox submissions require complete acceptance evidence. This gate does not verify account credentials, permissions, sandbox capability, or provider connectivity.
 - **Background Engines**: `cmd/worker` runs three concurrent loops with graceful context cancellation:
   - Submission Job Worker: leases and executes pending submission dispatches (2s ticker).
   - Webhook Inbox Processor: leases and processes received external webhooks (3s ticker).

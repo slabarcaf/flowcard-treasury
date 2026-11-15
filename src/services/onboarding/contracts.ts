@@ -43,6 +43,9 @@ export interface PersonInput {
   id: string;
   first_name: string;
   last_name: string;
+  nationality?: string;
+  email?: string;
+  phone?: string;
   role: string;
   date_of_birth: string;
   identifications?: IdentificationInput[];
@@ -58,7 +61,10 @@ export interface CompanyInput {
   business_profile?: {
     website: string;
     description: string;
+    products?: string;
     registered_address?: AddressInput;
+    operating_address?: AddressInput;
+    operating_countries?: string[];
   };
   registration_identifiers?: RegistrationIdentifierInput[];
   people?: PersonInput[];
@@ -83,6 +89,9 @@ export interface PersonRequest {
   id?: string;
   first_name: string;
   last_name: string;
+  nationality?: string;
+  email?: string;
+  phone?: string;
   role: string;
   date_of_birth: string;
   identifications?: IdentificationRequest[];
@@ -98,7 +107,10 @@ export interface CreateCompanyRequest {
   business_profile?: {
     website: string;
     description: string;
+    products?: string;
     registered_address?: AddressInput;
+    operating_address?: AddressInput;
+    operating_countries?: string[];
   };
   registration_identifiers?: RegistrationIdentifierRequest[];
   people?: PersonRequest[];
@@ -115,7 +127,10 @@ export interface EditCompanyRequest {
   business_profile?: {
     website?: string;
     description?: string;
+    products?: string;
     registered_address?: AddressInput;
+    operating_address?: AddressInput;
+    operating_countries?: string[];
   };
   registration_identifiers?: RegistrationIdentifierRequest[];
   people?: PersonRequest[];
@@ -127,7 +142,13 @@ export interface OnboardingDetailsInput {
   intended_products?: string[];
   estimated_monthly_revenue: { amount?: string; currency?: string };
   primary_contact_person_id?: string;
-  people?: { person_id: string; platform_roles?: string[]; residential_address?: AddressInput }[];
+  people?: {
+    person_id: string;
+    platform_roles?: string[];
+    residential_address?: AddressInput;
+    primary_identification_id?: string;
+    secondary_identification_id?: string;
+  }[];
   customer_agreements: {
     agreed_to_terms_and_conditions: boolean;
     agreed_to_data_usage: boolean;
@@ -139,7 +160,13 @@ export interface PlatformOnboardingDetailsRequest {
   intended_products?: string[];
   estimated_monthly_revenue: { amount?: string; currency?: string };
   primary_contact_person_id?: string;
-  people?: { person_id: string; platform_roles?: string[]; residential_address?: AddressInput }[];
+  people?: {
+    person_id: string;
+    platform_roles?: string[];
+    residential_address?: AddressInput;
+    primary_identification_id?: string;
+    secondary_identification_id?: string;
+  }[];
   customer_agreements: {
     agreed_to_terms_and_conditions: boolean;
     agreed_to_data_usage: boolean;

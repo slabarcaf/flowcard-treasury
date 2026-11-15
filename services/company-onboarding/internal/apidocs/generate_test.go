@@ -813,6 +813,18 @@ func TestTask2_LeadPoint6_SchemaValidationAllDocumentedTypes(t *testing.T) {
 	if err := validateJSONAgainstSchema(t, schemas["CreateCompanyRequest"].Value, validCreateCompJSON); err != nil {
 		t.Errorf("CreateCompanyRequest valid schema failed: %v", err)
 	}
+	personContactJSON := `{"legal_name":"Valid Company Name","people":[{"first_name":"Ada","last_name":"Lovelace","nationality":"","email":"","role":"Director","date_of_birth":"1990-01-01"}]}`
+	if err := validateJSONAgainstSchema(t, schemas["CreateCompanyRequest"].Value, personContactJSON); err != nil {
+		t.Errorf("CreateCompanyRequest blank optional person fields schema failed: %v", err)
+	}
+	personContactJSON = `{"legal_name":"Valid Company Name","people":[{"first_name":"Ada","last_name":"Lovelace","nationality":"US","email":"ada@example.test","role":"Director","date_of_birth":"1990-01-01"}]}`
+	if err := validateJSONAgainstSchema(t, schemas["CreateCompanyRequest"].Value, personContactJSON); err != nil {
+		t.Errorf("CreateCompanyRequest valid optional person fields schema failed: %v", err)
+	}
+	personContactJSON = `{"legal_name":"Valid Company Name","people":[{"first_name":"Ada","last_name":"Lovelace","nationality":"USA","email":"invalid-email","role":"Director","date_of_birth":"1990-01-01"}]}`
+	if err := validateJSONAgainstSchema(t, schemas["CreateCompanyRequest"].Value, personContactJSON); err == nil {
+		t.Errorf("expected invalid nationality and email to fail CreateCompanyRequest schema")
+	}
 
 	// legal_name min length violation (1 char < min 2)
 	shortNameJSON := `{"legal_name": "A"}`

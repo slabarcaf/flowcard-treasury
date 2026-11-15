@@ -159,8 +159,8 @@ When introducing a new API endpoint to the company-onboarding subsystem:
 
 The OpenAPI documentation reflects the exact runtime reality of the onboarding subsystem, including its active security boundaries and deferred gates:
 
-1. **Blocked Application Submission Gate**:
-   - `POST /api/onboarding-applications/{id}/submit` returns `422 Unprocessable Entity` with code `SUBMISSION_CONTRACT_BLOCKED`. Submission execution remains blocked pending explicit business resolution of the reviewed revisions policy.
+1. **Application Submission Readiness**:
+   - `POST /api/onboarding-applications/{id}/submit` atomically revalidates the latest saved data and returns `202 Accepted` when ready. Sandbox demo submissions may omit customer agreements when none were collected; non-sandbox submissions require complete acceptance evidence. A 202 means queued for provider processing, not provider acceptance.
 2. **Scoped Status Enums**:
    - `CompanyResponse` status is strictly `ACTIVE` or `ARCHIVED` (initial status is `ACTIVE`; `DRAFT` is rejected as an invalid state).
    - `ApplicationResponse` has 7 discrete status values (`DRAFT`, `SUBMITTED`, `IN_REVIEW`, `APPROVED`, `REJECTED`, `CHANGES_REQUESTED`, `ERROR`).
@@ -173,10 +173,7 @@ The OpenAPI documentation reflects the exact runtime reality of the onboarding s
    - Go service-rejected requests return `ServiceAuthError`: `{"code": "UNAUTHORIZED", "message": "..."}`.
    - Both variants are documented under `401 Unauthorized` using an explicit `oneOf` discriminator schema.
 5. **Deferred Onboarding Gates**:
-   - Three pending implementation gates remain deferred in code and documented honestly:
-     1. Revision review policy resolution (fail-closed submission contract).
-     2. Document verification pipeline (returns 503 if S3 storage unconfigured).
-     3. Platform contract readiness gate (blocks external account creation if Airwallex client unconfigured).
+   - External acceptance gates remain open: live Connected Account capability and API scopes, Airwallex credentials, document storage configuration, and provider outcomes. The local contract check supports the documented US scope, but no live account has been created or submitted by this work.
 
 ---
 
