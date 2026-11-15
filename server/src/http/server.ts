@@ -3,7 +3,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ServerConfig } from "../config.js";
 import type { DatabasePool } from "../db/pool.js";
 import { handleAirwallexWebhook } from "./routes/airwallex-webhook.js";
-import { handleLedgerProjection } from "./routes/ledger-projection.js";
 import { handleKit5Preflight, handleKit5Session } from "./kit5-operator-auth.js";
 import { handleOnboardingProxy, handleOnboardingDocsProxy, isOnboardingDocsRoute } from "./routes/onboarding-proxy.js";
 import type { OnboardingWebhookForwarder } from "../webhooks/onboarding-forwarder.js";
@@ -16,7 +15,7 @@ export function createHttpServer(
   return createServer(createRequestHandler(config, pool, onboardingForwarder));
 }
 
-/** Node retains onboarding, mapping tooling and historical ledger reads. */
+/** Node retains onboarding and mapping tooling; financial APIs are retired. */
 export function createRequestHandler(
   config: ServerConfig,
   pool?: DatabasePool,
@@ -32,6 +31,11 @@ export function createRequestHandler(
     if (/^\/api\/customers\/[^/]+\/snapshot\/?$/.test(pathname)) {
       response.writeHead(410, { "content-type": "application/json", "cache-control": "no-store" });
       response.end(JSON.stringify({ error: "legacy_customer_snapshot_retired", message: "Use the Go underwriting customer-context contract with its service authentication." }));
+      return;
+    }
+    if (pathname === "/api/ledger" || pathname === "/api/ledger/") {
+      response.writeHead(410, { "content-type": "application/json", "cache-control": "no-store" });
+      response.end(JSON.stringify({ error: "legacy_ledger_retired", message: "Use the authenticated Go financial reads. Historical Node records have not been migrated by this retirement." }));
       return;
     }
     const operatorAuth = {
@@ -66,10 +70,6 @@ export function createRequestHandler(
         secret: config.airwallexWebhookSecret,
         onReceived: () => onboardingForwarder?.nudge(),
       });
-      return;
-    }
-    if (request.method === "GET" && request.url === "/api/ledger" && pool) {
-      void handleLedgerProjection(response, pool);
       return;
     }
     handleRequest(request, response);

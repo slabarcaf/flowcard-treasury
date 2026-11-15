@@ -24,8 +24,8 @@ npm run dev
   tests with an explicitly configured owned local test database.
 
 Node funding, approval and repayment execution is retired. Node continues to
-serve onboarding proxies, operator sessions and historical ledger
-reads. See the [retirement inventory](/docs/demo/node-funding-retirement.md)
+serve onboarding proxies and operator sessions. Mapping and historical database
+tooling remain. See the [retirement inventory](/docs/demo/node-funding-retirement.md)
 and [Go Funding runbook](/docs/demo/funding-and-collection-local.md).
 
 See [repository instructions](AGENTS.md) and

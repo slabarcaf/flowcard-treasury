@@ -92,6 +92,31 @@ The browser gateway login/proxy slice does not replace this public intake.
   after replacement acceptance and callback cutover. Retain historical
   migrations and delivery records.
 
+### Browser default and mapping administration
+
+The verified Go operator workspace can become the local default independently
+of the full customer portal. This cleanup does not change the default.
+
+- [ ] Provision the gateway schema, restricted runtime connection and invited
+  operator accounts through the existing privileged tools. Configure exact
+  trusted origins and the actual Go onboarding/Coordinator/Funding endpoints.
+- [ ] Switch the normal frontend entry/config and API proxy target to Go only
+  after login/restore/logout, Applications and financial reads pass in that
+  intended local runtime. Resolve public docs routing explicitly. Retain the
+  old instance until the replacement works.
+- [ ] Complete and verify Task D before making the full customer financial
+  portal the default: trusted bindings, exact acceptance/approval, persisted
+  uncertain receipts and distinct customer/operator authorization.
+- [ ] Replace the retained roster CLI with a trusted Go administrative CLI
+  before deleting it. Preserve `enroll`, `deactivate`, `map-account`,
+  `bind-card`, `unbind-card` and `list`, their stable-ID/active-mapping guards
+  and actor/reason audit history. A new microservice is unnecessary.
+
+Go demo preparation writes synthetic mapping fixtures only. Gateway user-to-
+servicing bindings verify existing actors; neither is a general replacement
+for roster administration. Customer login is not enrollment. Node webhook
+intake and hosted traffic cutover remain separate from a local browser switch.
+
 ### Remaining migration and ownership work
 
 - [ ] Reconcile opening balances and unresolved operations before retiring a
