@@ -1,6 +1,6 @@
 import type { SalesforceSnapshotClient, SalesforceSnapshotReadModel } from '../types.js';
 
-/** Browser-safe, read-only client for the server-owned Salesforce snapshot API. */
+/** Legacy snapshot client. Retirement is surfaced without a fixture fallback. */
 export class SalesforceSnapshotApiClient implements SalesforceSnapshotClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -19,6 +19,7 @@ export class SalesforceSnapshotApiClient implements SalesforceSnapshotClient {
         credentials: 'omit',
       },
     );
+    if (response.status === 410) throw new Error('The legacy CRM snapshot API is retired. Customer context must use the Go service integration.');
     if (!response.ok) throw new Error(`Salesforce snapshot request failed (${response.status})`);
     return await response.json() as SalesforceSnapshotReadModel;
   }

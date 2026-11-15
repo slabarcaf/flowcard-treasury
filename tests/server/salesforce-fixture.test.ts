@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import boundedTextFixture from "../../server/src/salesforce/fixtures/bounded-text.json" with { type: "json" };
-import invalidMappingFixture from "../../server/src/salesforce/fixtures/invalid-mapping.json" with { type: "json" };
-import { getDemoSalesforceSnapshot } from "../../server/src/salesforce/fixture-source.js";
-import { validateSnapshot } from "../../server/src/salesforce/validate.js";
+import { getDemoSalesforceSnapshot } from "../../src/services/mock/salesforce/fixture-source.js";
 import { mockCrmClient } from "../../src/services/mock/CrmClient.js";
-import type { SalesforceCustomerSnapshot } from "../../server/src/salesforce/types.js";
 
 const demoCustomerIds = ["acct_bloom001", "acct_atlas001", "acct_nova001", "acct_pixel001"];
 
@@ -23,11 +19,10 @@ function expectSourcedFields(value: object, recordId: string, fields: string[]):
 }
 
 describe("Salesforce demo snapshot fixtures", () => {
-  it("provides schema-valid canonical snapshots for every synthetic roster customer", () => {
+  it("provides canonical fixture shapes for every synthetic roster customer", () => {
     for (const customerId of demoCustomerIds) {
       const snapshot = getDemoSalesforceSnapshot(customerId);
       expect(snapshot).not.toBeNull();
-      expect(validateSnapshot(snapshot!)).toEqual([]);
       expect(snapshot).toMatchObject({
         schemaVersion: 1,
         mappingVersion: "salesforce-proposed-v1",
@@ -69,20 +64,6 @@ describe("Salesforce demo snapshot fixtures", () => {
     const snapshot = getDemoSalesforceSnapshot("acct_atlas001");
     expect(snapshot?.cases).toEqual([]);
     expect(snapshot?.callActivities).toEqual([]);
-    expect(validateSnapshot(snapshot!)).toEqual([]);
-  });
-
-  it("rejects a canonical fixture carrying an unmapped value", () => {
-    expect(validateSnapshot(invalidMappingFixture as SalesforceCustomerSnapshot)).toContain(
-      "Account customer status is not a canonical value",
-    );
-  });
-
-  it("keeps fixture notes within configured text bounds", () => {
-    const snapshot = boundedTextFixture as SalesforceCustomerSnapshot;
-    expect(validateSnapshot(snapshot)).toEqual([]);
-    expect(Array.from(snapshot.cases[0]?.description.value ?? "").length).toBeLessThanOrEqual(1200);
-    expect(Array.from(snapshot.callActivities[0]?.note.value ?? "").length).toBeLessThanOrEqual(500);
   });
 
   it("uses local fixtures without making Salesforce or Airwallex requests", async () => {

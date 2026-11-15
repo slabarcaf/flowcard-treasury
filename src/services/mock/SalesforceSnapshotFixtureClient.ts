@@ -1,4 +1,4 @@
-import { getDemoSalesforceSnapshot } from '../../../server/src/salesforce/fixture-source.js';
+import { getDemoSalesforceSnapshot } from './salesforce/fixture-source.js';
 import type { SalesforceSnapshotClient, SalesforceSnapshotReadModel } from '../types.js';
 
 const DEMO_CAPTURED_AT = '2026-10-21T00:00:00.000Z';

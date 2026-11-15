@@ -1,5 +1,5 @@
 import type { DemoPolicyReadiness, FacilityConfig, CustomerProfile, Signals } from './policy/types.js';
-import { getDemoSalesforceSnapshot } from '../server/src/salesforce/fixture-source.js';
+import { getDemoSalesforceSnapshot } from './services/mock/salesforce/fixture-source.js';
 
 // ---------------------------------------------------------------------------
 // Facility config

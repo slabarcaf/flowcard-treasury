@@ -7,7 +7,6 @@
     "dev": "vite",
     "server:build": "node scripts/build-server.mjs",
     "server:start": "npm run server:build && node .dev/server/server/src/main.js",
-    "ai-evidence:review": "npm run server:build && node .dev/server/server/src/main.js evidence-review",
     "db:migrate": "npm run server:build && node .dev/server/server/src/db/migrate.js",
     "db:seed": "npm run server:build && node .dev/server/server/src/db/seed.js",
     "roster:cli": "npm run server:build && node .dev/server/server/src/roster/cli.js",

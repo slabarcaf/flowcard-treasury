@@ -1,4 +1,4 @@
-/** Canonical Salesforce snapshot types. Provider field names stay in field-map.ts. */
+/** Types for retained synthetic CRM fixtures, not a live Salesforce contract. */
 export const SNAPSHOT_SCHEMA_VERSION = 1;
 
 export interface SourceMetadata {
