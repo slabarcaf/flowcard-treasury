@@ -298,6 +298,7 @@ func buildProfile(stage, runID string, anchor time.Time, outputRelative, upstrea
 		customer.InflowHistory = append(customer.InflowHistory, map[string]any{"id": fmt.Sprintf("%s-inflow-%d", runID, i+1), "date": today.AddDate(0, 0, offset).Format("2006-01-02"), "amount_cents": 10_000_000, "kind": "EXTERNAL_SETTLED", "payer_id": "synthetic-payer"})
 	}
 	invoiceRef := sourceRef("synthetic-accounting", invoiceID, runID)
+	customer.SourceRefs = append(customer.SourceRefs, invoiceRef)
 	customer.Receivables = append(customer.Receivables, map[string]any{"invoice_id": invoiceID, "payer_id": "synthetic-payer", "currency": "USD", "eligible_unpaid_cents": 1_000_000, "allocated_cents": 0, "due_on": invoiceDue.Format("2006-01-02"), "due_date_verified": true, "allocation_complete": true, "source_ref": invoiceRef})
 	customer.Classifications = append(customer.Classifications, map[string]any{"transaction_id": transactionID, "merchant_category": "suppliers", "source_ref": sourceRef("synthetic-demo", "classification-"+profileName, runID)})
 	facilityRefs := []sourceReference{sourceRef("synthetic-demo", "facility-"+profileName, runID)}
