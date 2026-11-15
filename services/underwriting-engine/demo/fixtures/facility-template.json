@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "source_mode": "DEMO",
+  "source_id": "underwriting-demo-fixtures",
+  "source_version": "{{run_id}}",
+  "captured_at": "{{run_anchor}}",
+  "source_refs": [
+    {
+      "system": "synthetic-fixture",
+      "record_id": "facility-underwriting-demo",
+      "version": "{{run_id}}",
+      "effective_at": "{{run_anchor}}"
+    }
+  ],
+  "facility_id": "facility_underwriting_demo",
+  "currency": "USD",
+  "facility_total_cents": 100000000,
+  "reserve_floor_bps": 2000,
+  "funded_principal_cents": 8000000,
+  "reserved_principal_cents": 2000000,
+  "ledger_version": "{{run_id}}",
+  "ledger_complete": true
+}
