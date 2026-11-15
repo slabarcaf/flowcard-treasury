@@ -1,7 +1,9 @@
 # Company onboarding implementation plan
 
 Build the separate Go onboarding service described in the agreed design.
-This plan is unexecuted; deferred revision policy blocks finalizing submit.
+PARTIAL: core Go implementation, local UI integration and sandbox payload
+mapping are delivered. Provider contract/role acceptance remains open; submit
+revision semantics are implemented, not an unresolved design blocker.
 
 [TOC]
 
@@ -17,6 +19,37 @@ Agterm coding sessions instead of spawned subagents. Apply Go style when writing
 Go, keep checks fixture-based, and add tests with each behavioral task.
 
 ## Progress tracking
+
+### Next acceptance slice, November 15, 2026
+
+- [x] Review current local implementation and remaining provider gates.
+- [x] Confirm real customer/operator login is required for the browser cutover.
+- [x] Rerun domain, validation and mocked Airwallex client tests plus OpenAPI
+  freshness before the cutover; all pass. These do not prove live acceptance.
+- [x] Verify the local operator onboarding journey through Go sessions/proxy:
+  actual production handlers and owned PostgreSQL cover create/save, returned
+  person IDs on the same draft, list/detail and authenticated UUID creator
+  persistence. Customer/session denial and frontend session recovery pass.
+  Browser evidence covers login/restore, draft save and retaining unsaved
+  edits on reauthentication; no provider submission was performed.
+- [ ] Build an explicit US-business contract matrix by field, entity/role,
+  document, local DTO/mapping, official source and unresolved capability.
+  No form/schema expansion based on guesses; real consent stays backlogged.
+- [ ] Run focused local storage/worker/RFI acceptance on owned test targets.
+  Preserve manual holds and state exactly which provider capabilities are
+  mocked versus verified. Do not claim actual account creation/submission.
+- [ ] Prepare a separately reviewable sandbox execution checklist with exact
+  prerequisite scopes, data and permitted calls before any provider write.
+
+No Airwallex docs MCP is exposed in the current tool set. Official public
+documentation remains the fallback source. The current
+[native RFI guide](https://www.airwallex.com/docs/connected-accounts/handle-rfis/handle-kyc-rfi/native-kyc-rfi-api)
+requires platform-account enablement; this review does not establish that
+capability. Account terms metadata is described by the
+[create API](https://www.airwallex.com/docs/api/scale/accounts/create), but real
+acceptance must not be fabricated. The full US/entity matrix remains open.
+The [acceptance matrix](/docs/api/onboarding-acceptance-review.md) records
+delivered local behavior, checked sources and the exact remaining evidence.
 
 Mark tasks complete immediately after their checks pass. Record blockers and
 scope changes without silently resolving decisions parked in the backlog.
@@ -37,8 +70,8 @@ scope changes without silently resolving decisions parked in the backlog.
       payloads (role and country-document matrix remain unresolved external gates).
 - [x] Document uncertain-create recovery; keep manual hold when no safe lookup
       exists (lookup unverified; manual hold enforced).
-- [x] Record that reviewed revisions remain undecided and block final submit
-      contract until resolved.
+- [x] Resolve submit revision semantics: revalidate the latest locked saved
+      data and freeze its snapshot; retain the application revision guard.
 - [x] Add sanitized contract fixtures and fixture-shape checks; never invent
       missing platform behavior (tracked in testdata/PROVENANCE.md).
 - [x] Run relevant checks and resolve failures before proceeding (native go test
@@ -130,8 +163,9 @@ scope changes without silently resolving decisions parked in the backlog.
       expose supplied sensitive values.
 - [x] Implement saved-data POST verify with 200 VALIDATION_PASSED or 422
       exhaustive field errors.
-- [ ] Finalize submit request only after explicit resolution of deferred
-      revision policy; do not choose a default.
+- [x] Finalize submit against current locked Company/Application data, with
+      `expected_revision` guarding stale application requests and frozen
+      submission snapshots. See the current design, section Submit revisions.
 - [x] Test error envelopes, draft permissiveness, submission completeness and
       pagination.
 - [x] Run relevant checks and resolve failures before proceeding.
@@ -177,6 +211,10 @@ scope changes without silently resolving decisions parked in the backlog.
 - [x] Run relevant checks and resolve failures before proceeding.
 
 ### Task 9: Integrate authentication and webhook delivery
+
+The checked items below describe the delivered Node-to-Go forwarding path.
+Direct provider-authenticated Go intake remains open in the
+[Node cutover plan](/docs/plans/20261115-node-go-cutover.md#remaining-onboarding-webhook-intake-and-forwarding).
 
 **Files:**
 

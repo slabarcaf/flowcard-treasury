@@ -1,9 +1,15 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { OnboardingApiClient } from '../../services/onboarding/OnboardingApiClient.js';
+import { browserGatewayEnabled } from '../../services/browser-session/client.js';
+import { BrowserLoginForm } from './BrowserLoginForm.js';
 
 /** Explicit authorized local testing only. Never auto-issue or embed operator credentials. */
 export function LocalSessionForm({ onConnected }: { onConnected: () => void }) {
+  return browserGatewayEnabled ? <BrowserLoginForm onConnected={onConnected} /> : <LegacySessionForm onConnected={onConnected} />;
+}
+
+function LegacySessionForm({ onConnected }: { onConnected: () => void }) {
   const [credential, setCredential] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

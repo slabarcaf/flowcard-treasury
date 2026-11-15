@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { LocalSessionForm } from './LocalSessionForm.js';
+import { browserGatewayEnabled } from '../../services/browser-session/client.js';
 import { AuroraBackground } from './AuroraBackground.js';
 import { useCompanyApplication } from '../../hooks/useCompanyApplication.js';
 import { applicationStatus } from '../../services/onboarding/contracts.js';
@@ -102,7 +103,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         <ol className="flex gap-4 text-xs text-slate-400 mb-8" aria-label="Application progress">{STEPS.map((title, i) => <li key={title} aria-current={step === i ? 'step' : undefined} className={step === i ? 'text-white' : ''}>{i + 1}. {title}</li>)}</ol>
         <h1 className="text-2xl font-bold mb-3">{step === 3 ? 'Review your information' : `${STEPS[step]} details`}</h1>
         <p className="text-sm text-slate-400 mb-7">Complete all required information for your application. Fields marked optional can be left blank.</p>
-        {signedIn && <p role="status" className="mb-5 text-sm text-green-300">Signed in for local testing. Your entries are still here. Click Save draft again.</p>}
+        {signedIn && <p role="status" className="mb-5 text-sm text-green-300">{browserGatewayEnabled ? 'Signed in. Your entries remain here. Review saved status before continuing.' : 'Signed in for local testing. Your entries are still here. Click Save draft again.'}</p>}
         <form onSubmit={advance}>
           <fieldset disabled={locked}>
             {step === 0 && <CompanyApplicationStep value={company} onChange={next => { saved.clearReadiness(); setCompany(next); }} fieldIssues={saved.readiness?.errors} savedCompany={saved.savedCompanyInput} allowProfileValueClears={saved.company !== null} />}
@@ -131,7 +132,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       </>
       {saved.error && <div role="alert" className="mt-6 rounded-xl border border-red-400/40 p-4 text-sm text-red-200">
         <p>{saved.error.message}</p>
-        {saved.error.status === 401 && import.meta.env.DEV && <LocalSessionForm onConnected={() => { saved.clearError(); setSignedIn(true); }} />}
+        {saved.error.status === 401 && (browserGatewayEnabled || import.meta.env.DEV) && <LocalSessionForm onConnected={() => { saved.clearError(); setSignedIn(true); }} />}
         {saved.error.issues.length > 0 && <ul className="mt-2 space-y-1">{saved.error.issues.map((issue, i) => <li key={i}>{issue.field}: {issue.message}</li>)}</ul>}
         {saved.error.code === 'STORAGE_UNAVAILABLE' && <p className="mt-2">Your company and application were saved before the upload failed. Remove the pending files above, then retry to continue this local test without attachments.</p>}
         {saved.company && !saved.savedDraft && saved.error.code !== 'STORAGE_UNAVAILABLE' && <p className="mt-2">Company saved: {saved.company.id}. Saving this draft will continue with that company rather than create another.</p>}

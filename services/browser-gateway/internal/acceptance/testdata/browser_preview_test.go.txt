@@ -1,0 +1,84 @@
+// Compiled only by the explicit local browser-walkthrough overlay, not routine
+// tests. Both DBs, identities, HTTP servers and frontend are disposable.
+package acceptance_test
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/slabarcaf/flowcard-treasury/services/browser-gateway/internal/config"
+	"github.com/slabarcaf/flowcard-treasury/services/browser-gateway/internal/httpapi"
+)
+
+func TestOwnedBrowserWalkthrough(t *testing.T) {
+	control := os.Getenv("BROWSER_GATEWAY_WALKTHROUGH_CONTROL")
+	address := os.Getenv("BROWSER_GATEWAY_WALKTHROUGH_ADDRESS")
+	if control == "" || address == "" {
+		t.Fatal("explicit owned walkthrough control paths required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+	defer cancel()
+	authDB := owned(t)
+	onboardingDB := owned(t)
+	upstream := onboardingHarness(t, onboardingDB, 13*time.Minute)
+	authDB.user(t, "ui.operator", "OPERATOR")
+	authDB.user(t, "ui.customer", "CUSTOMER")
+	cfg, err := config.Parse("127.0.0.1:0", authDB.runtimeURL, "http://127.0.0.1:5175", "true")
+	if err != nil {
+		t.Fatal("walkthrough gateway config failed")
+	}
+	cfg, err = cfg.WithOnboarding(upstream, serviceSecret)
+	if err != nil {
+		t.Fatal("walkthrough upstream config failed")
+	}
+	gateway := httptest.NewServer(httpapi.New(cfg, authDB.store))
+	defer gateway.Close()
+	root, err := filepath.Abs("../../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	vite := exec.CommandContext(ctx, filepath.Join(root, "node_modules/.bin/vite"), "--config", "vite.browser-gateway.config.ts")
+	vite.Dir = root
+	vite.Env = append(os.Environ(), "VITE_BROWSER_GATEWAY_ENABLED=true", "BROWSER_GATEWAY_DEV_TARGET="+gateway.URL)
+	vite.Stdout, vite.Stderr = io.Discard, io.Discard
+	if err := vite.Start(); err != nil {
+		t.Fatal("walkthrough frontend launch failed")
+	}
+	done := make(chan error, 1)
+	go func() { done <- vite.Wait() }()
+	t.Cleanup(func() {
+		_ = vite.Process.Signal(os.Interrupt)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			cancel()
+			<-done
+		}
+	})
+	data, _ := json.Marshal(map[string]string{"url": "http://127.0.0.1:5175", "gateway": gateway.URL, "operator": "ui.operator", "customer": "ui.customer"})
+	if err := os.WriteFile(address, data, 0600); err != nil {
+		t.Fatal("walkthrough readiness file failed")
+	}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("owned walkthrough deadline exceeded")
+		case <-done:
+			t.Fatal("walkthrough frontend exited early")
+		case <-ticker.C:
+			if _, err := os.Stat(control); os.IsNotExist(err) {
+				t.Log("owned browser walkthrough stopped; disposing all owned resources")
+				return
+			}
+		}
+	}
+}
