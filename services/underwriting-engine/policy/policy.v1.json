@@ -1,0 +1,75 @@
+{
+  "policy_id": "bridge-capital-go-v1",
+  "history": {
+    "minimum_tenure_months": 3,
+    "balance_window_days": 90,
+    "inflow_window_days": 90
+  },
+  "freshness": {
+    "customer_max_age_seconds": 86400,
+    "facility_max_age_seconds": 300,
+    "shortfall_max_age_seconds": 300,
+    "future_tolerance_seconds": 5
+  },
+  "tiers": {
+    "A": {
+      "minimum_tenure_months": 12,
+      "late_window_days": 180,
+      "maximum_late_closures": 0,
+      "default_window_days": 180,
+      "maximum_defaults": 0,
+      "maximum_near_zero_days": 5,
+      "line_basis_points": 3000
+    },
+    "B": {
+      "minimum_tenure_months": 6,
+      "late_window_days": 180,
+      "maximum_late_closures": 1,
+      "no_default_ever": true,
+      "line_basis_points": 2000
+    },
+    "C": {
+      "default_window_days": 365,
+      "line_basis_points": 1000
+    }
+  },
+  "pricing": {
+    "base_fee_cents": 5000,
+    "monthly_rate_basis_points": 200,
+    "days_per_month": 30,
+    "minimum_term_days": 7,
+    "maximum_term_days": 90
+  },
+  "capital": {
+    "abundant_above_basis_points": 6000,
+    "normal_above_basis_points": 3000,
+    "tight_above_basis_points": 1000,
+    "tight_human_approval_above_cents": 500000,
+    "spend_allowed": {
+      "ABUNDANT": ["CRITICAL", "STANDARD", "DISCRETIONARY"],
+      "NORMAL": ["CRITICAL", "STANDARD", "DISCRETIONARY"],
+      "TIGHT": ["CRITICAL"],
+      "CRITICAL": ["CRITICAL"],
+      "AT_FLOOR": []
+    },
+    "tiers_allowed": {
+      "ABUNDANT": ["A", "B", "C"],
+      "NORMAL": ["A", "B"],
+      "TIGHT": ["A", "B", "C"],
+      "CRITICAL": ["A"],
+      "AT_FLOOR": []
+    }
+  },
+  "near_zero_basis_points": 1000,
+  "merchant_categories": {
+    "suppliers": "CRITICAL",
+    "payroll": "CRITICAL",
+    "inventory": "CRITICAL",
+    "utilities": "STANDARD",
+    "logistics": "STANDARD",
+    "professional_services": "STANDARD",
+    "travel": "DISCRETIONARY",
+    "entertainment": "DISCRETIONARY",
+    "saas": "DISCRETIONARY"
+  }
+}
