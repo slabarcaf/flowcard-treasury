@@ -163,3 +163,39 @@ pinned policy and pricing, provider boundary, and upstream configuration.
 false for the local double. DEMO mock creates can run when runtime
 prerequisites pass even though `SERVICING_LIVE_DISPATCH_ENABLED=false`;
 SANDBOX creates remain blocked.
+
+## Focused tests
+
+The service tests use the standard Go test runner and synthetic HTTP providers.
+The acceptance scenarios each own a fresh disposable database:
+
+- `TestUnsentFundingCancellation`: release backing after a proven unsent
+  cancellation, then reserve fresh accepted terms for the same payment.
+- `TestFundingRecovery`: competing reservations and recovery of an uncertain
+  create by the restarted worker, using the original request identity.
+- `TestCollectionReversalAndAccrual`: fee-first allocations, verified fee and
+  principal reversals, persisted daily accrual and idempotent catch-up.
+- `TestServicingJourney`: funding through repayment and the final public read
+  models, using the real API, worker and HTTP adapter.
+
+Typed setup and HTTP helpers live in `internal/acceptance/fixtures_test.go`,
+worker-driving helpers in `worker_fixture_test.go`, and the shared two-deposit
+repayment setup in `repayment_test.go`. Each scenario can run independently.
+The terms/guards and HTTP contract tests cover pricing, policy refusals,
+authentication, actor decisions and command replay.
+
+Run the pure terms/guards test without PostgreSQL, from the repository root:
+
+```sh
+GOPROXY=off GOSUMDB=off go -C services/funding-collection test ./internal/domain
+```
+
+For HTTP and acceptance tests, set `FUNDING_TEST_ADMIN_URL_FILE` to a private
+file containing a loopback PostgreSQL maintenance URL. The existing database
+helper creates and cleans only its uniquely named, marked databases and logins.
+Run the suite serially, or select a single scenario with `-run`:
+
+```sh
+GOPROXY=off GOSUMDB=off go -C services/funding-collection test -p 1 ./... -count=1
+GOPROXY=off GOSUMDB=off go -C services/funding-collection test ./internal/acceptance -run '^TestFundingRecovery$' -count=1
+```

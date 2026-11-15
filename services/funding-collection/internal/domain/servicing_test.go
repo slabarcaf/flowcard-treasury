@@ -112,7 +112,8 @@ func TestTermsAndGuards(t *testing.T) {
 	}
 
 	// Fixture arithmetic follows cumulative opening-principal numerators. The
-	// persisted UTC-day history and catch-up path are exercised by Journey.
+	// persisted UTC-day history and catch-up path are exercised by
+	// TestCollectionReversalAndAccrual in the acceptance package.
 	openingPrincipal := []domain.Money{700_000, 350_000, 350_000}
 	var numerator int64
 	var assessed domain.Money
