@@ -184,6 +184,12 @@ repayment setup in `repayment_test.go`. Each scenario can run independently.
 The terms/guards and HTTP contract tests cover pricing, policy refusals,
 authentication, actor decisions and command replay.
 
+Additional focused cases cover changed collection capacity, ambiguous lookup
+without resend, midnight cancellation, immutable accrual correction and the
+five-input self-reservation projection. Demo-command tests exercise standalone
+provider reads and both preparation modes, including the system audit actor
+and invoice provenance required by the real guards.
+
 Run the pure terms/guards test without PostgreSQL, from the repository root:
 
 ```sh

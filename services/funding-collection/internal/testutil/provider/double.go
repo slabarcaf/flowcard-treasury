@@ -405,3 +405,23 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
+
+// DuplicateLookupMatch exposes contradictory provider identities for the same
+// request. It changes lookup facts only and never applies a second cash move.
+func (d *Double) DuplicateLookupMatch(requestID string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, transfer := range d.transfers {
+		if transfer["request_id"] != requestID {
+			continue
+		}
+		conflict := make(map[string]any, len(transfer))
+		for key, value := range transfer {
+			conflict[key] = value
+		}
+		conflict["id"] = "conflicting-" + fmt.Sprint(transfer["id"])
+		d.transfers = append(d.transfers, conflict)
+		return nil
+	}
+	return errors.New("provider_fixture_transfer_not_found")
+}

@@ -90,4 +90,23 @@ func TestFundingRecovery(t *testing.T) {
 	if !hasScopedLookup(h.ProviderHTTP.Requests(), sent.RequestID, servicefixture.FundingAccount) {
 		t.Fatal("provider lookup did not retain the original funding request ID and source account scope")
 	}
+	// A distinct duplicate wake for the settled funding must not book debt twice.
+	if err := sendTransferWake(h, "recovery-duplicate-settlement", sent.RequestID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Worker.ProcessOne(ctx); err != nil {
+		t.Fatalf("duplicate settled funding wake: %v", err)
+	}
+	var principal, fee int64
+	var effects int
+	if err := h.Pool.QueryRow(ctx, `SELECT b.principal_owed_cents,b.contract_fee_owed_cents,
+		(SELECT count(*) FROM servicing.ledger_transactions t WHERE t.mode=b.mode AND t.bridge_id=b.id AND t.transaction_kind='FUNDING_SETTLEMENT')
+		FROM servicing.bridges b WHERE b.mode='DEMO' AND b.id=$1`, funding.BridgeID).
+		Scan(&principal, &fee, &effects); err != nil || principal != 700_000 || fee != 19_000 || effects != 1 {
+		t.Fatalf("duplicate funding debt/effects=%d/%d/%d err=%v, want 700000/19000/1", principal, fee, effects, err)
+	}
+	if h.ProviderHTTP.CreateRequestCount() != 1 {
+		t.Fatal("duplicate settlement wake caused another provider create")
+	}
+
 }
