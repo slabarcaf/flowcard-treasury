@@ -57,10 +57,10 @@ are distinct from the retired Node routes.
 | Database migration and guarded seed commands | Historical schema and existing onboarding/development tooling |
 | Current frontend policy calculations | Existing fixture/simulation UI, not Funding execution authority |
 
-The legacy browser `BridgeApiClient` still represents the retired financial
-contract. Its old execution calls receive 410, and its ledger read remains a
-historical Node view. Browser integration with Go needs explicit actor and
-consent wiring; it is not implemented by redirecting old requests.
+The legacy browser `BridgeApiClient` was removed in the UI cleanup. Operator
+onboarding and financial reads use the Go gateway's explicit contracts.
+Customer financial writes and consent remain Task D. The old ledger HTTP route
+returns 410; its stored history was preserved without aliasing it to a Go book.
 
 ## Remaining cutover work
 

@@ -6,6 +6,11 @@ PARTIAL: duplicate Node financial source and startup writers were retired in
 retired at `7d2bba4`, with verified closeout `569ced2`. Existing processes,
 books and callbacks were not cut over.
 
+Unused Node issuing helpers and the historical ledger HTTP handler were
+retired at `35fd469`; `/api/ledger` now returns explicit 410. Historical records
+and mapping administration remain preserved. See the
+[cleanup verification](/docs/demo/node-issuing-ledger-retirement.md).
+
 [TOC]
 
 ## Completed source slice
@@ -123,9 +128,9 @@ intake and hosted traffic cutover remain separate from a local browser switch.
   running old financial writer or switching provider callbacks. Go currently
   supports known-empty DEMO opening books, not nonempty legacy cutover.
   Preserve operation identities and settlement provenance.
-- [ ] Migrate legacy browser execution callers to the Go offer and actor
-  contract. The old `BridgeApiClient` receives 410 for financial commands and
-  retains only its historical ledger read; it is not a Go consent adapter.
+- [ ] Complete customer-bound Go offer/actor commands in Task D. The old
+  `BridgeApiClient` and historical ledger HTTP handler have been removed;
+  operator reads use Go. No legacy request is translated into customer consent.
 - [ ] Replace remaining onboarding/session/roster/tooling responsibilities
   before deleting the whole Node service, its Compose/Docker process or shared
   dependencies. Funding verification alone does not complete that rewrite.
