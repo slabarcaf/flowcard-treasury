@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source_mode": "DEMO",
+  "source_id": "synthetic-actors",
+  "source_version": "2026-11-14-run-001",
+  "captured_at": "2026-11-14T12:00:00Z",
+  "source_refs": [
+    {"system": "demo-fixture", "record_id": "actor-batch-001", "version": "1", "effective_at": "2026-11-14T12:00:00Z"}
+  ],
+  "actors": [
+    {"actor_id": "demo-customer-actor", "actor_type": "CUSTOMER", "authentication_subject": "demo:customer-001", "customer_id": "demo-customer-001", "active": true, "source_ref": {"system": "demo-fixture", "record_id": "actor-customer-001", "version": "1", "effective_at": "2026-11-14T12:00:00Z"}},
+    {"actor_id": "demo-operator-actor", "actor_type": "OPERATOR", "authentication_subject": "demo:operator-001", "customer_id": null, "active": true, "source_ref": {"system": "demo-fixture", "record_id": "actor-operator-001", "version": "1", "effective_at": "2026-11-14T12:00:00Z"}},
+    {"actor_id": "demo-system-actor", "actor_type": "SYSTEM", "authentication_subject": "system:auto-approval", "customer_id": null, "active": true, "source_ref": {"system": "demo-fixture", "record_id": "actor-system-001", "version": "1", "effective_at": "2026-11-14T12:00:00Z"}}
+  ]
+}

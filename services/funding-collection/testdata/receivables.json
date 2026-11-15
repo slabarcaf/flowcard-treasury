@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "source_mode": "DEMO",
+  "source_id": "synthetic-invoices",
+  "source_version": "2026-11-14-run-001",
+  "captured_at": "2026-11-14T12:00:00Z",
+  "source_refs": [
+    {"system": "demo-fixture", "record_id": "invoice-batch-001", "version": "1", "effective_at": "2026-11-14T12:00:00Z"}
+  ],
+  "receivables": [
+    {"customer_id": "demo-customer-001", "source_system": "demo-crm", "invoice_id": "invoice-001", "payer_id": "demo-customer-001", "currency": "USD", "eligible_unpaid_cents": 800000, "due_on": "2026-12-14", "due_date_verified": true, "allocation_complete": true, "source_complete": true, "disputed": false, "source_ref": {"system": "demo-crm", "record_id": "invoice-001", "version": "1", "effective_at": "2026-11-14T12:00:00Z"}}
+  ]
+}
