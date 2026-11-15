@@ -12,8 +12,12 @@ run in a separate task-owned DB/profile. Three actual evaluations and fixture
 investigations completed before the five-minute cutoff. The scheduler made a
 successful shortfall list poll after that cutoff; no new case or evaluation
 was added, and both owned listeners have stopped. This freshness deviation is
-recorded for parent review. No provider request or live model call was made.
-The Go module files have no new dependencies.
+recorded, not a clean continuous-freshness pass. A later lead-owned joined
+DEMO run was independently accepted for source-emitted monitoring, exact
+origin links, closure and restart recovery; its provider double recorded
+`provider_acceptance_verified:false`. Funding/browser/live acceptance remains
+pending, and no model call was made. The Go module files have no new
+dependencies.
 
 [TOC]
 
@@ -27,9 +31,10 @@ user data. No funding, UI, CRM mutation or generic agent platform.
 
 Baseline inspected: main checkout `develop` at `6a9a83a`. The underwriting
 HTTP implementation is committed at `e608a4556f83dde4c45e51d389d7d24da32835bd`
-and merged to lead `develop`; runtime and combined HTTP acceptance remain G
-items. Shortfall fixture success does not verify live decline extraction.
-This plan follows the repository's granular task-group pattern.
+and merged to lead `develop`; the actual underwriting API and joined local DEMO
+slice were exercised in G. This does not verify live decline extraction,
+provider acceptance, or live financial integration. This plan follows the
+repository's granular task-group pattern.
 
 Follow the repository's Planning Exec group discipline in the same authorized
 Agterm session and worktree, and obtain independent parent review before each
@@ -85,7 +90,7 @@ scenarios per critical behavior.
   consumer DB.
 - [x] Record the approved optional `originating_case_id` field on the existing
   funding offer request as attributed provenance only. Funding owns publisher
-  behavior; actual API propagation remains a G proof.
+  behavior; the exact source-emitted refs were verified in the joined G run.
 - [x] Confirm funding read auth uses issuer `flowcard-go`, audience
   `flowcard-funding-collection`, subject `coordinator-reader`, 20-second TTL;
   `SERVICING_SERVICE_SECRET` equals the existing funding coordinator-reader
@@ -137,9 +142,10 @@ Files under `services/go-coordinator`:
 Done for the bounded persistence interfaces: uniqueness constraints prevent
 duplicate cases/revisions, exact assessment requests are pinned before POST,
 page checkpoints and case stubs commit together, and leases fence workflow
-writes. The explicit migration command is present but was not run. No
-test-database execution occurs before G. Parent independent review is required
-before C. API, replay and evidence commands remain for later groups.
+writes. At the B checkpoint the migration command had not yet been run; G
+later verified migrations twice on unique owned databases. Parent then
+reviewed and released C; API, replay, and evidence commands were implemented
+in later groups.
 
 ## C. Discovery and deterministic scheduler
 
@@ -174,35 +180,35 @@ under `internal/postgres/`, and forward migration `003_scheduler_retries.sql`.
   bridge/collection state before explanation, coalesce intermediate updates,
   reopen only from a newer authoritative state. Model outage/budget exhaustion
   cannot stop deterministic monitoring or invent closure.
-- [ ] Pin collection run bridge version/allowed actions. Re-read before finish
+- [x] Pin collection run bridge version/allowed actions. Re-read before finish
   publication; fence against latest locally observed version as well as lease.
   Supersede stale runs instead of publishing their recommendations as current.
   New progress invalidates earlier current recommendations without requiring
   a model call or resetting investigation limits.
-- [ ] Alternate due feeds and case steps fairly. Persist independent feed age
+- [x] Alternate due feeds and case steps fairly. Persist independent feed age
   and checkpoint; stale observations remain visible as stale. Cap collection
   investigations at three per bridge, five minutes apart, on distinct allowed
   trigger/version transitions. Other updates use a deterministic summary.
-- [ ] Implement states/stage transitions, 45-second work plus five-second
+- [x] Implement states/stage transitions, 45-second work plus five-second
   persistence allowance, 60-second leases and one model call per step,
   three transient failures with 5/20-second jittered delays and Retry-After.
   Do not sleep holding a lease. Shutdown cancels work and fences disposition.
-Group C implements the feed fairness, freshness and deterministic refresh
-parts above. Collection investigation caps, model-run version fencing and
-operator replay remain unwired with the later D/E case-agent stages; no
-recommendation publication occurs in C.
+The initial C checkpoint covered source clients, feed fairness, freshness,
+checkpointing and deterministic refresh. Collection caps, publication fences,
+and operator replay were completed in later C/D/E implementation groups and
+included in the accepted G checks.
 
-- [ ] Replay only allowed held/interrupted stages with same revision/key and
+- [x] Replay only allowed held/interrupted stages with same revision/key and
   remaining call allowance. No counter reset or automatic new evaluation.
 
-Group C implementation status: recurring full rescans cover late commits;
-source clients, durable feed checkpoints and dirty refresh, serial feed/case
-fairness, bounded collection reads, persisted retries, lease-fenced atomic
-refresh disposition and readiness age reporting are implemented. Shortfall
-evaluation, case-scoped model runs, recommendation publication, run-version
-supersession, collection investigation caps and operator replay remain D/E
-integration points and are not reported as successful. Runtime database and
-schema proof remains in G. Independent parent review is required before D.
+Group C final status: recurring full rescans cover late commits; source
+clients, durable checkpoints, dirty refresh, fair serial scheduling, bounded
+collection reads, retries, lease-fenced refresh disposition, readiness age,
+run-version supersession and operator replay are implemented. The accepted
+G tests verify representative discovery, dirty-work recovery, and stale
+publication fences. The actual joined run verifies source-owned collection
+closure and restart recovery; collection-agent narrative coverage remains
+separately deferred below.
 
 ## D. Context, sources, evidence and bounded AI loop
 
@@ -227,14 +233,14 @@ Files: `internal/context/client.go`, `internal/sources/{manifest,reader}.go`,
   only for COLLECTION runs. Bind handles to case bridge/customer; validate
   recommendation against current source-owned allowed action/version. No
   underwriting tool or funding/review/reconcile command in that registry.
-- [ ] Bound collection attempt history to two 25-row pages, persist cursor and
+- [x] Bound collection attempt history to two 25-row pages, persist cursor and
   version between substeps, and label truncation/incompleteness. One version
   restart is allowed; subsequent change defers with backoff. Never infer absent
   attempts or authority from a truncated history; debt uses bridge aggregates.
 - [x] Record PENDING_REVIEW claims with exact excerpt validation and stable
   local deduplication. Implement review export and snapshot link CLI with
   actor/time/source checks. Linking cannot publish or financially validate.
-- [ ] Implement the explicit agent loop: typed task/case packet, versioned
+- [x] Implement the explicit agent loop: typed task/case packet, versioned
   system prompt, case-specific tool registry, persisted call/result history,
   typed finish-tool findings/gaps/next steps, citation validation and host-owned
   stage completion. Include shortfall and collection examples in the runbook.
@@ -249,7 +255,7 @@ Files: `internal/context/client.go`, `internal/sources/{manifest,reader}.go`,
   existing limits and forced named finish on the final reserved call. Reject
   multiple/malformed tool blocks before execution. Resolve any saved tool use
   with its matching saved/recovered result before the next model request.
-- [ ] Add deterministic fixture agent using identical tool dispatch, budgets
+- [x] Add deterministic fixture agent using identical tool dispatch, budgets
   and schema validation. Include useful evidence selection and injected source
   instruction behavior; label every run FIXTURE or live-provider mode.
 - [x] Persist call counts before dispatch: twelve model calls/twelve tool calls
@@ -261,14 +267,14 @@ Files: `internal/context/client.go`, `internal/sources/{manifest,reader}.go`,
 - [x] Separate system authority from source text, redact irrelevant sensitive
   data, retain protected source hash/excerpt references and sanitize logs.
   Extracted claims remain unverified regardless of confidence/citations.
-- [ ] Derive timestamp/model/source metadata in Go; validate exact retained
+- [x] Derive timestamp/model/source metadata in Go; validate exact retained
   redacted source sections/locators. Label model prose as AI commentary and
   pending claims separately from saved financial result/next actions.
 
-Done when the agent can choose evidence, report gaps and submit attributed
-claims, while the host rejects out-of-scope authority. Live model and CRM
-verification flags remain false without separate authorized evidence.
-Independent lead review before E.
+Done for the bounded fixture path: the agent chooses selected evidence, reports
+gaps, and submits attributed claims while the host rejects out-of-scope
+authority. Live model and CRM verification flags remain false without separate
+authorized evidence. Parent reviewed the D path and released E.
 
 ## E. Assessment, safe explanation and internal reads
 
@@ -329,8 +335,10 @@ linked servicing event is accepted only with matching case, evaluation, offer,
 customer, alias, source mode and stored raw-account evidence. The optional
 `originating_case_id` on the existing funding offer request is owner-approved
 provenance, and the DEMO source binding is fixed at
-`flowcard-integration-20261114`. Funding publisher/runtime consistency remains
-a Group G proof item. No linking metadata is inferred from a free-form alias.
+`flowcard-integration-20261114`. Funding publisher/runtime consistency was
+demonstrated by the exact local joined-G source event. Actual provider
+acceptance remains false; no linking metadata is inferred from a free-form
+alias.
 Shortfall and collection case IDs use `domain.StableCaseID`; the F helper calls
 that same implementation to prepare manifests for new cases. Existing stored
 case IDs are not rewritten.
@@ -376,13 +384,15 @@ Files: `services/go-coordinator/Dockerfile`,
   submitted evidence remains `PENDING_REVIEW`, and later facts do not silently
   re-key or rewrite the saved decision.
 - [x] Distinguish committed underwriting HTTP from the synthetic `8092`
-  source adapter and the funding-owned API/provider double. Actual funding
-  publisher/linked-event proof remains a G prerequisite; no fake funding API
-  or event is added.
+  source adapter and the funding-owned API/provider double. Group G later
+  demonstrated the Funding-owned source-emitted linked event in one joined
+  DEMO run. The provider double is not real provider acceptance; no fake
+  funding API or event is added.
 - [x] Document the source-owned G collection walk: two partial settlements,
   uncertain operation recovery, missing authority and source-confirmed
-  closure. The coordinator only reads and recommends; if the funding runtime
-  cannot supply an actual state, the guide says to report the step blocked.
+  closure as source-owned states. The accepted local run confirms the source
+  feed/closure slice, not collection-agent narration for each intermediate
+  state. The coordinator only reads and recommends.
 - [x] Keep routine profile `FIXTURE` and omit Anthropic keys. Document the
   existing Anthropic config variables as gated by separate model/data/spend
   approval; no model call or live-model claim is made in F.
@@ -422,9 +432,14 @@ request approval if meaningful coverage truly requires a fourth function.
 - [x] Verify migrations twice/restricted grants as routine isolated setup
   checks. No shared container, volume or manual underwriting database was
   changed.
-- [ ] Run the broader Bloom/collection/watch presentation as a separately
-  recorded manual walkthrough. Distinguish that evidence from the three
-  automated scenarios; add no extra test matrix through helper functions.
+- [x] Record the accepted source-owned collection monitoring/closure/restart
+  slice separately from the three automated scenarios. It covers 58 contiguous
+  feed rows, exact origin/evaluation/offer refs, REPAID bridge v28, CLOSED case
+  v28, four settled operations and matching restart state.
+- [ ] A collection-agent explanation for held/uncertain intermediate states
+  remains unobserved: the actual collection case had `runs:[]`,
+  `recommendations:[]`, and `investigation:null`. Do not infer this coverage
+  from Funding-side transitions or add a synthetic money run to manufacture it.
 - [x] Use one lead-refreshed retained underwriting manifest for the `8092`
   adapter, source preparation, and actual underwriting HTTP evaluation. The
   exact run was `978759d7-8f21-4cdc-9880-631f669a2200` with anchor
@@ -434,9 +449,22 @@ request approval if meaningful coverage truly requires a fourth function.
   `10:03:16.790Z` cutoff; it returned the same three cases and created no new
   evaluation. Both owned listeners were stopped. Record this deviation, not a
   clean continuous-freshness pass. Keep all artifacts; do not edit timestamps.
-- [ ] Actual Funding Task11B linked publisher/event proof remains pending with
-  the Funding owner. No funding double/listener was started; no coordinator
-  write authority or collection acceptance is claimed.
+- [x] Actual local Funding Task11B publisher/event proof was accepted for the
+  joined DEMO slice. The run linked the exact shortfall case, saved evaluation,
+  offer, bridge and collection case through the source feed. The local provider
+  double reported four create effects and `provider_acceptance_verified:false`;
+  no real provider acceptance or funds movement is claimed.
+- [x] Record exact joined run `da3bc19b-085d-4ff3-80c4-33b570b4896a`, anchor
+  `2026-11-15T19:22:03.586696Z`, shortfall case
+  `14227972-3985-87f7-b846-9da5dfd99860`, saved evaluation
+  `d521b3f0-4916-4418-81dd-2fadf1322f0a`, offer
+  `3c832fab-2218-41b5-b3a8-dfb477cc1c09`, bridge
+  `913cd3df-ff6e-49d4-8640-c708ac4da638`, and collection case
+  `91511fc3-c895-8a3b-bba8-c881cef988e4`. Artifact paths are listed below.
+- [x] Preserve the distinct earlier failed/422 books and receipts under main
+  `runtime/funding/retired-books/flowcard_funding_demo_integrated_1aa196a5/`
+  and `.../flowcard_funding_demo_integrated_f01ac791/`. The final joined run
+  does not overwrite or relabel those historical outcomes.
 - [x] Record the focused test case/evaluation/evidence IDs, migration and grant
   results, actual API health response, and synthetic HTTP-double boundaries in
   `/tmp/rootie6-group-g-checkpoint.txt`. Keep credentials out of evidence.
@@ -447,12 +475,33 @@ request approval if meaningful coverage truly requires a fourth function.
   summary parser was corrected. Initial empty outputs were removed before this
   history was recorded; current valid before/after restart captures are in the
   task-owned ignored `manual-http` directory.
-- [ ] Independently review source and result artifacts before declaring done.
-- [ ] Report changed files and pending proposals to Ramil. No commit, merge,
-  push, deployment, subscription change or worktree cleanup before parent
-  source/test review. After review, create only the scoped local feature commit;
-  the lead alone merges `develop`. Preserve all user-owned files and processes.
+- [x] Rootie3 independently reviewed the source and final joined result
+  artifacts. The demonstrated linked monitoring/closure/restart slice is
+  accepted; the unobserved collection-agent narrative and actual provider
+  acceptance remain explicit limitations.
+- [x] Rootie3 accepted the documentation closeout and released the scoped local
+  docs commit after the final provider-key/table/path corrections below. The
+  lead alone merges `develop`; no push, deploy, subscription change, private
+  artifact archive or preserved-database removal is included.
 
-Completion establishes a durable Go coordinator and bounded agent through an
-honest fixture-local path. Live model/CRM/decline readiness requires separate
-evidence and authorization; no funds are reserved or moved.
+### Accepted joined runtime artifact paths
+
+The exact main-runtime artifacts for the accepted joined run are:
+
+```text
+.dev/integration/20261114/runtime/funding/selected-run.json
+.dev/integration/20261114/runtime/funding/joint-funding-result.json
+.dev/integration/20261114/runtime/funding/bridge-final.json
+.dev/integration/20261114/runtime/funding/verified-allocations.json
+.dev/integration/20261114/runtime/coordinator/selected-profile.json
+.dev/integration/20261114/runtime/coordinator-task/manual-http/r6g_lead_mwi7rj10_eca601/capture/joined-feed-proof.json
+.dev/integration/20261114/runtime/coordinator-task/manual-http/r6g_lead_mwi7rj10_eca601/capture/restart-proof.json
+.dev/integration/20261114/runtime/coordinator-task/manual-http/r6g_lead_mwi7rj10_eca601/capture/after-restart-91511fc3-c895-8a3b-bba8-c881cef988e4.json
+```
+
+This archive records a durable coordinator, bounded fixture agent, and the
+accepted local joined DEMO source/collection slice. The coordinator has no
+funding command. The Funding-owned provider double did not establish real
+provider acceptance or movement of real funds. Live model/CRM/decline readiness,
+Task 14, browser acceptance, and the unobserved collection-agent explanation
+require separate evidence and authorization.

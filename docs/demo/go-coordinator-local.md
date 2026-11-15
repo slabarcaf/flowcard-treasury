@@ -61,7 +61,7 @@ record fields from that bundle.
 | Synthetic shortfall adapter | `127.0.0.1:8092` | Coordinator-owned, loopback-only, same prepared shortfalls file. |
 | Underwriting API | `127.0.0.1:8083` | Actual committed HTTP implementation, lead-owned runtime. |
 | Underwriting detail-only mock | `127.0.0.1:8084` | Lead-owned; serves detail and has no shortfall list route. |
-| Funding API | `127.0.0.1:8085` | Owner-confirmed target; runtime and publisher acceptance remain for G. |
+| Funding API | `127.0.0.1:8085` | Actual Funding API; provider uses a local double; live acceptance unverified. |
 | Funding provider double | `127.0.0.1:8091` | Funding-owner local double; no real provider call. |
 
 Leave onboarding `5175`, gateway `8003`, and the existing Go service `8004`
@@ -78,9 +78,11 @@ relation. Neither the alias nor a source summary establishes ownership.
 The source binding is `flowcard-integration-20261114` in DEMO. Funding's
 optional `originating_case_id` on the existing offer request is approved and
 remains attributed provenance, not authority. Funding owns that publisher. G
-must verify the actual event carries the exact originating case, saved
-evaluation, offer, customer, alias, mode, and binding. Do not add an endpoint,
-tool, SQL shortcut, or fake event.
+verified that a source-emitted event carries the exact originating case, saved
+evaluation, offer, customer, alias, mode, and binding in one local joined
+DEMO run. Do not add an endpoint, tool, SQL shortcut, or fake event. This
+provenance does not grant coordinator write authority or establish live
+provider acceptance.
 
 ## Prepare one fresh underwriting run
 
@@ -102,13 +104,14 @@ go -C services/underwriting-engine run ./cmd/demo prepare \
   --database-name flowcard_underwriting_demo_<safe_suffix>
 ```
 
-These are reference commands, not run in this F checkpoint. For combined G
-proof, coordinate a new run with the lead and use the active bundle under
-`.dev/integration/20261114/runtime/underwriting/bundle/`. Select its retained
-manifest at `runs/<run_id>/manifest.json`. Keep that run ID, anchor, IDs,
-shortfalls file, auth profile, and provenance across the adapter and callers.
-Do not copy chat IDs, edit timestamps, re-key saved decisions, or rewrite prior
-cases with a new run.
+The lead owns the underwriting runtime and any source refresh. For an
+authorized combined run, use the exact retained bundle under
+`.dev/integration/20261114/runtime/underwriting/bundle/`, with manifest at
+`runs/<run_id>/manifest.json`. Keep that run ID, anchor, IDs, shortfalls file,
+auth profile, and provenance across the adapter and callers. Do not copy chat
+IDs, edit timestamps, re-key saved decisions, or rewrite prior cases with a
+new run. The accepted joined G run and its retained artifacts are summarized
+below; no second refresh is implied by this runbook.
 
 The adapter reads the `shortfalls_file` path from that retained manifest,
 validates it against the scenarios and run anchor, and returns the generated
@@ -301,10 +304,10 @@ prepared run and IDs.
 The coordinator's collection client reads the funding change feed, bridge,
 collection pages, and referenced operation details from the API at `8085`. It
 issues no money-movement command. The funding provider double at `8091` is a
-funding-owned local test dependency, not a real provider. The owner's final
-publisher/runtime command and actual linked event are still required in G. If
-the publisher is not available, mark the linked collection walkthrough blocked
-rather than inventing a bridge or claiming acceptance.
+funding-owned local test dependency, not a real provider. The accepted joined
+run below demonstrates the owner API's linked source event and read path. It
+does not demonstrate real provider acceptance, funds movement, or every
+collection-agent explanation.
 
 The origin link for G must be emitted through the funding owner's existing
 offer command with the exact saved `originating_case_id`, `evaluation_id`, and
@@ -312,15 +315,55 @@ resulting `offer_id`. Verify the source event and bridge preserve customer ID,
 canonical alias, private raw-account relation, source binding, and mode. This
 is attributed provenance only and grants no coordinator write authority.
 
-The G collection walkthrough uses one source-owned bridge and case. Funding
-must provide successive authoritative states with two partial settlements,
-an uncertain operation/recovery state, missing collection authority, and
-source-confirmed closure. The coordinator resumes the retained change-feed
-sequence, refreshes that bridge, and keeps each model explanation scoped to
-its source version and allowed actions. If the funding provider double or
-publisher cannot produce one of those real HTTP states, record that step as
-blocked by the owner runtime. Do not create a coordinator-side funding route,
-insert saved results with SQL, or infer settlement from a pending operation.
+## Accepted joined G runtime slice
+
+The lead-owned joined run was `da3bc19b-085d-4ff3-80c4-33b570b4896a`, anchored
+at `2026-11-15T19:22:03.586696Z`. The linked chain was shortfall case
+`14227972-3985-87f7-b846-9da5dfd99860`, saved evaluation
+`d521b3f0-4916-4418-81dd-2fadf1322f0a`, offer
+`3c832fab-2218-41b5-b3a8-dfb477cc1c09`, bridge
+`913cd3df-ff6e-49d4-8640-c708ac4da638`, and collection case
+`91511fc3-c895-8a3b-bba8-c881cef988e4`. Mode was DEMO, binding was
+`flowcard-integration-20261114`, customer was `acct_bloom001`, and the alias
+was `customer:acct_bloom001`.
+
+The producer feed supplied 58 contiguous rows through checkpoint 58 with exact
+origin/evaluation/offer references. The bridge reached REPAID v28, the
+coordinator collection case reached CLOSED v28, and `refresh_needed` was false.
+The source reported zero debt buckets and no holds; all four operations were
+SETTLED with positive operation versions. Funding recorded fee allocations of
+10,000 and 9,000 cents and principal of 700,000 cents. Its result records
+principal 700,000 cents, fee 19,000 cents, term 30, reply recovery true, four
+provider-double create effects, and `provider_acceptance_verified:false`. No
+real provider accepted or moved funds.
+
+Artifacts are in the main ignored runtime. Funding evidence includes
+`funding/selected-run.json`, `funding/joint-funding-result.json`,
+`funding/bridge-final.json`, and `funding/verified-allocations.json`.
+Coordinator evidence includes `coordinator/selected-profile.json` and
+`coordinator-task/manual-http/r6g_lead_mwi7rj10_eca601/capture/` with
+`joined-feed-proof.json`, `restart-proof.json`, and before/after case JSON.
+The full artifact review is recorded in
+`/tmp/rootie3-final-joined-artifact-verdict.txt`.
+
+The final collection case JSON had `runs:[]`, `recommendations:[]`, and
+`investigation:null`. The joined source/feed proof demonstrates deterministic
+monitoring, allocation, closure, and restart recovery. It does not prove a
+collection-agent explanation for held or uncertain intermediate states; do not
+infer one from Funding events. Funding's actual provider acceptance remains
+false, Task 14 and browser acceptance remain separate lead-owned work, and no
+coordinator write tool or source-side financial calculation was added.
+
+After the retained shortfall window, the adapter was stopped while the API
+remained available for historical case reads. `/readyz` kept
+`service_ready:true` and reported stale shortfall/workflow readiness as false;
+servicing freshness and monitoring remained true. Historical reads do not make
+the expired shortfall source fresh or authorize a new evaluation.
+
+Earlier failed/422 books and receipts remain immutable historical artifacts in
+`funding/retired-books/flowcard_funding_demo_integrated_1aa196a5/` and
+`funding/retired-books/flowcard_funding_demo_integrated_f01ac791/`. The accepted
+joined run is separate; it does not rewrite or relabel those outcomes.
 
 ## Stop and preserve data
 
