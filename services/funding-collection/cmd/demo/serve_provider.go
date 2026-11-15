@@ -298,7 +298,7 @@ func (p *providerDouble) readBalance(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	balance := p.state.Accounts[account]
 	p.mu.Unlock()
-	writeProviderJSON(w, http.StatusOK, []map[string]any{{"account_type": "CASH", "currency": "USD", "available_amount": decimalJSON(balance)}})
+	writeProviderJSON(w, http.StatusOK, []map[string]any{{"account_type": "CASH", "currency": "USD", "available_amount": json.RawMessage(decimalJSON(balance))}})
 }
 
 func (p *providerDouble) readPayment(w http.ResponseWriter, r *http.Request) {
