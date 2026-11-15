@@ -77,8 +77,6 @@ authorization:
 | `KIT5_OPERATOR_TOKEN` | Secret / Node | Existing | `server/src/config.ts` | Secrets Manager (`flowcard/operator`) | Kit 5 operator session login credential |
 | `KIT5_OPERATOR_ID` | Env / Node | Existing | `server/src/config.ts` | ECS Task Definition | Operator identity string for session binding |
 | `KIT5_ALLOWED_ORIGINS` | Env / Node | Existing | `server/src/config.ts` | ECS Task Definition | CloudFront HTTPS origin URL for CORS |
-| `REMOTE_AUTH_REPAYMENT_TERM` | Env / Node | Existing | `server/src/config.ts` | ECS Task Definition | Repayment authorization term (`asap`) |
-| `SALESFORCE_SNAPSHOT_MODE` | Env / Node | Existing | `server/src/config.ts` | ECS Task Definition | Snapshot provider mode (`demo`) |
 | `ONBOARDING_SERVICE_URL` | Env / Node | **Approved** | `server/src/config.ts` | ECS Task Definition | Upstream Go API endpoint (Service Discovery) |
 | `ONBOARDING_SERVICE_SECRET` | Secret / Node & Go | **Approved** | Node and Go configuration loaders | Secrets Manager (`flowcard/service-auth`) | Shared HMAC secret for service-to-service JWTs |
 | `PORT` | Env / Go API | Existing | `services/config.go` | ECS Task Definition | Go API HTTP port (`8080`) |
@@ -92,10 +90,8 @@ authorization:
 | `S3_KMS_KEY_ID` | Env / Go API & Worker | **Approved** | Go configuration loader | ECS Task Definition | KMS Key ARN/ID for SSE-KMS document encryption |
 
 > [!NOTE]
-> Legacy Kit 5 demo settings (`KIT5_NOVA_GLOBAL_ACCOUNT_ID`,
-> `KIT5_NOVA_GLOBAL_ACCOUNT_CONNECTED_ACCOUNT_ID`, and
-> `KIT5_NOVA_GLOBAL_ACCOUNT_CURRENCY`) remain optional in `server/src/config.ts`
-> and are not required for Company Onboarding API operations.
+> Legacy Kit 5 financial and snapshot settings were retired. Only the operator
+> session settings remain until the Go browser gateway replaces that boundary.
 
 ## Service-to-service authentication contract
 

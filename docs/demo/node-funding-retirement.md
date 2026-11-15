@@ -50,10 +50,10 @@ are distinct from the retired Node routes.
 | --- | --- |
 | Onboarding API/docs proxy, authenticated operator session and webhook forwarding | Onboarding frontend and Go company-onboarding service |
 | Customer roster/card mappings and provider account reconciliation CLI | Shared roster readers, onboarding and trusted mapping consumers |
-| CRM snapshots, evidence review and legacy provider profile publication | Retired in the [read-model follow-up](/docs/demo/node-readmodel-retirement.md); local frontend fixtures retained |
+| CRM snapshots, evidence review and legacy provider profile publication | Retired in the [read-model follow-up](/docs/demo/node-readmodel-retirement.md); unused presenter fixtures subsequently removed in [UI cleanup](/docs/demo/legacy-ui-cleanup.md) |
 | Read-only `/api/ledger` | Legacy browser client and historical Node projections |
 | Database migration and guarded seed commands | Historical schema and existing onboarding/development tooling |
-| Shared frontend policy calculations | Existing fixture/simulation UI, not Funding execution authority |
+| Current frontend policy calculations | Existing fixture/simulation UI, not Funding execution authority |
 
 The legacy browser `BridgeApiClient` still represents the retired financial
 contract. Its old execution calls receive 410, and its ledger read remains a
