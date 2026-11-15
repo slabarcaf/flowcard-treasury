@@ -1,0 +1,115 @@
+# Remaining Node-to-Go cutover
+
+PARTIAL: duplicate Node financial source and startup writers were retired in
+`4dd9dd1`, merged into develop at `8662dd1`. Financial routes now return
+410. Node snapshot, underwriting-profile and AI-evidence pipelines were also
+retired at `7d2bba4`, with verified closeout `569ced2`. Existing processes,
+books and callbacks were not cut over.
+
+[TOC]
+
+## Completed source slice
+
+The ownership inventory, removed writers/routes, preserved migrations and
+121 focused retained-function checks are recorded in
+[Node funding retirement](/docs/demo/node-funding-retirement.md).
+The delivered Go scope is recorded in the
+[Funding runbook](/docs/demo/funding-and-collection-local.md).
+
+The read-model retirement and retained boundaries are recorded in
+[its verification note](/docs/demo/node-readmodel-retirement.md) and
+[completed plan](/docs/plans/completed/20261115-node-readmodel-retirement.md).
+Live Salesforce retrieval and automatic financial-fact publication remain
+deferred; retiring the Node pipeline does not implement those capabilities.
+
+## Remaining execution
+
+### Selected first implementation: real login and Go browser boundary
+
+Ramil selected real customer/operator login on November 15, 2026. Follow
+[the gateway design](/docs/designs/browser-gateway.md). Implementation order:
+
+1. **A, real auth foundation:** add `services/browser-gateway` with API,
+   migration/user CLI, restricted user/session storage and the specified
+   password/session/Origin behavior. Focused password, HTTP/session lifecycle
+   and DB privilege tests use unique owned targets. No upstream money calls.
+2. **B, operator onboarding:** add exact allowlisted Go onboarding/docs proxy
+   routes and server-signed actor assertions. Replace the credential-only
+   frontend login/session panel with username/password/current-user/logout.
+   Route a dedicated local preview through Go; preserve the existing instance.
+   Verify draft save, person/company PATCH, list/detail and role denial.
+3. **C, backend reads:** display real Coordinator evaluations and Funding
+   offers/bridges/collections with versions, cents and explicit missing data.
+   Keep fixture screens explicitly separate; no financial fallback to mocks.
+4. **D, customer-bound writes:** establish trusted account bindings, then wire
+   create offer, customer acceptance, operator approval and fund/reconcile to
+   their exact contracts. Persist retry keys and uncertain receipts. Verify
+   cross-customer denial and exact terms/version binding before a local DEMO
+   money journey. Real provider operations remain separately gated.
+
+- [x] Review current Node retirement, frontend adapter and Go actor contracts.
+- [x] Select real identity and implement A, with independent race/owned DB,
+  build and vet verification and both bounded lead corrections.
+- [x] Implement and verify B through actual Go onboarding handlers and owned
+  PostgreSQL, preserving actor attribution and same-draft person IDs.
+- [x] Implement C: operator-only Coordinator/Funding reads, exact cents and
+  versions, no financial writes or silent fixture fallback. See the
+  [financial reads plan](/docs/plans/20261115-browser-financial-reads.md).
+- [ ] Complete D: trusted customer bindings and actor-bound financial writes.
+
+A-C are verified locally in the opt-in Go workspace. The normal legacy preview
+remains unchanged unless explicitly started with the Go gateway flag. Existing
+manual services, root environment and user records were not modified. No real
+provider/model call, customer consent or financial write is inferred.
+
+### Remaining onboarding webhook intake and forwarding
+
+OPEN: direct Go receivers exist for shortfalls and servicing. Onboarding
+`account.*` and `rfi.*` events still enter Node at `/webhooks/airwallex`.
+Node verifies the provider signature, persists delivery work and forwards a
+service-signed request to Go onboarding at `/api/webhooks/airwallex`. The
+existing Go endpoint verifies an internal assertion, not a provider signature.
+The browser gateway login/proxy slice does not replace this public intake.
+
+- [ ] Add direct provider-authenticated intake to Go company-onboarding,
+  retaining the existing protected internal delivery contract during cutover.
+  Verify the original body and provider signature before accepting an event;
+  do not expose the internal JWT endpoint as an unauthenticated callback.
+- [ ] Preserve durable receipt before acknowledgement, provider-event
+  deduplication, controlled conflicting-event handling, restart recovery and
+  existing account/RFI application updates. Reuse the Go onboarding inbox and
+  processing rules where compatible.
+- [ ] Verify signed synthetic account/RFI events through actual local HTTP and
+  owned PostgreSQL, including duplicates, invalid signatures and restart
+  recovery. Keep shortfall and servicing event ownership separate.
+- [ ] Before a separately authorized hosted switch, verify provider
+  subscriptions and infrastructure routing, then drain or safely transfer
+  outstanding Node forwarding work. Preserve event IDs and delivery evidence.
+- [ ] Remove the Node onboarding receiver/forwarder and exclusive tests only
+  after replacement acceptance and callback cutover. Retain historical
+  migrations and delivery records.
+
+### Remaining migration and ownership work
+
+- [ ] Reconcile opening balances and unresolved operations before retiring a
+  running old financial writer or switching provider callbacks. Go currently
+  supports known-empty DEMO opening books, not nonempty legacy cutover.
+  Preserve operation identities and settlement provenance.
+- [ ] Migrate legacy browser execution callers to the Go offer and actor
+  contract. The old `BridgeApiClient` receives 410 for financial commands and
+  retains only its historical ledger read; it is not a Go consent adapter.
+- [ ] Replace remaining onboarding/session/roster/tooling responsibilities
+  before deleting the whole Node service, its Compose/Docker process or shared
+  dependencies. Funding verification alone does not complete that rewrite.
+
+- [ ] Specify and implement actual card retry and the customer-facing journey.
+  Go Funding currently funds and collects; its delivery does not retry a card.
+- [ ] Verify provider callback ownership before switching traffic. Node
+  financial callbacks return 410; real Go shortfall extraction is still held.
+
+## Boundaries
+
+No nonempty-book migration, process shutdown, callback switch or entire Node
+removal was performed by source retirement. Preserve existing operation IDs,
+financial records and historical migrations. Deployment and live provider
+acceptance need their own verified scope. This document authorizes none.

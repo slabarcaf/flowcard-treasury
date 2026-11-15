@@ -527,7 +527,7 @@ func (r *Repository) CreateApplication(ctx context.Context, app *domain.Onboardi
 		companySnapshotJSON,
 		docsJSON,
 		rfisJSON,
-		"creator",
+		app.Creator(),
 		app.OperatorReviewFlagged(),
 		app.Revision(),
 		app.CreatedAt(),

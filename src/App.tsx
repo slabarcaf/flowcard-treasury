@@ -7,10 +7,16 @@ import { BackOffice } from './features/bridge-capital/backoffice/index.js';
 import { Portal } from './features/bridge-capital/portal/index.js';
 import { MockAdapter } from './features/bridge-capital/data/MockAdapter.js';
 import { screenFromHash, type AppScreen } from './app-routing.js';
+import { browserGatewayEnabled } from './services/browser-session/client.js';
+import { BrowserGatewayApp } from './components/onboarding/BrowserGatewayApp.js';
 
 type Screen = AppScreen;
 
 function App() {
+  return browserGatewayEnabled ? <BrowserGatewayApp /> : <LegacyApp />;
+}
+
+function LegacyApp() {
   const [screen, setScreen] = useState<Screen>(() => screenFromHash(window.location.hash));
   const [demoAdapter] = useState(() => new MockAdapter());
 

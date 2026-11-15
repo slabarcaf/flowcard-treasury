@@ -7,6 +7,8 @@ import type { ApplicationsListState } from '../useBackOffice.js';
 import { color, font, radius, space } from '../tokens.js';
 import { Badge, Button, Card, CardHeader, ClickableTr, Table, Td, Th } from './primitives.js';
 import { formatTimestamp } from './onboarding-format.js';
+import { BrowserLoginForm } from '../../../../components/onboarding/BrowserLoginForm.js';
+import { browserGatewayEnabled } from '../../../../services/browser-session/client.js';
 
 const control: CSSProperties = {
   color: color.text,
@@ -128,13 +130,14 @@ export function OnboardingApplications({
     <Card>
       <CardHeader title="Onboarding applications" meta="Live backend records" />
       <p style={{ color: color.textMuted, marginTop: 0 }}>
-        Applications across companies and statuses, including drafts. Demo portfolio customers remain in Customers.
+        {browserGatewayEnabled ? 'Saved company onboarding records, including drafts.' : 'Applications across companies and statuses, including drafts. Demo portfolio customers remain in Customers.'}
       </p>
       <div style={{ display: 'flex', gap: space.lg, marginBottom: space.xl }}>
         <Button onClick={refreshFirstPage} disabled={pageBusy}>{pageBusy ? 'Loading…' : 'Refresh'}</Button>
-        <Button onClick={() => setShowConnection(value => !value)}>Internal session</Button>
+        <Button onClick={() => setShowConnection(value => !value)}>{browserGatewayEnabled ? 'Sign in again' : 'Internal session'}</Button>
       </div>
-      {showConnection && (
+      {showConnection && browserGatewayEnabled && <BrowserLoginForm onConnected={() => { setShowConnection(false); refreshFirstPage(); }} />}
+      {showConnection && !browserGatewayEnabled && (
         <form onSubmit={connect} style={{ display: 'grid', gap: space.lg, marginBottom: space.xl }}>
           <label style={{ display: 'grid', gap: space.md }}>Operator credential
             <input
