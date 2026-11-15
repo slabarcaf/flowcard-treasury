@@ -285,8 +285,28 @@ type Config struct {
 	settings   policySettings
 }
 
+// Pricing contains the scalar term and fee parameters from the pinned policy.
+type Pricing struct {
+	BaseFeeCents           int64
+	MonthlyRateBasisPoints int64
+	DaysPerMonth           int64
+	MinimumTermDays        int
+	MaximumTermDays        int
+}
+
 // PolicyID returns the pinned identifier associated with this configuration.
 func (c Config) PolicyID() string { return c.policyID }
 
 // PolicyHash returns the SHA-256 of the exact embedded JSON bytes.
 func (c Config) PolicyHash() string { return c.policyHash }
+
+// Pricing returns a value copy of the validated embedded pricing parameters.
+func (c Config) Pricing() Pricing {
+	return Pricing{
+		BaseFeeCents:           c.settings.Pricing.BaseFeeCents,
+		MonthlyRateBasisPoints: c.settings.Pricing.MonthlyRateBasisPoints,
+		DaysPerMonth:           c.settings.Pricing.DaysPerMonth,
+		MinimumTermDays:        c.settings.Pricing.MinimumTermDays,
+		MaximumTermDays:        c.settings.Pricing.MaximumTermDays,
+	}
+}

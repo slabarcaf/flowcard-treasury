@@ -10,6 +10,18 @@ func TestPolicyDecisions(t *testing.T) {
 	if err != nil {
 		t.Fatal("LoadConfig() error =", err)
 	}
+	wantPricing := Pricing{
+		BaseFeeCents: 5000, MonthlyRateBasisPoints: 200, DaysPerMonth: 30,
+		MinimumTermDays: 7, MaximumTermDays: 90,
+	}
+	pricing := config.Pricing()
+	if pricing != wantPricing {
+		t.Fatalf("Config.Pricing() = %+v, want %+v", pricing, wantPricing)
+	}
+	pricing.BaseFeeCents = 0
+	if got := config.Pricing(); got != wantPricing {
+		t.Fatalf("Config.Pricing() after caller mutation = %+v, want value copy %+v", got, wantPricing)
+	}
 	base := testPolicyInput(t)
 
 	eligible := Evaluate(base, config)
