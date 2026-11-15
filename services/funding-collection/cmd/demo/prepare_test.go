@@ -33,33 +33,43 @@ func TestPreparedRunHasOneSystemApprovalActor(t *testing.T) {
 		operator: domain.ActorImport{ActorID: "synthetic-operator-actor", ActorType: "OPERATOR",
 			AuthenticationSubject: "synthetic-operator", Active: true, SourceRef: ref},
 	}
-	stage := t.TempDir()
-	_, err = materializeFundingRun(".dev/actor-regression", stage, runID, anchor,
-		"flowcard_funding_demo_actor_test", "flowcard_underwriting_demo_actor_test", cfg, &profile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(filepath.Join(stage, "actors.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var actors domain.ActorsImport
-	if err := json.Unmarshal(data, &actors); err != nil {
-		t.Fatal(err)
-	}
-	activeSystems := 0
-	for _, actor := range actors.Actors {
-		if actor.ActorType != "SYSTEM" || !actor.Active {
-			continue
-		}
-		activeSystems++
-		if actor.ActorID == "" || actor.AuthenticationSubject != "system:funding-collection" ||
-			actor.CustomerID != nil || actor.SourceRef.System != "synthetic-demo" ||
-			actor.SourceRef.Version != runID || !actor.SourceRef.EffectiveAt.Equal(anchor) {
-			t.Fatalf("system actor = %+v, want run-bound synthetic service actor", actor)
-		}
-	}
-	if activeSystems != 1 || len(actors.Actors) != 3 {
-		t.Fatalf("prepared active SYSTEM actors = %d total = %d, want one service actor plus customer/operator", activeSystems, len(actors.Actors))
+	for _, input := range []struct {
+		name    string
+		profile *profileBuild
+	}{
+		{name: "external", profile: &profile},
+		{name: "component"},
+	} {
+		t.Run(input.name, func(t *testing.T) {
+			stage := t.TempDir()
+			manifest, err := materializeFundingRun(".dev/actor-regression", stage, runID, anchor,
+				"flowcard_funding_demo_actor_test", "flowcard_underwriting_demo_actor_test", cfg, input.profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(filepath.Join(stage, "actors.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var actors domain.ActorsImport
+			if err := json.Unmarshal(data, &actors); err != nil {
+				t.Fatal(err)
+			}
+			activeSystems := 0
+			for _, actor := range actors.Actors {
+				if actor.ActorType != "SYSTEM" || !actor.Active {
+					continue
+				}
+				activeSystems++
+				if actor.ActorID == "" || actor.AuthenticationSubject != "system:funding-collection" ||
+					actor.CustomerID != nil || actor.SourceRef.System != "synthetic-demo" ||
+					actor.SourceRef.Version != runID || !actor.SourceRef.EffectiveAt.Equal(anchor) {
+					t.Fatalf("system actor = %+v, want run-bound synthetic service actor", actor)
+				}
+			}
+			if activeSystems != 1 || len(actors.Actors) != 1+2*len(manifest.UpstreamProfiles) {
+				t.Fatalf("prepared active SYSTEM actors = %d total = %d, want one service actor plus each profile customer/operator", activeSystems, len(actors.Actors))
+			}
+		})
 	}
 }
