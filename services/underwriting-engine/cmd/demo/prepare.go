@@ -20,6 +20,10 @@ const (
 	fixtureMaxBytes         = 2_000_000
 	expectedFacilityID      = "facility_underwriting_demo"
 	defaultDemoDatabaseName = "flowcard_underwriting_demo"
+	standardBookProfile     = "standard"
+	knownEmptyBookProfile   = "known-empty"
+	standardMonthlyInflows  = int64(10_000_000)
+	capacityMonthlyInflows  = int64(3_000_000)
 )
 
 type fixturePack struct {
@@ -130,10 +134,14 @@ func runPrepare(args []string) error {
 	scenario := flags.String("scenario", "all", "scenario id or all")
 	asOf := flags.String("as-of", "now", "now or RFC3339 UTC instant")
 	out := flags.String("out", ".dev/demo", "output directory under the repository .dev directory")
+	bookProfile := flags.String("book-profile", standardBookProfile, "standard or known-empty opening debt/reservation books")
 	databaseName := flags.String("database-name", defaultDemoDatabaseName,
 		"task-owned demo database name under the flowcard_underwriting_demo namespace")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
 		return errors.New("invalid prepare arguments")
+	}
+	if !validBookProfile(*bookProfile) {
+		return errors.New("invalid demo book profile")
 	}
 	if !validDemoDatabaseName(*databaseName) {
 		return errors.New("invalid demo database name")
@@ -190,7 +198,7 @@ func runPrepare(args []string) error {
 	defer os.RemoveAll(stagingDirectory)
 
 	manifest, err := materializeRun(outputRelative, *databaseName, stagingDirectory, runID, anchor,
-		policyConfig.PolicyID(), policyConfig.PolicyHash(), plans)
+		policyConfig.PolicyID(), policyConfig.PolicyHash(), *bookProfile, plans)
 	if err != nil {
 		return err
 	}
@@ -216,7 +224,10 @@ func runPrepare(args []string) error {
 }
 
 func materializeRun(outputRelative, databaseName, stagingDirectory, runID string, anchor time.Time,
-	policyID, policyHash string, plans []scenarioPlan) (generatedManifest, error) {
+	policyID, policyHash, bookProfile string, plans []scenarioPlan) (generatedManifest, error) {
+	if !validBookProfile(bookProfile) {
+		return generatedManifest{}, errors.New("invalid demo book profile")
+	}
 	if len(plans) == 0 {
 		return generatedManifest{}, errors.New("no demo scenarios selected")
 	}
@@ -234,22 +245,32 @@ func materializeRun(outputRelative, databaseName, stagingDirectory, runID string
 		ExpectedTraceFile: filepath.ToSlash(filepath.Join("runs", runID, "expected-traces.json")),
 		Provenance:        "Synthetic DEMO fixtures; no live Airwallex, Salesforce, funding, or repayment records.",
 	}
+	if bookProfile == knownEmptyBookProfile {
+		manifest.Provenance += " Opening bridge and reservation books are explicitly known-empty synthetic facts."
+	}
 	shortfalls := shortfallFixturePack{
 		SourceMode: "DEMO",
 		Provenance: "Synthetic final-observation mock responses rendered from one fresh UTC run anchor.",
 		Records:    make([]shortfallFixtureRecord, 0, len(plans)),
 	}
 	var customerFunded, customerReserved int64
-	for _, plan := range plans {
+	for _, template := range plans {
+		plan, monthlyInflowsCents, knownEmptyBooks, err := scenarioForBookProfile(template, bookProfile)
+		if err != nil {
+			return generatedManifest{}, err
+		}
 		if plan.ID == "" || plan.CustomerID == "" || plan.AccountID == "" || plan.CardID == "" ||
 			plan.ExpectedStatus == "" || plan.PrincipalCents <= 0 || plan.TermDays < 7 || plan.TermDays > 90 ||
 			plan.EstimatedFeeCents < 0 || plan.TotalDueCents != plan.PrincipalCents+plan.EstimatedFeeCents ||
 			len(plan.ExpectedRules) != 10 {
 			return generatedManifest{}, errors.New("invalid checked-in scenario template")
 		}
-		existingReserve := plan.ExistingExposureCents - 1_100_000
-		if existingReserve <= 0 || existingReserve > 3_000_000 {
-			return generatedManifest{}, errors.New("invalid checked-in exposure setup")
+		existingReserve := int64(0)
+		if !knownEmptyBooks {
+			existingReserve = plan.ExistingExposureCents - 1_100_000
+			if existingReserve <= 0 || existingReserve > 3_000_000 {
+				return generatedManifest{}, errors.New("invalid checked-in exposure setup")
+			}
 		}
 		shortfallID, err := randomUUID()
 		if err != nil {
@@ -267,16 +288,20 @@ func materializeRun(outputRelative, databaseName, stagingDirectory, runID string
 		if err != nil {
 			return generatedManifest{}, errors.New("demo id generation failed")
 		}
-		bridgeTransactionID, err := randomUUID()
-		if err != nil {
-			return generatedManifest{}, errors.New("demo id generation failed")
-		}
-		reservationTransactionID, err := randomUUID()
-		if err != nil {
-			return generatedManifest{}, errors.New("demo id generation failed")
+		bridgeTransactionID, reservationTransactionID := "", ""
+		if !knownEmptyBooks {
+			bridgeTransactionID, err = randomUUID()
+			if err != nil {
+				return generatedManifest{}, errors.New("demo id generation failed")
+			}
+			reservationTransactionID, err = randomUUID()
+			if err != nil {
+				return generatedManifest{}, errors.New("demo id generation failed")
+			}
 		}
 		customer, err := customerFixture(plan, runID, anchor, today, windowStart, windowEnd,
-			transactionID, bridgeTransactionID, reservationTransactionID, existingReserve)
+			transactionID, bridgeTransactionID, reservationTransactionID, existingReserve,
+			monthlyInflowsCents, knownEmptyBooks)
 		if err != nil {
 			return generatedManifest{}, err
 		}
@@ -301,21 +326,28 @@ func materializeRun(outputRelative, databaseName, stagingDirectory, runID string
 			FreeReceivablesCents:     plan.FreeReceivablesCents,
 			ExpectedRules:            plan.ExpectedRules, Provenance: plan.Provenance,
 		})
-		customerFunded += 1_000_000
-		customerReserved += existingReserve
+		if !knownEmptyBooks {
+			customerFunded += 1_000_000
+			customerReserved += existingReserve
+		}
 	}
-	if customerFunded > 8_000_000 || customerReserved > 2_000_000 {
+	fundedPrincipalCents, reservedPrincipalCents, availableCapitalCents := int64(8_000_000), int64(2_000_000), int64(70_000_000)
+	if bookProfile == knownEmptyBookProfile {
+		fundedPrincipalCents, reservedPrincipalCents, availableCapitalCents = 0, 0, 80_000_000
+	}
+	if customerFunded > fundedPrincipalCents || customerReserved > reservedPrincipalCents {
 		return generatedManifest{}, errors.New("facility commitments exceed synthetic books")
 	}
 	manifest.FacilityBooks = facilityBooks{
 		FacilityTotalCents: 100_000_000, ReserveFloorBPS: 2000,
-		FundedPrincipalCents: 8_000_000, CustomerFundedPrincipalCents: customerFunded,
-		OtherFundedPrincipalCents: 8_000_000 - customerFunded,
-		ReservedPrincipalCents:    2_000_000, CustomerReservedPrincipalCents: customerReserved,
-		OtherReservedPrincipalCents: 2_000_000 - customerReserved,
-		FeesCountedInFacilityCash:   false, AvailableCapitalCents: 70_000_000,
+		FundedPrincipalCents: fundedPrincipalCents, CustomerFundedPrincipalCents: customerFunded,
+		OtherFundedPrincipalCents: fundedPrincipalCents - customerFunded,
+		ReservedPrincipalCents:    reservedPrincipalCents, CustomerReservedPrincipalCents: customerReserved,
+		OtherReservedPrincipalCents: reservedPrincipalCents - customerReserved,
+		FeesCountedInFacilityCash:   false, AvailableCapitalCents: availableCapitalCents,
 	}
-	facility, err := facilityFixture(runID, anchor)
+	facility, err := facilityFixture(runID, anchor, fundedPrincipalCents, reservedPrincipalCents,
+		bookProfile == knownEmptyBookProfile)
 	if err != nil {
 		return generatedManifest{}, err
 	}
@@ -338,16 +370,48 @@ func materializeRun(outputRelative, databaseName, stagingDirectory, runID string
 	return manifest, nil
 }
 
+func validBookProfile(profile string) bool {
+	return profile == standardBookProfile || profile == knownEmptyBookProfile
+}
+
+func scenarioForBookProfile(plan scenarioPlan, profile string) (scenarioPlan, int64, bool, error) {
+	switch profile {
+	case standardBookProfile:
+		return plan, standardMonthlyInflows, false, nil
+	case knownEmptyBookProfile:
+		plan.ExistingExposureCents = 0
+		plan.PostFundingExposureCents = plan.PrincipalCents + plan.EstimatedFeeCents
+		monthlyInflowsCents := standardMonthlyInflows
+		if plan.ID == "capacity_exceeded" {
+			plan.CustomerLimitCents = 600_000
+			monthlyInflowsCents = capacityMonthlyInflows
+		}
+		plan.Provenance += " Opening bridge and reservation books are explicitly known-empty synthetic facts."
+		return plan, monthlyInflowsCents, true, nil
+	default:
+		return scenarioPlan{}, 0, false, errors.New("invalid demo book profile")
+	}
+}
+
 func customerFixture(plan scenarioPlan, runID string, anchor time.Time, today, windowStart, windowEnd time.Time,
-	shortfallTransactionID, bridgeTransactionID, reservationTransactionID string, reservationPrincipal int64) (domain.CustomerSnapshot, error) {
+	shortfallTransactionID, bridgeTransactionID, reservationTransactionID string, reservationPrincipal,
+	monthlyInflowsCents int64, knownEmptyBooks bool) (domain.CustomerSnapshot, error) {
 	started := addMonthsClamped(today, -9)
 	bridgeOpened := today.AddDate(0, 0, -60)
 	bridgeDue := today.AddDate(0, 0, 15)
 	invoiceDue := today.AddDate(0, 0, 20)
+	bridgeBookRecordID := "bridge-" + plan.ID
+	reservationBookRecordID := "reservation-" + plan.ID
+	sourceID := "underwriting-demo-fixtures"
+	if knownEmptyBooks {
+		bridgeBookRecordID = "known-empty-bridge-book-" + plan.ID
+		reservationBookRecordID = "known-empty-reservation-book-" + plan.ID
+		sourceID += "-known-empty-books"
+	}
 	sourceRefs := []domain.SourceReference{
 		sourceRef("synthetic-fixture", "customer-"+plan.ID, runID, anchor),
-		sourceRef("synthetic-ledger", "bridge-"+plan.ID, runID, anchor),
-		sourceRef("synthetic-ledger", "reservation-"+plan.ID, runID, anchor),
+		sourceRef("synthetic-ledger", bridgeBookRecordID, runID, anchor),
+		sourceRef("synthetic-ledger", reservationBookRecordID, runID, anchor),
 		sourceRef("synthetic-accounting", "invoice-"+plan.ID, runID, anchor),
 		sourceRef("synthetic-fixture", "classification-"+plan.ID, runID, anchor),
 	}
@@ -370,10 +434,24 @@ func customerFixture(plan scenarioPlan, runID string, anchor time.Time, today, w
 	}
 	onboarding, active, suspended := true, true, false
 	accountStatus := "ACTIVE"
+	bridges := []domain.Bridge{{
+		ID: runID + "-bridge-" + plan.ID, TransactionID: bridgeTransactionID,
+		OriginalPrincipalCents: 1_000_000, PrincipalOwedCents: 1_000_000,
+		FeesOwedCents: 100_000, Status: "OPEN",
+		OpenedOn: domain.Date(bridgeOpened.Format("2006-01-02")), DueOn: domain.Date(bridgeDue.Format("2006-01-02")),
+	}}
+	reservations := []domain.Reservation{{
+		ID: runID + "-reservation-" + plan.ID, TransactionID: reservationTransactionID,
+		PrincipalCents: reservationPrincipal, FeeCents: 0, Status: "ACTIVE",
+	}}
+	if knownEmptyBooks {
+		bridges = make([]domain.Bridge, 0)
+		reservations = make([]domain.Reservation, 0)
+	}
 	snapshot := domain.CustomerSnapshot{
 		SnapshotMetadata: domain.SnapshotMetadata{
 			SchemaVersion: domain.SchemaVersion, SourceMode: "DEMO",
-			SourceID: "underwriting-demo-fixtures", SourceVersion: runID + "-" + plan.ID,
+			SourceID: sourceID, SourceVersion: runID + "-" + plan.ID,
 			CapturedAt: anchor.UTC(), SourceRefs: sourceRefs,
 		},
 		CustomerID: plan.CustomerID, AccountID: plan.AccountID, CardID: plan.CardID,
@@ -389,20 +467,12 @@ func customerFixture(plan scenarioPlan, runID string, anchor time.Time, today, w
 		},
 		BalanceHistory: make([]domain.Balance, 0, 90),
 		InflowHistory: []domain.Inflow{
-			{ID: runID + "-" + plan.ID + "-inflow-1", Date: domain.Date(today.AddDate(0, 0, -20).Format("2006-01-02")), AmountCents: 10_000_000, Kind: "EXTERNAL_SETTLED", PayerID: "synthetic-payer-1"},
-			{ID: runID + "-" + plan.ID + "-inflow-2", Date: domain.Date(today.AddDate(0, 0, -50).Format("2006-01-02")), AmountCents: 10_000_000, Kind: "EXTERNAL_SETTLED", PayerID: "synthetic-payer-1"},
-			{ID: runID + "-" + plan.ID + "-inflow-3", Date: domain.Date(today.AddDate(0, 0, -80).Format("2006-01-02")), AmountCents: 10_000_000, Kind: "EXTERNAL_SETTLED", PayerID: "synthetic-payer-1"},
+			{ID: runID + "-" + plan.ID + "-inflow-1", Date: domain.Date(today.AddDate(0, 0, -20).Format("2006-01-02")), AmountCents: monthlyInflowsCents, Kind: "EXTERNAL_SETTLED", PayerID: "synthetic-payer-1"},
+			{ID: runID + "-" + plan.ID + "-inflow-2", Date: domain.Date(today.AddDate(0, 0, -50).Format("2006-01-02")), AmountCents: monthlyInflowsCents, Kind: "EXTERNAL_SETTLED", PayerID: "synthetic-payer-1"},
+			{ID: runID + "-" + plan.ID + "-inflow-3", Date: domain.Date(today.AddDate(0, 0, -80).Format("2006-01-02")), AmountCents: monthlyInflowsCents, Kind: "EXTERNAL_SETTLED", PayerID: "synthetic-payer-1"},
 		},
-		Bridges: []domain.Bridge{{
-			ID: runID + "-bridge-" + plan.ID, TransactionID: bridgeTransactionID,
-			OriginalPrincipalCents: 1_000_000, PrincipalOwedCents: 1_000_000,
-			FeesOwedCents: 100_000, Status: "OPEN",
-			OpenedOn: domain.Date(bridgeOpened.Format("2006-01-02")), DueOn: domain.Date(bridgeDue.Format("2006-01-02")),
-		}},
-		Reservations: []domain.Reservation{{
-			ID: runID + "-reservation-" + plan.ID, TransactionID: reservationTransactionID,
-			PrincipalCents: reservationPrincipal, FeeCents: 0, Status: "ACTIVE",
-		}},
+		Bridges:      bridges,
+		Reservations: reservations,
 		Receivables: []domain.Invoice{{
 			InvoiceID: runID + "-invoice-" + plan.ID, PayerID: "synthetic-payer-1", Currency: "USD",
 			EligibleUnpaidCents: 800_000, AllocatedCents: 0, DueOn: dueOn,
@@ -424,18 +494,25 @@ func customerFixture(plan scenarioPlan, runID string, anchor time.Time, today, w
 	return snapshot, nil
 }
 
-func facilityFixture(runID string, anchor time.Time) (domain.FacilitySnapshot, error) {
+func facilityFixture(runID string, anchor time.Time, fundedPrincipalCents, reservedPrincipalCents int64,
+	knownEmptyBooks bool) (domain.FacilitySnapshot, error) {
+	sourceID := "underwriting-demo-fixtures"
+	recordID := "facility-underwriting-demo"
+	if knownEmptyBooks {
+		sourceID += "-known-empty-books"
+		recordID += "-known-empty-books"
+	}
 	return domain.FacilitySnapshot{
 		SnapshotMetadata: domain.SnapshotMetadata{
 			SchemaVersion: domain.SchemaVersion, SourceMode: "DEMO",
-			SourceID: "underwriting-demo-fixtures", SourceVersion: runID,
+			SourceID: sourceID, SourceVersion: runID,
 			CapturedAt: anchor.UTC(), SourceRefs: []domain.SourceReference{
-				sourceRef("synthetic-fixture", "facility-underwriting-demo", runID, anchor),
+				sourceRef("synthetic-fixture", recordID, runID, anchor),
 			},
 		},
 		FacilityID: expectedFacilityID, Currency: "USD", FacilityTotalCents: 100_000_000,
-		ReserveFloorBPS: 2000, FundedPrincipalCents: 8_000_000,
-		ReservedPrincipalCents: 2_000_000, LedgerVersion: runID, LedgerComplete: true,
+		ReserveFloorBPS: 2000, FundedPrincipalCents: fundedPrincipalCents,
+		ReservedPrincipalCents: reservedPrincipalCents, LedgerVersion: runID, LedgerComplete: true,
 	}, nil
 }
 

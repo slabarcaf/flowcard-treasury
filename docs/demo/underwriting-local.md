@@ -142,6 +142,29 @@ but a run with stale facility/shortfall timestamps must be regenerated before
 evaluation. Prepare does not run migrations, change mappings or insert
 assessments.
 
+The optional `--book-profile` flag defaults to `standard`; the command above
+preserves the existing fixture values. For a combined proof that starts from
+known-empty debt and reservation books, prepare with:
+
+```bash
+go -C services/underwriting-engine run ./cmd/demo prepare \
+  --scenario all --as-of now --out .dev/demo \
+  --book-profile known-empty
+```
+
+This profile emits explicit empty `bridges` and `reservations` arrays, with
+complete coverage and synthetic source references that identify the books as
+known-empty. It creates no legacy obligation rows. Facility total and reserve
+floor remain unchanged; funded, reserved and other commitments are zero, so
+available capital is $800,000. All cases retain $7,000 principal, $190 fee,
+and $7,190 total due. The eligible and missing-date cases use $100,000 monthly
+inflows and a $20,000 line. The capacity case uses $30,000 monthly inflows and
+a $6,000 line, so its $7,190 post-funding exposure fails
+`CUSTOMER_CAPACITY`. The missing-date case keeps its null, unverified invoice
+date and returns `RECEIVABLE_COVERAGE` UNKNOWN. This changes synthetic inputs
+only; policy values and rules are unchanged. Unsupported profile names are
+rejected before output files are written.
+
 The generated mapping script has a database-name guard and only inserts the
 known synthetic roster/card pairs. By default the manifest and script target
 `flowcard_underwriting_demo`. For disposable verification, choose a fresh name

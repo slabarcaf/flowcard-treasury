@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -101,6 +102,30 @@ func TestUnderwritingContract(t *testing.T) {
 		!validDemoDatabaseName(defaultDemoDatabaseName+"_task_f_20261114") {
 		t.Fatal("validDemoDatabaseName() rejected a supported task-owned name")
 	}
+	root, err := repositoryRoot()
+	if err != nil {
+		t.Fatal("repositoryRoot() error:", err)
+	}
+	invalidRunID, err := randomUUID()
+	if err != nil {
+		t.Fatal("randomUUID() error:", err)
+	}
+	invalidOutput := filepath.Join(
+		".dev",
+		"invalid-book-profile-"+strings.ReplaceAll(invalidRunID, "-", ""),
+	)
+	invalidOutputPath := filepath.Join(root, invalidOutput)
+	t.Cleanup(func() {
+		if err := os.RemoveAll(invalidOutputPath); err != nil {
+			t.Errorf("remove invalid-profile test output: %v", err)
+		}
+	})
+	if err := runPrepare([]string{"--book-profile", "unsupported", "--out", invalidOutput}); err == nil {
+		t.Fatal("runPrepare(unsupported profile) succeeded")
+	}
+	if _, err := os.Stat(invalidOutputPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runPrepare(unsupported profile) created output, stat error = %v", err)
+	}
 	for _, name := range []string{
 		"flowcard_underwriting_demo_test;DROP DATABASE postgres",
 		"flowcard_underwriting_demo_UPPER", "other_database",
@@ -115,6 +140,170 @@ func TestUnderwritingContract(t *testing.T) {
 	if manifest.DatabaseName != defaultDemoDatabaseName+"_task_f_contract" {
 		t.Fatalf("generated database name = %q", manifest.DatabaseName)
 	}
+	emptyBundleRoot, emptyManifest, _ := makeTestBundleWithProfile(t,
+		defaultDemoDatabaseName+"_task_f_known_empty", knownEmptyBookProfile)
+	if emptyManifest.Provenance == manifest.Provenance || !strings.Contains(emptyManifest.Provenance, "known-empty") {
+		t.Fatalf("known-empty manifest provenance = %q", emptyManifest.Provenance)
+	}
+	if emptyManifest.FacilityBooks.FacilityTotalCents != 100_000_000 ||
+		emptyManifest.FacilityBooks.ReserveFloorBPS != 2000 ||
+		emptyManifest.FacilityBooks.FundedPrincipalCents != 0 ||
+		emptyManifest.FacilityBooks.CustomerFundedPrincipalCents != 0 ||
+		emptyManifest.FacilityBooks.OtherFundedPrincipalCents != 0 ||
+		emptyManifest.FacilityBooks.ReservedPrincipalCents != 0 ||
+		emptyManifest.FacilityBooks.CustomerReservedPrincipalCents != 0 ||
+		emptyManifest.FacilityBooks.OtherReservedPrincipalCents != 0 ||
+		emptyManifest.FacilityBooks.AvailableCapitalCents != 80_000_000 {
+		t.Fatalf("known-empty facility books = %+v", emptyManifest.FacilityBooks)
+	}
+	wantEmptyScenarios := map[string]struct {
+		limitCents          int64
+		monthlyInflowsCents int64
+		status              string
+		capacityRuleStatus  string
+	}{
+		"eligible":                 {limitCents: 2_000_000, monthlyInflowsCents: 10_000_000, status: "ELIGIBLE", capacityRuleStatus: "PASS"},
+		"capacity_exceeded":        {limitCents: 600_000, monthlyInflowsCents: 3_000_000, status: "INELIGIBLE", capacityRuleStatus: "FAIL"},
+		"missing_receivable_dates": {limitCents: 2_000_000, monthlyInflowsCents: 10_000_000, status: "REVIEW_REQUIRED", capacityRuleStatus: "PASS"},
+	}
+	traceData, err := os.ReadFile(filepath.Join(emptyBundleRoot, filepath.FromSlash(emptyManifest.ExpectedTraceFile)))
+	if err != nil {
+		t.Fatal("read known-empty expected traces:", err)
+	}
+	var traces []generatedScenario
+	if err := json.Unmarshal(traceData, &traces); err != nil || len(traces) != len(wantEmptyScenarios) {
+		t.Fatalf("decode known-empty expected traces: count %d, error %v", len(traces), err)
+	}
+	if len(emptyManifest.Scenarios) != len(wantEmptyScenarios) {
+		t.Fatalf("known-empty scenario count = %d, want %d", len(emptyManifest.Scenarios), len(wantEmptyScenarios))
+	}
+	for i, scenario := range emptyManifest.Scenarios {
+		want, ok := wantEmptyScenarios[scenario.ID]
+		if !ok {
+			t.Fatalf("unexpected known-empty scenario %q", scenario.ID)
+		}
+		if scenario.PrincipalCents != 700_000 || scenario.EstimatedFeeCents != 19_000 ||
+			scenario.TotalDueCents != 719_000 || scenario.CustomerLimitCents != want.limitCents ||
+			scenario.ExistingExposureCents != 0 || scenario.PostFundingExposureCents != 719_000 ||
+			scenario.ExpectedStatus != want.status || !strings.Contains(scenario.Provenance, "known-empty") {
+			t.Fatalf("known-empty scenario %q = %+v", scenario.ID, scenario)
+		}
+		expectedRulesMatch := len(traces[i].ExpectedRules) == len(scenario.ExpectedRules)
+		for ruleIndex := range scenario.ExpectedRules {
+			if !expectedRulesMatch || traces[i].ExpectedRules[ruleIndex] != scenario.ExpectedRules[ruleIndex] {
+				expectedRulesMatch = false
+				break
+			}
+		}
+		if traces[i].ID != scenario.ID || traces[i].CustomerLimitCents != scenario.CustomerLimitCents ||
+			traces[i].ExistingExposureCents != 0 || traces[i].PostFundingExposureCents != 719_000 ||
+			traces[i].ExpectedStatus != scenario.ExpectedStatus || !expectedRulesMatch {
+			t.Fatalf("known-empty expected trace %q = %+v, scenario = %+v", traces[i].ID, traces[i], scenario)
+		}
+		capacityRuleStatus, receivableRuleStatus := "", ""
+		for _, rule := range scenario.ExpectedRules {
+			switch rule.RuleID {
+			case "CUSTOMER_CAPACITY":
+				capacityRuleStatus = rule.Status
+			case "RECEIVABLE_COVERAGE":
+				receivableRuleStatus = rule.Status
+			}
+		}
+		if capacityRuleStatus != want.capacityRuleStatus {
+			t.Fatalf("known-empty scenario %q capacity rule = %q, want %q", scenario.ID, capacityRuleStatus, want.capacityRuleStatus)
+		}
+		if scenario.ID == "missing_receivable_dates" && receivableRuleStatus != "UNKNOWN" {
+			t.Fatalf("known-empty missing-date receivable rule = %q, want UNKNOWN", receivableRuleStatus)
+		}
+		customerBytes, err := os.ReadFile(filepath.Join(emptyBundleRoot, filepath.FromSlash(scenario.CustomerFile)))
+		if err != nil {
+			t.Fatal("read known-empty customer snapshot:", err)
+		}
+		var customer domain.CustomerSnapshot
+		if err := json.Unmarshal(customerBytes, &customer); err != nil {
+			t.Fatal("decode known-empty customer snapshot:", err)
+		}
+		wantCoverage := domain.Coverage{
+			Standing: true, BalanceHistory: true, InflowHistory: true,
+			BridgeHistory: true, LifetimeDefaults: true, Reservations: true,
+			Receivables: true, Classification: true,
+		}
+		if customer.Bridges == nil || len(customer.Bridges) != 0 ||
+			customer.Reservations == nil || len(customer.Reservations) != 0 ||
+			customer.Coverage != wantCoverage || !strings.Contains(customer.SourceID, "known-empty-books") ||
+			len(customer.SourceRefs) != 5 {
+			t.Fatalf("known-empty customer books/source = bridges %+v reservations %+v coverage %+v source %q",
+				customer.Bridges, customer.Reservations, customer.Coverage, customer.SourceID)
+		}
+		if len(customer.InflowHistory) != 3 {
+			t.Fatalf("known-empty scenario %q inflow count = %d, want 3", scenario.ID, len(customer.InflowHistory))
+		}
+		var totalInflows int64
+		for _, inflow := range customer.InflowHistory {
+			if inflow.AmountCents != want.monthlyInflowsCents {
+				t.Fatalf("known-empty scenario %q inflow = %d, want %d",
+					scenario.ID, inflow.AmountCents, want.monthlyInflowsCents)
+			}
+			totalInflows += inflow.AmountCents
+		}
+		if totalInflows/int64(len(customer.InflowHistory)) != want.monthlyInflowsCents {
+			t.Fatalf("known-empty scenario %q average inflows = %d, want %d",
+				scenario.ID, totalInflows/int64(len(customer.InflowHistory)), want.monthlyInflowsCents)
+		}
+		if customer.SourceRefs[1].RecordID != "known-empty-bridge-book-"+scenario.ID ||
+			customer.SourceRefs[2].RecordID != "known-empty-reservation-book-"+scenario.ID {
+			t.Fatalf("known-empty scenario %q book source refs = %+v", scenario.ID, customer.SourceRefs)
+		}
+		if scenario.ID == "missing_receivable_dates" {
+			if len(customer.Receivables) != 1 || customer.Receivables[0].DueOn != nil || customer.Receivables[0].DueDateVerified {
+				t.Fatalf("known-empty missing-date receivable = %+v", customer.Receivables)
+			}
+		} else if len(customer.Receivables) != 1 || customer.Receivables[0].DueOn == nil || !customer.Receivables[0].DueDateVerified {
+			t.Fatalf("known-empty scenario %q receivable facts changed: %+v", scenario.ID, customer.Receivables)
+		}
+		if len(customer.Classifications) != 1 || customer.Classifications[0].TransactionID != scenario.TransactionID ||
+			customer.Classifications[0].MerchantCategory != "suppliers" {
+			t.Fatalf("known-empty scenario %q merchant/payment classification changed: %+v",
+				scenario.ID, customer.Classifications)
+		}
+	}
+	facilityData, err := os.ReadFile(filepath.Join(emptyBundleRoot, filepath.FromSlash(emptyManifest.FacilityFile)))
+	if err != nil {
+		t.Fatal("read known-empty facility snapshot:", err)
+	}
+	var emptyFacility domain.FacilitySnapshot
+	if err := json.Unmarshal(facilityData, &emptyFacility); err != nil {
+		t.Fatal("decode known-empty facility snapshot:", err)
+	}
+	if emptyFacility.FacilityTotalCents != 100_000_000 || emptyFacility.ReserveFloorBPS != 2000 ||
+		emptyFacility.FundedPrincipalCents != 0 || emptyFacility.ReservedPrincipalCents != 0 ||
+		!emptyFacility.LedgerComplete ||
+		!strings.Contains(emptyFacility.SourceID, "known-empty-books") {
+		t.Fatalf("known-empty facility snapshot = %+v", emptyFacility)
+	}
+	mappingData, err := os.ReadFile(filepath.Join(emptyBundleRoot, filepath.FromSlash(emptyManifest.MappingSetupSQL)))
+	if err != nil {
+		t.Fatal("read known-empty mapping setup:", err)
+	}
+	if !strings.Contains(string(mappingData), "current_database() <> '"+emptyManifest.DatabaseName+"'") {
+		t.Fatalf("known-empty mapping SQL does not guard database %q", emptyManifest.DatabaseName)
+	}
+	shortfallsData, err := os.ReadFile(filepath.Join(emptyBundleRoot, filepath.FromSlash(emptyManifest.ShortfallsFile)))
+	if err != nil {
+		t.Fatal("read known-empty shortfall fixtures:", err)
+	}
+	var shortfalls shortfallFixturePack
+	if err := json.Unmarshal(shortfallsData, &shortfalls); err != nil || len(shortfalls.Records) != len(wantEmptyScenarios) {
+		t.Fatalf("decode known-empty shortfall fixtures: count %d, error %v", len(shortfalls.Records), err)
+	}
+	for _, record := range shortfalls.Records {
+		if record.Response.ShortfallCents == nil || *record.Response.ShortfallCents != 700_000 ||
+			record.Response.AttemptedAmountCents == nil || *record.Response.AttemptedAmountCents != 900_000 ||
+			record.Response.AvailableBalanceCents == nil || *record.Response.AvailableBalanceCents != 200_000 {
+			t.Fatalf("known-empty scenario %q shortfall/payment facts changed: %+v",
+				record.ScenarioID, record.Response)
+		}
+	}
 	loadedRoot, loaded, err := loadGeneratedManifest(filepath.Join(bundleRoot, "manifest.json"))
 	if err != nil || loadedRoot != bundleRoot || loaded.RunID != manifest.RunID {
 		t.Fatalf("loadGeneratedManifest(portable) = root %q run %q err %v",
@@ -125,40 +314,43 @@ func TestUnderwritingContract(t *testing.T) {
 		t.Fatalf("loadGeneratedManifest(retained run) error = %v", err)
 	}
 	listener, err := net.Listen("tcp4", demoShortfallAddress)
-	if err != nil {
-		t.Fatalf("DEMO shortfall port %s is occupied: %v", demoShortfallAddress, err)
-	}
-	if err := listener.Close(); err != nil {
-		t.Fatal("release shortfall port preflight:", err)
-	}
-	t.Setenv("UNDERWRITING_MODE", "DEMO")
-	t.Setenv("SHORTFALL_SERVICE_SECRET", secret)
-	serveContext, stopServe := context.WithCancel(context.Background())
-	serveDone := make(chan error, 1)
-	go func() {
-		serveDone <- runServeShortfalls(serveContext,
-			[]string{"--manifest", filepath.Join(bundleRoot, "manifest.json")})
-	}()
-	if err := waitForDemoShortfall(t, demoShortfallAddress); err != nil {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		t.Logf("skip local serve-shortfalls check because %s is already in use", demoShortfallAddress)
+	} else if err != nil {
+		t.Fatal("DEMO shortfall port preflight:", err)
+	} else {
+		if err := listener.Close(); err != nil {
+			t.Fatal("release shortfall port preflight:", err)
+		}
+		t.Setenv("UNDERWRITING_MODE", "DEMO")
+		t.Setenv("SHORTFALL_SERVICE_SECRET", secret)
+		serveContext, stopServe := context.WithCancel(context.Background())
+		serveDone := make(chan error, 1)
+		go func() {
+			serveDone <- runServeShortfalls(serveContext,
+				[]string{"--manifest", filepath.Join(bundleRoot, "manifest.json")})
+		}()
+		if err := waitForDemoShortfall(t, demoShortfallAddress); err != nil {
+			stopServe()
+			<-serveDone
+			t.Fatal("serve-shortfalls did not become available:", err)
+		}
+		servedClient, err := shortfall.NewClient("http://"+demoShortfallAddress, secret)
+		if err != nil {
+			stopServe()
+			<-serveDone
+			t.Fatal("NewClient(DEMO mock) error:", err)
+		}
+		servedRecord, err := servedClient.Get(context.Background(), manifest.Scenarios[0].ShortfallID, time.Now().UTC())
+		if err != nil || servedRecord.ID != manifest.Scenarios[0].ShortfallID {
+			stopServe()
+			<-serveDone
+			t.Fatalf("authenticated serve-shortfalls GET = %q err %v", servedRecord.ID, err)
+		}
 		stopServe()
-		<-serveDone
-		t.Fatal("serve-shortfalls did not become available:", err)
-	}
-	servedClient, err := shortfall.NewClient("http://"+demoShortfallAddress, secret)
-	if err != nil {
-		stopServe()
-		<-serveDone
-		t.Fatal("NewClient(DEMO mock) error:", err)
-	}
-	servedRecord, err := servedClient.Get(context.Background(), manifest.Scenarios[0].ShortfallID, time.Now().UTC())
-	if err != nil || servedRecord.ID != manifest.Scenarios[0].ShortfallID {
-		stopServe()
-		<-serveDone
-		t.Fatalf("authenticated serve-shortfalls GET = %q err %v", servedRecord.ID, err)
-	}
-	stopServe()
-	if err := <-serveDone; err != nil {
-		t.Fatal("serve-shortfalls shutdown:", err)
+		if err := <-serveDone; err != nil {
+			t.Fatal("serve-shortfalls shutdown:", err)
+		}
 	}
 
 	customerPath := filepath.Join(bundleRoot, filepath.FromSlash(manifest.Scenarios[0].CustomerFile))
@@ -329,6 +521,10 @@ func TestUnderwritingContract(t *testing.T) {
 }
 
 func makeTestBundle(t *testing.T, databaseName string) (string, generatedManifest, time.Time) {
+	return makeTestBundleWithProfile(t, databaseName, standardBookProfile)
+}
+
+func makeTestBundleWithProfile(t *testing.T, databaseName, bookProfile string) (string, generatedManifest, time.Time) {
 	t.Helper()
 	root, err := repositoryRoot()
 	if err != nil {
@@ -350,7 +546,7 @@ func makeTestBundle(t *testing.T, databaseName string) (string, generatedManifes
 		t.Fatal("create fixture bundle:", err)
 	}
 	manifest, err := materializeRun(".dev/demo", databaseName, runDirectory, runID,
-		anchor, config.PolicyID(), config.PolicyHash(), pack.Scenarios)
+		anchor, config.PolicyID(), config.PolicyHash(), bookProfile, pack.Scenarios)
 	if err != nil {
 		t.Fatal("materializeRun() error:", err)
 	}
