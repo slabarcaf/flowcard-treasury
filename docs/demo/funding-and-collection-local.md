@@ -1,10 +1,12 @@
 # Funding and collection local fixture
 
-This runbook describes the Task 12A/12B source workflow and the later gated
-local journey. It uses synthetic DEMO funding and provider facts, the committed
-public underwriting policy and authenticated service APIs. The runner and
-commands compile, but no database, app or provider execution has been run from
-this worktree. The local provider double is not Airwallex acceptance.
+This runbook describes the local DEMO journey using synthetic funding and
+provider facts, the committed public underwriting policy and authenticated
+service APIs. The real API, worker and HTTP adapter passed component tests
+and the actual joined Underwriting/Coordinator/Funding run on November 15,
+2026. See the [verification report](/docs/demo/funding-and-collection-verification.md)
+for exact source, amounts and evidence. The local provider double is not
+Airwallex acceptance.
 
 [TOC]
 
@@ -542,8 +544,9 @@ docker build -f services/funding-collection/Dockerfile \
   -t flowcard-funding-demo:local .
 ```
 
-This image build is deferred to the final verification gate; it was not run
-during Task 12A or 12B source work.
+The verified joined journey used standalone binaries. Container image build
+and container startup were not exercised by that proof; they remain separate
+packaging checks.
 
 The source-level 12B runner uses authenticated actor/API calls and the real
 worker/adapter. The component profile specifies $7,000 principal, 30 days,

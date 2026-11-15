@@ -2,8 +2,8 @@
 
 Updated November 15, 2026. The separate Go service in
 [the design](/docs/designs/funding-and-collection.md) is implemented and
-component-tested. This document distinguishes completed source work from
-remaining joined-runtime acceptance and later cutover.
+component- and joined-runtime-tested. This document records the completed
+local fixture delivery and the separately deferred Node/live cutover.
 
 [TOC]
 
@@ -18,7 +18,10 @@ November 15, 2026: component implementation `9a687ca`, scope correction
 `e8d68a2`, Ramil-authorized test cleanup `1d82beb`, and standalone provider
 balance fix `ae90c96` are integrated into local `develop` at `edbcebf`.
 All seven Funding tests passed on the integrated tree; build and vet passed.
-Task 13 joined Underwriting/Coordinator/Funding acceptance remains open.
+The corrected joined Underwriting/Coordinator/Funding journey subsequently
+passed on `5cea5c6`, with independent financial and Coordinator read/feed
+audits. Tasks 1–13 are complete for the local fixture delivery. See the
+[verification report](/docs/demo/funding-and-collection-verification.md).
 
 The first actual joined run created a linked offer and acceptance, then saved
 422 `PROVIDER_READ_HELD` before funding. The standalone provider double had
@@ -36,6 +39,14 @@ list, fixing `RECEIVABLE_COVERAGE_UNKNOWN` during component preparation.
 Both preparation modes now pass their focused regression. These follow-ups
 retain all real authority, policy and freshness guards.
 
+Corrected run `da3bc19b-085d-4ff3-80c4-33b570b4896a` linked the actual saved
+Coordinator case/evaluation to the accepted offer and settled bridge. It
+funded 700000 cents and collected 19000 cents in fees followed by 700000 cents
+in principal from the two deposits, recovering the dropped collection reply
+with four provider creates total. Funding ended REPAID with zero debt, holds
+and backing. Coordinator closed its linked collection case at bridge version
+28 and consumed the feed through sequence 58, including recovery changes.
+
 Evidence available in this execution environment:
 
 - `/tmp/funding-component-verification.md`: original component proof.
@@ -52,10 +63,11 @@ Evidence available in this execution environment:
 - Main checkout `.dev/integration/20261114/funding-corrected-merged-tests.json`:
   independent integrated seven-test PASS, with zero skips.
 
-These ignored/local artifacts support component acceptance; they do not prove
-a completed joined journey. Source checkboxes below mean implemented and
-source-accepted. Demonstration and verification checkboxes require the stated
-runtime or test evidence. Task 14 and live acceptance remain separate scope.
+The verification report records the actual joined result, independent
+read-only audits and their retained evidence paths. Source checkboxes below
+mean implemented and source-accepted; demonstration and verification boxes
+are backed by their stated runtime or test evidence. Task 14 and live
+acceptance remain separate scope.
 Ramil removed the numeric test cap: prefer isolated focused tests and concise
 journeys, preserve assertions, and reuse existing fixtures and dependencies.
 
@@ -87,12 +99,12 @@ the shared runtime launches and source refresh. Preserve user files, existing
 runtime processes and database volumes. Do not copy or read root `.env`.
 Never mark tasks complete for planned code.
 
-Source review and component verification are complete for the delivered
-service. Task 13 closes the first delivery after joined-runtime acceptance
-and resolution of the explicitly unverified checks below. Task 14 remains a
-separately authorized later migration phase. Use focused behavior and failure
-scenarios rather than exhaustive permutations. New source follows Go style
-and explicit typed boundaries; fixture results never imply live acceptance.
+Source review, focused tests and joined-runtime verification are complete for
+the local fixture service. Task 13 closes this first delivery. Task 14 remains
+a separately authorized later migration phase. Use focused behavior and
+failure scenarios rather than exhaustive permutations. New source follows Go
+style and explicit typed boundaries; fixture results never imply live
+acceptance.
 
 ## Context and integration contracts
 
@@ -109,7 +121,7 @@ collection or 5-bps/day fee. Funding settlement precedes card retry; no retry
 implementation in this plan.
 
 The following contracts are implemented for the local DEMO boundary; their
-shared-runtime linkage remains to be proved in Task 13. SANDBOX authority and
+shared-runtime linkage was proved in Task 13. SANDBOX authority and
 real provider extraction remain live acceptance requirements:
 
 - Public pure Go underwriting `policy` package usable outside its module's
@@ -515,7 +527,7 @@ holding debt state or selecting its own monetary commands.
 - [x] Demonstrate component actor steps, reservation, confirmed funding,
   partial fee/principal collection, dropped-receipt recovery and same-identity
   reconciliation through the real API/worker/HTTP adapter.
-- [ ] Complete the standalone joined-process demonstration with actual saved
+- [x] Complete the standalone joined-process demonstration with actual saved
   Underwriting evaluation and Coordinator case, partial collections, recovery
   and linked Coordinator readback. Retain pending/held observations if seen.
 - [x] Expose liveness separately from DB/migration/policy/mode readiness;
@@ -558,7 +570,8 @@ path reads a fresh owner-prepared known-empty Underwriting manifest without
 changing its source facts; the host supplies the saved assessment ID and
 matching coordinator case ID. This checkpoint originally covered source
 only. Task 12 source review and Task 13 component verification subsequently
-passed; the corrected standalone joined journey remains open.
+passed; the corrected standalone joined journey has now passed as recorded
+in the verification report.
 
 ### Task 13: Final focused verification and review report
 
@@ -618,14 +631,15 @@ passed; the corrected standalone joined journey remains open.
   holds without rewriting frozen zero-principal accrual days.
 - [x] Test prepared system-actor presence and invoice provenance using both
   external and built-in materialization, preserving real shared-policy checks.
-- [ ] Complete the corrected shared Underwriting/Coordinator/Funding process
+- [x] Complete the corrected shared Underwriting/Coordinator/Funding process
   journey on fresh uniquely owned books, preserving the first failed 422.
   Capture exact case/evaluation/offer/bridge links, $7000 funding, $100 then
   $7090 deposits, $190 fee-first repayment, zero debt/backing/holds and actual
   Coordinator feed/detail progress through closure and uncertain recovery.
-- [ ] Review joined evidence and final contract/design/runbook consistency,
-  record actual remaining limitations, and close this delivery. Do not archive
-  or claim live/provider acceptance from component-only evidence.
+- [x] Review joined evidence and final contract/design/runbook consistency,
+  record actual remaining limitations and close this local fixture delivery.
+  The plan retains Task 14 and live gates; no live/provider acceptance is
+  inferred from local evidence.
 
 Commands used from the service directory, with cached dependencies and a
 privately supplied `FUNDING_TEST_ADMIN_URL_FILE` for isolated databases:
@@ -645,7 +659,7 @@ Each acceptance scenario can run independently.
 There is no fixed test-count cap. Keep new coverage tied to a concrete risk
 and reuse typed fixtures; new dependencies/infrastructure need approval.
 
-#### Corrected joined journey completion proposal
+#### Executed corrected joined journey
 
 1. Confirm the single shared runtime owner has all corrected binaries,
    restricted DB profiles, source preparation and launch commands ready.
@@ -673,9 +687,11 @@ and reuse typed fixtures; new dependencies/infrastructure need approval.
    expires before a required decision. Review the focused-assertion evidence
    and final joined captures before marking Task 13 done.
 
-The lead already owns this coordinated runtime continuation. Do not launch a
-second process set or independently refresh its source bundle. No live
-provider/model calls, deployment, Node cutover or financial-state injection.
+The lead executed this coordinated runtime sequence; independent read-only
+Funding and Coordinator audits passed. Preserve retained runtime ownership
+and source windows; do not launch duplicate consumers or rewrite old runs.
+No live provider/model calls, deployment, Node cutover or financial-state
+injection.
 
 ## Later separately authorized migration phase
 
@@ -724,7 +740,7 @@ implementation checklist. A fixture report cannot mark them passed.
 
 - Verify real shortfall extraction, trusted fresh payment/balance state and
   live full-shortfall race semantics; upstream currently fails closed.
-- Implement/review upstream policy/facts and coordinator contracts,
+- Verify real upstream policy/facts and coordinator source contracts,
   single-writer opening exposure/receivable reconciliation and trusted
   customer delegation.
 - Pin CA transfer schemas, A/B account scopes, permissions, mandates,
