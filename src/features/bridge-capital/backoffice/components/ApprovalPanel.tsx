@@ -1,7 +1,7 @@
 /**
  * The approval door: approve as asked, or at terms the officer chooses.
  *
- * Nothing is decided here. Changing the amount or the term re-prices through
+ * Nothing is decided here. Changing the term re-prices through
  * `priceOffer` and re-runs `evaluate`, and the panel shows what the engine
  * says about the amended request before anything is committed.
  */
@@ -79,13 +79,13 @@ export function ApprovalPanel({
   onDecline: (reason: string) => void;
   onEscalate: () => void;
 }) {
-  const [principal, setPrincipal] = useState(request.principal);
+  const principal = request.principal;
   const [termDays, setTermDays] = useState(request.term_days);
   const [editing, setEditing] = useState(false);
 
-  const changed = principal !== request.principal || termDays !== request.term_days;
+  const changed = termDays !== request.term_days;
   const termValid = isValidTerm(termDays);
-  const principalValid = principal > 0;
+  const principalValid = principal > 0 && principal === request.principal;
   const usable = termValid && principalValid;
 
   // Re-run the engine against the amended request, so the officer sees what the
@@ -100,7 +100,7 @@ export function ApprovalPanel({
       {editing && (
         <div style={{ display: 'grid', gap: space.lg, background: color.bg, borderRadius: radius.xl, padding: space.xl }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: space.lg }}>
-            <NumberField label="Amount" value={principal} onChange={setPrincipal} prefix="$" />
+            <Row label="Full shortfall" value={usd(principal)} />
             <NumberField label="Term" value={termDays} onChange={setTermDays} suffix="days" />
           </div>
 
@@ -134,7 +134,7 @@ export function ApprovalPanel({
           )}
           {!principalValid && (
             <div style={{ color: color.critical, fontSize: font.size.sm }}>
-              Amount must be more than zero.
+              A bridge must cover the complete positive shortfall.
             </div>
           )}
 
@@ -202,7 +202,7 @@ export function ApprovalPanel({
 
       <div style={{ fontSize: font.size.sm, color: color.textMuted, lineHeight: 1.5 }}>
         {decision !== null && !decision.eligible
-          ? 'Approval is closed at these terms: a person decides where the regime asks for one, not whether a rule applies. Change the amount or the term until every rule passes, or decline.'
+          ? 'Approval is closed at these terms. Change the term until every rule passes, or decline.'
           : 'Approval is bound to this customer, amount, fee and term. Change any of them and it is void, and a new offer has to be issued.'}
       </div>
     </div>

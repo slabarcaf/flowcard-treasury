@@ -6,7 +6,8 @@
  * customer is shown the new offer instead of a retry button.
  */
 import { buildOffer, priceOffer } from '../../policy/pricing.js';
-import { isAcceptanceValid } from '../../policy/binding.js';
+import { isAcceptanceValid, isApprovalValid } from '../../policy/binding.js';
+import { evaluate } from '../../policy/eligibility.js';
 import { color, font, space } from '../tokens.js';
 import { usd, shortDate } from '../../ui/format.js';
 import type { Portal } from '../usePortal.js';
@@ -78,6 +79,26 @@ export function AcceptedScreen({ portal, transactionId }: { portal: Portal; tran
     );
   }
 
+  const decision = evaluate({ ...request, term_days: termDays }, customer, data.capital, { today: portal.today });
+  const approval = data.approvals[offer.id];
+  const awaitingApproval = decision.needs_human_approval && (approval === undefined || !isApprovalValid(approval, offer));
+
+  if (!decision.eligible || awaitingApproval) {
+    return (
+      <div style={{ display: 'grid', gap: space['2xl'] }}>
+        <BackLink onClick={() => go({ screen: 'wallet' })}>Wallet</BackLink>
+        <Heading>{awaitingApproval ? 'Accepted, awaiting approval' : 'This bridge needs review'}</Heading>
+        <Callout tone="warning">
+          {awaitingApproval
+            ? 'Your acceptance is saved. A credit officer must approve these exact terms before the payment can be retried.'
+            : 'The current policy checks do not allow funding. Your wallet has not been funded.'}
+        </Callout>
+        <Button variant="secondary" onClick={() => void portal.reload()}>Check approval status</Button>
+        <Button variant="secondary" onClick={() => go({ screen: 'decline', transactionId })}>Review the offer</Button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'grid', gap: space['2xl'] }}>
       <BackLink onClick={() => go({ screen: 'wallet' })}>Wallet</BackLink>
@@ -100,8 +121,10 @@ export function AcceptedScreen({ portal, transactionId }: { portal: Portal; tran
         we will ask you to accept again.
       </Callout>
 
-      <Button onClick={() => void retryPayment(request, offer)}>
-        Retry payment to {request.transaction.merchant_name}
+      {portal.actionError !== null && <Callout tone="warning">{portal.actionError}</Callout>}
+
+      <Button disabled={portal.retrying} onClick={() => void retryPayment(request, offer)}>
+        {portal.retrying ? 'Retrying payment…' : `Retry payment to ${request.transaction.merchant_name}`}
       </Button>
 
       <Button variant="secondary" onClick={() => go({ screen: 'decline', transactionId })}>
