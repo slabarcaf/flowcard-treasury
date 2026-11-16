@@ -205,3 +205,26 @@ Run the suite serially, or select a single scenario with `-run`:
 GOPROXY=off GOSUMDB=off go -C services/funding-collection test -p 1 ./... -count=1
 GOPROXY=off GOSUMDB=off go -C services/funding-collection test ./internal/acceptance -run '^TestFundingRecovery$' -count=1
 ```
+
+## Browser gateway DEMO delegation
+
+The browser gateway can bind invited real users to existing DEMO actors after
+an administrative verification. `GET /api/servicing/actor` authenticates the
+current ACTOR with its existing per-role key and returns only its internal
+actor/type/customer, mode/facility/source binding and fixture-only installation
+flag. Broad reader/system subjects cannot use this self-read. Customer mapping
+must exist and be active. No provider IDs or credentials are returned.
+
+An optional signed `binding` assertion field narrows actor ID/type/customer and
+mode/facility/source binding. Verification still derives authority from the
+actual authenticated subject, key class and current active registry. A
+restriction mismatch fails closed; constraints cannot grant authority. Existing
+CLI callers without these additive restrictions remain compatible. Gateway
+requests always carry the verified restrictions, so actor reassignment does
+not silently rebind a browser user.
+
+Offer create/read DTOs additionally expose actual `source_mode` and
+`customer_id`, enabling verified gateway indexing against the owning source.
+They introduce no client-selected customer authority or policy change. All
+existing exact terms/hash/version/idempotency, live delegation, provider,
+worker, financial guard and ledger contracts remain in force.

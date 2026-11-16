@@ -1,0 +1,103 @@
+// Explicit, bounded browser fixture only. Real gateway/Funding/worker/adapter,
+// fixture Coordinator/underwriting inputs and loopback mock provider facts.
+package acceptance_test
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/slabarcaf/flowcard-treasury/services/browser-gateway/internal/cli"
+	"github.com/slabarcaf/flowcard-treasury/services/browser-gateway/internal/config"
+	"github.com/slabarcaf/flowcard-treasury/services/browser-gateway/internal/httpapi"
+)
+
+func TestOwnedMoneyBrowserWalkthrough(t *testing.T) {
+	control, address := os.Getenv("BROWSER_GATEWAY_WALKTHROUGH_CONTROL"), os.Getenv("BROWSER_GATEWAY_WALKTHROUGH_ADDRESS")
+	if control == "" || address == "" {
+		t.Fatal("explicit owned browser control paths required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+	defer cancel()
+	e := owned(t)
+	fixture := moneyHarness(t, 13*time.Minute)
+	var packet map[string]any
+	if json.Unmarshal(fixture.Case, &packet) != nil {
+		t.Fatal("owned public case packet missing")
+	}
+	coordinator := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/coordinator/cases" {
+			json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{{"id": readCaseID, "kind": "SHORTFALL", "status": "COMPLETED", "next_stage": "COMPLETE", "customer_id": "synthetic-customer", "assessment_id": "synthetic-evaluation", "decision_status": packet["assessment"].(map[string]any)["status"], "bridge_id": nil, "bridge_version": nil, "updated_at": time.Now().UTC()}}, "next_cursor": nil})
+			return
+		}
+		w.Write(fixture.Case)
+	}))
+	defer coordinator.Close()
+	cfg, err := config.Parse("127.0.0.1:0", e.runtimeURL, "http://127.0.0.1:5175", "true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = cfg.WithFinancial(coordinator.URL, coordinatorReadSecret, fixture.URL, moneyReaderKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = cfg.WithDemoWrites("DEMO", moneyOperatorKey, moneyCustomerKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, user := range []struct{ name, role, subject string }{{"ui.operator", "OPERATOR", fixture.Operator}, {"ui.customer", "CUSTOMER", fixture.Customer}, {"ui.other", "CUSTOMER", fixture.Other}} {
+		e.user(t, user.name, user.role)
+		if cli.Bindings(ctx, []string{"create", "--username", user.name, "--subject", user.subject, "--database-name", e.name}, e.adminURL, cfg) != nil {
+			t.Fatal("owned UI binding verification failed")
+		}
+	}
+	gateway := httptest.NewServer(httpapi.New(cfg, e.store))
+	defer gateway.Close()
+	root, _ := filepath.Abs("../../../..")
+	vite := exec.CommandContext(ctx, filepath.Join(root, "node_modules/.bin/vite"), "--config", "vite.browser-gateway.config.ts")
+	vite.Dir = root
+	vite.Env = append(os.Environ(), "VITE_BROWSER_GATEWAY_ENABLED=true", "BROWSER_GATEWAY_DEV_TARGET="+gateway.URL)
+	vite.Stdout, vite.Stderr = io.Discard, io.Discard
+	if vite.Start() != nil {
+		t.Fatal("owned DEMO frontend launch failed")
+	}
+	done := make(chan error, 1)
+	go func() { done <- vite.Wait() }()
+	t.Cleanup(func() {
+		_ = vite.Process.Signal(os.Interrupt)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			cancel()
+			<-done
+		}
+	})
+	raw, _ := json.Marshal(map[string]string{"url": "http://127.0.0.1:5175/#bridge-capital", "gateway": gateway.URL, "provider_control": fixture.Control})
+	if os.WriteFile(address, raw, 0600) != nil {
+		t.Fatal("owned UI readiness file failed")
+	}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("owned DEMO browser deadline exceeded")
+		case err := <-done:
+			done <- err
+			t.Fatal("owned frontend exited early")
+		case <-ticker.C:
+			if _, err := os.Stat(control); os.IsNotExist(err) {
+				t.Log("owned DEMO browser stopped; disposing all owned resources")
+				return
+			}
+		}
+	}
+}

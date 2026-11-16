@@ -60,7 +60,11 @@ Ramil selected real customer/operator login on November 15, 2026. Follow
 - [x] Implement C: operator-only Coordinator/Funding reads, exact cents and
   versions, no financial writes or silent fixture fallback. See the
   [financial reads plan](/docs/plans/completed/20261115-browser-financial-reads.md).
-- [ ] Complete D: trusted customer bindings and actor-bound financial writes.
+- [x] Complete D source/owned DEMO verification: immutable verified bindings,
+  current actor constraints, distinct-user acceptance/approval, durable command
+  recovery and real API/worker/adapter funding plus fee-first repayment. See
+  [the Task D plan](/docs/plans/20261115-browser-customer-writes.md).
+  The local persistent instance is being wired separately.
 
 A-C were merged at `6a499b6` and verified together with UI cleanup `9e3ec34`.
 The integration checks and limits are recorded in

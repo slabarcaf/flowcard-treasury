@@ -21,14 +21,27 @@ type Identity struct {
 	CustomerID      string
 	ActorType       string
 	CredentialClass string
+	Binding         *BindingRestriction
+}
+
+// BindingRestriction narrows a trusted caller's subject to a verified registry
+// entry and installation. It never supplies the principal's actual authority.
+type BindingRestriction struct {
+	ActorID         string `json:"actor_id"`
+	ActorType       string `json:"actor_type"`
+	CustomerID      string `json:"customer_id"`
+	Mode            string `json:"mode"`
+	FacilityID      string `json:"facility_id"`
+	SourceBindingID string `json:"source_binding_id"`
 }
 type claims struct {
-	Issuer    string `json:"iss"`
-	Audience  string `json:"aud"`
-	Subject   string `json:"sub"`
-	TokenID   string `json:"jti"`
-	IssuedAt  int64  `json:"iat"`
-	ExpiresAt int64  `json:"exp"`
+	Issuer    string              `json:"iss"`
+	Audience  string              `json:"aud"`
+	Subject   string              `json:"sub"`
+	TokenID   string              `json:"jti"`
+	IssuedAt  int64               `json:"iat"`
+	ExpiresAt int64               `json:"exp"`
+	Binding   *BindingRestriction `json:"binding,omitempty"`
 }
 
 // VerifyAssertion validates signature and fixed issuer/audience/TTL before any DB lookup.
@@ -107,7 +120,13 @@ func VerifyAssertion(r *http.Request, cfg config.Config, now time.Time) (Identit
 	if role == "ACTOR" && (c.Subject == "" || strings.HasPrefix(c.Subject, "system:")) {
 		return Identity{}, errors.New("unauthorized")
 	}
-	return Identity{Mode: cfg.Mode, Subject: c.Subject, Role: role, CredentialClass: credentialClass}, nil
+	if c.Binding != nil {
+		b := c.Binding
+		if role != "ACTOR" || b.ActorID == "" || (b.ActorType != "OPERATOR" && b.ActorType != "CUSTOMER") || (b.ActorType == "CUSTOMER") != (b.CustomerID != "") || b.Mode != cfg.Mode || b.FacilityID != cfg.FacilityID || b.SourceBindingID != cfg.SourceBindingID {
+			return Identity{}, errors.New("unauthorized")
+		}
+	}
+	return Identity{Mode: cfg.Mode, Subject: c.Subject, Role: role, CredentialClass: credentialClass, Binding: c.Binding}, nil
 }
 
 func secretsForSubject(cfg config.Config, subject string) []string {

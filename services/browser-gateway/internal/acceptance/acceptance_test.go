@@ -124,7 +124,7 @@ func owned(t *testing.T) *environment {
 	if _, err := maintenance.Exec(ctx, "COMMENT ON ROLE "+roleIdent+" IS '"+marker+"'"); err != nil {
 		t.Fatal("owned runtime role marking failed, role cleanup withheld")
 	}
-	if _, err := e.admin.Exec(ctx, "REVOKE ALL ON DATABASE "+ident+" FROM PUBLIC; REVOKE CREATE ON SCHEMA public FROM PUBLIC; GRANT CONNECT ON DATABASE "+ident+" TO "+roleIdent+"; GRANT USAGE ON SCHEMA browser_gateway TO "+roleIdent+"; GRANT SELECT ON browser_gateway.users TO "+roleIdent+"; GRANT SELECT,INSERT,DELETE ON browser_gateway.sessions TO "+roleIdent); err != nil {
+	if _, err := e.admin.Exec(ctx, "REVOKE ALL ON DATABASE "+ident+" FROM PUBLIC; REVOKE CREATE ON SCHEMA public FROM PUBLIC; GRANT CONNECT ON DATABASE "+ident+" TO "+roleIdent+"; GRANT USAGE ON SCHEMA browser_gateway TO "+roleIdent+"; GRANT SELECT ON browser_gateway.users TO "+roleIdent+"; GRANT SELECT ON browser_gateway.servicing_bindings TO "+roleIdent+"; GRANT SELECT,INSERT ON browser_gateway.financial_commands,browser_gateway.financial_receipts,browser_gateway.customer_offers TO "+roleIdent+"; GRANT SELECT,INSERT,DELETE ON browser_gateway.sessions TO "+roleIdent); err != nil {
 		t.Fatal("owned runtime grants failed")
 	}
 	u.User = url.UserPassword(e.role, marker)

@@ -104,3 +104,27 @@ func TestLimiterBounds(t *testing.T) {
 		t.Errorf("concurrent admitted=%d, want 5", got)
 	}
 }
+
+func TestFinancialCommandBodyBoundary(t *testing.T) {
+	hash := strings.Repeat("a", 64)
+	for _, body := range []string{
+		`{"terms_hash":"` + hash + `","expected_version":1,"actor_id":"forged"}`,
+		`{"terms_hash":"` + hash + `","expected_version":1,"Expected_Version":2}`,
+		`{"terms_hash":"` + hash + `","expected_version":1,"expected_version":2}`,
+		`{"terms_hash":"` + hash + `","expected_version":1.5}`,
+		`{"terms_hash":"` + hash + `","expected_version":9007199254740992}`,
+		`{"terms_hash":"` + hash + `","expected_version":1} {}`,
+	} {
+		request := httptest.NewRequest("POST", "/api/offers/22222222-2222-4222-8222-222222222222/acceptances", strings.NewReader(body))
+		request.Pattern = "POST /api/offers/{id}/acceptances"
+		if _, err := commandBody(httptest.NewRecorder(), request); err == nil {
+			t.Fatal("ambiguous/authority-supplying financial body accepted")
+		}
+	}
+	request := httptest.NewRequest("POST", "/api/offers/id/acceptances", strings.NewReader(`{"expected_version":7,"terms_hash":"`+hash+`"}`))
+	request.Pattern = "POST /api/offers/{id}/acceptances"
+	body, err := commandBody(httptest.NewRecorder(), request)
+	if err != nil || string(body) != `{"terms_hash":"`+hash+`","expected_version":7}` {
+		t.Fatal("valid command not canonicalized exactly")
+	}
+}

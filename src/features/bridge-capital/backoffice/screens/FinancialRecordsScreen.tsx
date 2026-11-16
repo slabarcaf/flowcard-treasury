@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { FinancialReadClient, FinancialReadError, cents } from '../../../../services/financial/client.js';
 import type { Bridge, CaseDetail, CasePage, Changes, Collections, Offer, Operation, ReadScope, SourceMode } from '../../../../services/financial/client.js';
+import { CommandRecovery, FinancialActions } from './FinancialActions.js';
 
 type Selection = { kind: 'case' | 'offer' | 'bridge' | 'operation'; id: string; scope?: ReadScope };
 type Detail = { kind: 'case'; value: CaseDetail } | { kind: 'offer'; value: Offer } | { kind: 'bridge'; value: Bridge; collections: Collections } | { kind: 'operation'; value: Operation };
@@ -210,7 +211,7 @@ export function FinancialRecordsScreen() {
   function lookup(event: FormEvent) { event.preventDefault(); void open({ kind, id }); }
   return <main className="p-5 space-y-6">
     <h1 className="text-2xl font-semibold">Financial records</h1>
-    <p className="text-slate-400">Read-only saved Coordinator and Funding records. Values and versions come from the connected Go services. Missing sources and missing facts remain explicit.</p>
+    <p className="text-slate-400">Saved Coordinator and Funding records. Values and versions come from the connected Go services. Verified local DEMO bindings enable explicit actions; missing sources and facts remain explicit.</p>
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5"><Cases api={api} open={selection => void open(selection)} /><Servicing api={api} open={selection => void open(selection)} /></div>
     <Card title="Saved record detail">
       <form onSubmit={lookup} className="flex flex-wrap items-end gap-3">
@@ -222,6 +223,8 @@ export function FinancialRecordsScreen() {
       <ErrorMessage state={state} />
       {!selected && <p>Select a saved case/change or enter a known record UUID.</p>}
       {state.data && <FinancialSnapshot record={state.data} nextCollections={() => void nextCollections()} busy={state.busy} />}
+      {state.data && <FinancialActions record={state.data} refresh={() => { if (selected) void open(selected); }} />}
     </Card>
+    <CommandRecovery />
   </main>;
 }

@@ -128,6 +128,35 @@ Explicit DEMO labels describe synthetic books without implying provider
 acceptance. Verification uses owned read fixtures and production handlers,
 without financial commands, provider/model calls or running workers.
 
+### Implemented Task D DEMO delegation
+
+An administrator verifies an invited user against the actual Funding actor
+self-read and records immutable actor/customer/mode/installation metadata.
+Runtime can only read that binding. No company-name or provider-ID inference
+is used. Customer and operator remain distinct real users. An unlinked user
+gains no financial authority.
+
+The existing Funding actor importer permits reassignment. Gateway assertions
+therefore carry signed narrowing constraints checked against the current
+registry and installation. These constrain an authenticated subject; they do
+not supply identity or role. Source drift, inactive users/bindings or changed
+installation fail closed. Existing direct CLI callers remain compatible.
+
+Write delegation is explicit local DEMO only, with separate role keys and
+actual backend MOCK_HTTP/loopback confirmation. SANDBOX/remote profiles fail.
+The gateway persists canonical intent/key before dispatch, appends definitive
+receipts and retains unknown results for manual same-key/payload recovery.
+Verified create receipts publish a customer-scoped offer index; customer detail
+uses the constrained customer principal rather than the broad read identity.
+
+The browser presents exact supplied terms/hash/version/disclosures, requires
+explicit customer acceptance and separate operator action, locks attempted
+snapshots and never retries unknown writes automatically. Backend owns every
+guard, policy, financial reservation and settlement. Owned verification proves
+the real API/worker/Go adapter against a local provider double, not live consent
+or provider acceptance. No actual card retry, shared-data migration, callback
+switch, production launch or entire Node deletion is included.
+
 ### Source references
 
 - [Go standard PBKDF2](https://pkg.go.dev/crypto/pbkdf2).

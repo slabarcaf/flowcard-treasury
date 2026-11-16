@@ -510,6 +510,7 @@ func (h *handler) persistOffer(ctx context.Context, id Identity, key, requestHas
 		return offerResponse{}, err
 	}
 	response := offerResponse{ID: terms.OfferID, Version: 1, Revision: 1, TermsHash: termsHash, PrincipalCents: terms.PrincipalCents, ContractFeeCents: terms.ContractFeeCents, TermDays: terms.TermDays, OfferedOn: terms.OfferedOn, DueOn: terms.DueOn, ExpiresAt: terms.ExpiresAt, State: state, ReadURL: "/api/offers/" + terms.OfferID, OriginatingCaseID: nil, EvaluationID: stringPointer(evaluationID)}
+	response.Mode, response.CustomerID = h.cfg.Mode, a.CustomerID
 	if originatingCaseID != "" {
 		response.OriginatingCaseID = stringPointer(originatingCaseID)
 	}

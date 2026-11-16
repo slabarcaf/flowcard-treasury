@@ -48,6 +48,14 @@ func New(c config.Config, s *postgres.Store) http.Handler {
 	mux.HandleFunc("POST /api/session/login", a.login)
 	mux.HandleFunc("GET /api/session/me", a.me)
 	mux.HandleFunc("POST /api/session/logout", a.logout)
+	mux.HandleFunc("GET /api/servicing/session", a.servicingSession)
+	if c.WriteMode == "DEMO" {
+		for _, route := range []string{"POST /api/offers", "POST /api/offers/{id}/acceptances", "POST /api/offers/{id}/approvals", "POST /api/offers/{id}/fund", "POST /api/bridges/{id}/collection-reviews", "POST /api/operations/{id}/reconcile"} {
+			mux.HandleFunc(route, a.financialCommand)
+		}
+		mux.HandleFunc("GET /api/financial/commands", a.financialCommands)
+		mux.HandleFunc("GET /api/customer/offers", a.customerOffers)
+	}
 	for _, route := range onboardingRoutes {
 		mux.HandleFunc(route, a.onboarding)
 	}

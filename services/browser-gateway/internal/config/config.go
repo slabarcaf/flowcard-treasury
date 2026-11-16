@@ -21,6 +21,9 @@ type Config struct {
 	CoordinatorSecret string
 	ServicingURL      *url.URL
 	ServicingSecret   string
+	WriteMode         string
+	OperatorSecret    string
+	CustomerSecret    string
 }
 
 // Origin validates and returns an exact serialized HTTP origin.
@@ -59,7 +62,23 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return c.WithFinancial(os.Getenv("BROWSER_GATEWAY_COORDINATOR_URL"), os.Getenv("BROWSER_GATEWAY_COORDINATOR_READ_SECRET"), os.Getenv("BROWSER_GATEWAY_SERVICING_URL"), os.Getenv("BROWSER_GATEWAY_SERVICING_READ_SECRET"))
+	c, err = c.WithFinancial(os.Getenv("BROWSER_GATEWAY_COORDINATOR_URL"), os.Getenv("BROWSER_GATEWAY_COORDINATOR_READ_SECRET"), os.Getenv("BROWSER_GATEWAY_SERVICING_URL"), os.Getenv("BROWSER_GATEWAY_SERVICING_READ_SECRET"))
+	if err != nil {
+		return Config{}, err
+	}
+	return c.WithDemoWrites(os.Getenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE"), os.Getenv("BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET"), os.Getenv("BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET"))
+}
+
+// WithDemoWrites enables only an explicitly local DEMO delegation profile.
+func (c Config) WithDemoWrites(mode, operator, customer string) (Config, error) {
+	if mode == "" && operator == "" && customer == "" {
+		return c, nil
+	}
+	if mode != "DEMO" || c.ServicingURL == nil || !loopback(c.ServicingURL.Hostname()) || len(strings.TrimSpace(operator)) < 32 || len(strings.TrimSpace(customer)) < 32 || operator == customer || operator == c.ServicingSecret || customer == c.ServicingSecret {
+		return Config{}, errors.New("invalid demo command configuration")
+	}
+	c.WriteMode, c.OperatorSecret, c.CustomerSecret = mode, operator, customer
+	return c, nil
 }
 
 // WithOnboarding validates the optional, server-owned service destination.

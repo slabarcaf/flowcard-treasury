@@ -67,6 +67,7 @@ func NewHandlerWithFunding(pool *pgxpool.Pool, cfg config.Config, policy *Policy
 	mux.HandleFunc("POST /api/operations/{id}/reconcile", h.reconcileOperation)
 	mux.HandleFunc("GET /api/servicing/state", h.readServicingState)
 	mux.HandleFunc("GET /api/servicing/changes", h.readChanges)
+	mux.HandleFunc("GET /api/servicing/actor", h.readActor)
 	mux.HandleFunc("GET /health/live", h.liveHealth)
 	mux.HandleFunc("GET /health/ready", h.readyHealth)
 	mux.HandleFunc("POST /api/offers/{id}/acceptances", h.acceptOffer)
@@ -97,7 +98,7 @@ func fundingRouteMethods(path string) ([]string, bool) {
 	switch path {
 	case "/api/offers":
 		return []string{"POST"}, true
-	case "/api/servicing/state", "/api/servicing/changes":
+	case "/api/servicing/state", "/api/servicing/changes", "/api/servicing/actor":
 		return []string{"GET"}, true
 	case "/health/live", "/health/ready":
 		return []string{"GET"}, true
@@ -285,6 +286,10 @@ func (h *handler) auth(w http.ResponseWriter, r *http.Request, write bool) (Iden
 		return Identity{}, false
 	}
 	id.ActorID, id.CustomerID, id.ActorType = actorID, customerID, actorType
+	if id.Binding != nil && (id.Binding.ActorID != actorID || id.Binding.ActorType != actorType || id.Binding.CustomerID != customerID) {
+		writeError(w, 403, "BINDING_CHANGED", "Actor binding no longer matches")
+		return Identity{}, false
+	}
 	if actorType != "CUSTOMER" && actorType != "OPERATOR" || actorType != id.CredentialClass {
 		writeJSON(w, 403, map[string]any{"error": map[string]string{"code": "FORBIDDEN", "message": "Actor credential class does not match registry role"}})
 		return Identity{}, false

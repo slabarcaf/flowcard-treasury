@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"github.com/slabarcaf/flowcard-treasury/services/browser-gateway/internal/servicing"
 	"net/http"
 	"strings"
 	"time"
@@ -24,6 +25,20 @@ func (a *Server) financial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if session.User.Role != "OPERATOR" {
+		if session.User.Role == "CUSTOMER" && a.config.WriteMode == "DEMO" && !strings.HasPrefix(r.Pattern, "GET /api/coordinator/") && r.Pattern != "GET /api/servicing/changes" {
+			binding, key, err := a.bound(ctx, session.User)
+			if err != nil {
+				bindingFailure(w, err)
+				return
+			}
+			token, err := servicing.Assertion(key, binding.Subject, &binding.Restriction)
+			if err != nil {
+				fail(w, 503, "servicing unavailable")
+				return
+			}
+			a.forward(ctx, w, r, a.config.ServicingURL, token, 0, 2*1024*1024)
+			return
+		}
 		fail(w, 403, "forbidden")
 		return
 	}
