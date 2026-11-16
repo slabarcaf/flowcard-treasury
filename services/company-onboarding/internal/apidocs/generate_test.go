@@ -149,18 +149,33 @@ func TestTask2_AudienceSeparation(t *testing.T) {
 	}
 
 	// 2. Webhook spec checks:
-	// - Must contain exactly 2 webhook receiver paths
+	// - Must contain 2 internal and 1 provider receiver paths
 	// - Must NOT contain operator paths or public health paths
 	// - Must contain WebhookServiceJWT
 	// - Must NOT contain operator session cookie or operator JWT
-	if whDoc.Paths.Len() != 2 {
-		t.Errorf("expected exactly 2 paths in webhook spec, got %d", whDoc.Paths.Len())
+	if whDoc.Paths.Len() != 3 {
+		t.Errorf("expected exactly 3 paths in webhook spec, got %d", whDoc.Paths.Len())
 	}
 	if whDoc.Paths.Find("/api/webhooks/airwallex") == nil {
 		t.Errorf("webhook spec missing /api/webhooks/airwallex")
 	}
 	if whDoc.Paths.Find("/api/v1/webhooks/airwallex") == nil {
 		t.Errorf("webhook spec missing /api/v1/webhooks/airwallex")
+	}
+	provider := whDoc.Paths.Find("/webhooks/airwallex")
+	if provider == nil || provider.Post == nil || provider.Post.Security == nil {
+		t.Fatal("missing provider webhook signature contract")
+	}
+	if whDoc.Components.SecuritySchemes["ProviderSignature"] == nil {
+		t.Fatal("missing provider signature scheme")
+	}
+	for _, requirement := range *provider.Post.Security {
+		if _, ok := requirement["ProviderSignature"]; !ok {
+			t.Error("provider route does not require signature")
+		}
+		if _, ok := requirement["WebhookServiceJWT"]; ok {
+			t.Error("provider route incorrectly accepts internal JWT")
+		}
 	}
 	if whDoc.Paths.Find("/api/companies") != nil {
 		t.Errorf("webhook spec must NOT contain /api/companies")

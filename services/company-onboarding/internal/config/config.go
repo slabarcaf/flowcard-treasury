@@ -28,16 +28,18 @@ var (
 
 // Config holds runtime configuration values parsed from environment variables.
 type Config struct {
-	Port              int
-	DatabaseURL       string
-	Environment       string
-	AWSRegion         string
-	ServiceAuthSecret string
-	S3BucketDocuments string
-	S3KMSKeyID        string
-	AirwallexBaseURL  string
-	AirwallexClientID string
-	AirwallexAPIKey   string
+	Port               int
+	DatabaseURL        string
+	Environment        string
+	AWSRegion          string
+	ServiceAuthSecret  string
+	WebhookSecret      string
+	WebhookEnvironment string
+	S3BucketDocuments  string
+	S3KMSKeyID         string
+	AirwallexBaseURL   string
+	AirwallexClientID  string
+	AirwallexAPIKey    string
 }
 
 // Load reads configuration from the environment using standard os.Getenv.
@@ -88,8 +90,16 @@ func LoadWithLookup(lookup func(string) string) (*Config, error) {
 	if apiKey := strings.TrimSpace(lookup("AIRWALLEX_API_KEY")); apiKey != "" {
 		cfg.AirwallexAPIKey = apiKey
 	}
+	cfg.WebhookSecret = lookup("ONBOARDING_WEBHOOK_SECRET")
+	cfg.WebhookEnvironment = strings.TrimSpace(lookup("ONBOARDING_WEBHOOK_ENVIRONMENT"))
+	if (cfg.WebhookSecret == "") != (cfg.WebhookEnvironment == "") || (cfg.WebhookEnvironment != "" && cfg.WebhookEnvironment != "sandbox" && cfg.WebhookEnvironment != "production") || (cfg.WebhookSecret != "" && strings.TrimSpace(cfg.WebhookSecret) == "") {
+		return nil, errors.New("ONBOARDING_WEBHOOK_SECRET and ONBOARDING_WEBHOOK_ENVIRONMENT must be configured together with sandbox or production scope")
+	}
 	if err := applyRuntimeIntegrations(cfg, lookup); err != nil {
 		return nil, err
+	}
+	if cfg.WebhookSecret != "" && cfg.WebhookSecret == cfg.ServiceAuthSecret {
+		return nil, errors.New("provider webhook and internal service authentication require distinct secrets")
 	}
 
 	return cfg, nil

@@ -169,6 +169,19 @@ func buildHandlerWithDependencies(ctx context.Context, cfg *config.Config, opAut
 		server.WithWebhookHandler(whHandler, whAuth)
 	}
 
+	var providerRepo webhooks.Repository
+	if repo != nil {
+		providerRepo = repo
+	}
+	providerHandler, err := webhooks.NewProviderHandler(providerRepo, []byte(cfg.WebhookSecret), cfg.WebhookEnvironment)
+	if err != nil {
+		if closeFn != nil {
+			closeFn()
+		}
+		return nil, nil, err
+	}
+	server.WithProviderWebhookHandler(providerHandler)
+
 	// 5. Documentation handler: public offline Swagger UI documentation
 	server.WithDocsHandler(apidocs.Handler())
 

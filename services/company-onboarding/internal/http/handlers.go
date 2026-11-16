@@ -22,14 +22,15 @@ import (
 
 // Server implements HTTP routing, DTO decoding, and controller actions for onboarding.
 type Server struct {
-	repo           *postgres.Repository
-	validator      *validation.Validator
-	authenticator  Authenticator
-	webhookAuth    Authenticator
-	webhookHandler http.Handler
-	docsHandler    http.Handler
-	platformGate   validation.PlatformContractValidator
-	storage        storage.ObjectStore
+	repo                   *postgres.Repository
+	validator              *validation.Validator
+	authenticator          Authenticator
+	webhookAuth            Authenticator
+	webhookHandler         http.Handler
+	providerWebhookHandler http.Handler
+	docsHandler            http.Handler
+	platformGate           validation.PlatformContractValidator
+	storage                storage.ObjectStore
 }
 
 type submissionReadinessError struct {
@@ -38,6 +39,12 @@ type submissionReadinessError struct {
 
 func (e *submissionReadinessError) Error() string {
 	return "onboarding readiness validation failed"
+}
+
+// WithProviderWebhookHandler configures direct provider-signature authentication.
+func (s *Server) WithProviderWebhookHandler(handler http.Handler) *Server {
+	s.providerWebhookHandler = handler
+	return s
 }
 
 // WithDocsHandler configures an explicit documentation handler for /docs/api.
@@ -124,6 +131,10 @@ func (s *Server) Routes() http.Handler {
 
 	// Wrap private endpoints in RequireAuth and requireRepo
 	mux.Handle("/api/", RequireAuth(s.authenticator)(s.requireRepo(apiMux)))
+
+	if s.providerWebhookHandler != nil {
+		mux.Handle("POST /webhooks/airwallex", s.providerWebhookHandler)
+	}
 
 	// Dedicated webhook endpoints with separate webhook authenticator
 	if s.webhookHandler != nil {

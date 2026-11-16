@@ -33,6 +33,9 @@ var migration005 string
 //go:embed migrations/006_reconciliation_next_check_and_inbox_processing.sql
 var migration006 string
 
+//go:embed migrations/007_provider_webhook_receipts.sql
+var migration007 string
+
 // Migration represents a numbered schema migration.
 type Migration struct {
 	Version  int
@@ -84,6 +87,12 @@ func AllMigrations() []Migration {
 			Name:     "006_reconciliation_next_check_and_inbox_processing",
 			SQL:      migration006,
 			Checksum: calculateChecksum(migration006),
+		},
+		{
+			Version:  7,
+			Name:     "007_provider_webhook_receipts",
+			SQL:      migration007,
+			Checksum: calculateChecksum(migration007),
 		},
 	}
 }
@@ -287,7 +296,7 @@ func VerifySchemaReadiness(ctx context.Context, pool *pgxpool.Pool) error {
 
 	// 3. Verify all durable schema tables are accessible via zero-row query
 	checkSQL := `
-		SELECT 1 FROM onboarding.companies,
+		SELECT onboarding.webhook_inbox.raw_body FROM onboarding.companies,
 		              onboarding.applications,
 		              onboarding.submissions,
 		              onboarding.platform_accounts,
@@ -296,7 +305,8 @@ func VerifySchemaReadiness(ctx context.Context, pool *pgxpool.Pool) error {
 		              onboarding.submission_dispatch_steps,
 		              onboarding.submission_document_uploads,
 		              onboarding.platform_creation_coordinators,
-		              onboarding.webhook_inbox
+		              onboarding.webhook_inbox,
+		              onboarding.webhook_conflicts
 		LIMIT 0;
 	`
 	if _, err := pool.Exec(ctx, checkSQL); err != nil {
