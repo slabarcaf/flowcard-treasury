@@ -14,12 +14,14 @@ These read-only contracts supply the preserved Bridge Capital interface.
 | `/api/operator/customers/{id}` | `/api/servicing/customers/{id}` | Verified OPERATOR |
 | `/api/operator/customers/{id}/bridges?cursor=...` | `/api/bridges?customer_id={id}&cursor=...` | Verified OPERATOR |
 | `/api/customer/bridges?cursor=...` | `/api/bridges?cursor=...` | Verified CUSTOMER; owner infers scope |
+| `/api/customer/wallet` | `/api/servicing/wallet` | Verified CUSTOMER; owner infers active wallet |
 
 Gateway session and immutable binding are checked before a signed owner read.
 Funding resolves the current active actor and role. Broad Coordinator and
 underwriting readers cannot use these actor endpoints. A CUSTOMER cannot pass
 customer, mode or facility selectors. Known-ID reads retain owner scope checks.
-No financial writer or provider call is invoked by a read.
+No financial writer is invoked by a read. Portfolio/history reads use the
+owner database; the wallet read uses the existing read-only provider boundary.
 
 ## Common fields
 
@@ -84,3 +86,18 @@ Discovery includes repaid and unfunded historical attempts. Original terms
 come from the linked offer; current debt comes from the owner ledger. Existing
 bridge/operation/collection detail routes supply certainty and allocations.
 No customer needs an operator receipt or a manually pasted bridge UUID.
+
+## Current wallet balance
+
+The wallet response includes common source fields, `customer_id`, USD
+`currency`, `available_balance_cents`, `requested_at`, `observed_at` and
+`provider_mode`. The owner resolves an active customer/account mapping, reads
+the current provider balance outside DB locks, validates currency/freshness and
+rechecks the mapping before returning. It never returns raw provider IDs,
+credentials or evidence bodies. Unknown/unavailable balance is 503, not zero.
+
+`observed_at` records the server receipt of the provider response, not a bank
+statement posting time. Available cash is informational and remains separate
+from the customer credit line, facility capital and bridge debt. No account
+selector is accepted from the customer and no financial command is enabled
+by exposing this read.

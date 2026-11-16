@@ -194,6 +194,16 @@ func TestOwnedBoundCustomerMoney(t *testing.T) {
 	if got := request(t, s, "GET", "/api/customer/offers", "", unlinked, nil); got.status != 403 {
 		t.Fatal("unlinked customer got offers")
 	}
+	wallet := moneyJSON(t, request(t, s, "GET", "/api/customer/wallet", "", customer, nil), 200)
+	if wallet["available_balance_cents"] != float64(200000) || wallet["currency"] != "USD" {
+		t.Fatal("scoped provider wallet value missing")
+	}
+	if request(t, s, "GET", "/api/customer/wallet", "", op, nil).status != 403 {
+		t.Fatal("operator used customer wallet route")
+	}
+	if request(t, s, "GET", "/api/customer/wallet?customer_id=foreign", "", customer, nil).status != 400 {
+		t.Fatal("customer selected a foreign wallet")
+	}
 	// Product reads use actual actor-bound owner routes, without broad reader authority.
 	portfolio := moneyJSON(t, request(t, s, "GET", "/api/operator/portfolio", "", op, nil), 200)
 	if portfolio["facility_total_cents"] == nil || portfolio["current_regime"] == nil {
@@ -321,6 +331,10 @@ func TestOwnedBoundCustomerMoney(t *testing.T) {
 	}
 	if bridge["principal_owed_cents"] != float64(0) || bridge["late_fee_owed_cents"] != float64(0) {
 		t.Fatal("repaid bridge retained debt")
+	}
+	wallet = moneyJSON(t, request(t, s, "GET", "/api/customer/wallet", "", customer, nil), 200)
+	if wallet["available_balance_cents"] != float64(900000) {
+		t.Fatalf("wallet after servicing=%v, want actual provider cash 900000", wallet["available_balance_cents"])
 	}
 	productBridges := moneyJSON(t, request(t, s, "GET", "/api/customer/bridges", "", customer, nil), 200)["items"].([]any)
 	if len(productBridges) != 1 || productBridges[0].(map[string]any)["id"] != bridgeID || productBridges[0].(map[string]any)["lifecycle"] != "REPAID" {

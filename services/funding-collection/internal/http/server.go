@@ -57,6 +57,7 @@ func NewHandlerWithFunding(pool *pgxpool.Pool, cfg config.Config, policy *Policy
 	}
 	h := &handler{pool: pool, cfg: cfg, now: now, policy: policy, evaluator: evaluator, provider: providerClient}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/servicing/wallet", h.readProductWallet)
 	mux.HandleFunc("GET /api/servicing/portfolio", h.readPortfolio)
 	mux.HandleFunc("GET /api/servicing/customers", h.readProductCustomers)
 	mux.HandleFunc("GET /api/servicing/customers/{id}", h.readProductCustomers)
@@ -102,7 +103,7 @@ func fundingRouteMethods(path string) ([]string, bool) {
 	switch path {
 	case "/api/offers":
 		return []string{"POST"}, true
-	case "/api/servicing/state", "/api/servicing/changes", "/api/servicing/actor", "/api/servicing/portfolio", "/api/servicing/customers", "/api/bridges":
+	case "/api/servicing/state", "/api/servicing/changes", "/api/servicing/actor", "/api/servicing/portfolio", "/api/servicing/customers", "/api/servicing/wallet", "/api/bridges":
 		return []string{"GET"}, true
 	case "/health/live", "/health/ready":
 		return []string{"GET"}, true

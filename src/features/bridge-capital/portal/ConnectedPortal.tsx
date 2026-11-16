@@ -166,13 +166,7 @@ function CustomerFinancing({
             <Heading sub="Offers and financing linked to your verified account">
               Your wallet
             </Heading>
-            <Card>
-              <Amount label="Current wallet balance" value="Unavailable" />
-              <p style={{ fontSize: 14, color: color.textMuted }}>
-                Current bank balances and card activity are not connected in this demo. Financing
-                below comes from the Go services.
-              </p>
-            </Card>
+            <WalletCard binding={binding} />
             {active.map((b) => (
               <Card key={b.id}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -334,5 +328,38 @@ function CustomerFinancing({
       </div>
       <TabBar active={tab} onSelect={(screen) => setView({ screen })} />
     </>
+  );
+}
+
+function WalletCard({ binding }: { binding: ServicingSession }) {
+  const wallet = useProductQuery(
+    'wallet-balance',
+    async () => {
+      const value = await product.wallet();
+      if (value.customer_id !== binding.customer_id || value.source_mode !== binding.mode) {
+        throw new Error('Wallet does not match this verified customer.');
+      }
+      return value;
+    },
+    10000
+  );
+  return (
+    <Card>
+      <Amount
+        label="Available wallet balance"
+        value={cents(wallet.data?.available_balance_cents)}
+      />
+      <ReadNotice {...wallet} />
+      {wallet.data && (
+        <p style={{ fontSize: 12, color: color.textMuted }}>
+          Retrieved {new Date(wallet.data.observed_at).toLocaleString()} ·{' '}
+          {wallet.data.source_mode === 'DEMO' ? 'local provider double' : 'Airwallex sandbox'}
+        </p>
+      )}
+      <p style={{ fontSize: 14, color: color.textMuted }}>
+        Provider cash is separate from your credit limit and bridge debt. Funding does not retry a
+        card purchase.
+      </p>
+    </Card>
   );
 }

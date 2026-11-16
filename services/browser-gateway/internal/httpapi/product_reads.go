@@ -19,6 +19,7 @@ var productReadRoutes = []string{
 	"GET /api/operator/customers/{id}",
 	"GET /api/operator/customers/{id}/bridges",
 	"GET /api/customer/bridges",
+	"GET /api/customer/wallet",
 }
 
 func (a *Server) productRead(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +30,7 @@ func (a *Server) productRead(w http.ResponseWriter, r *http.Request) {
 		authFailure(w, err, "unauthorized")
 		return
 	}
-	customerRoute := r.Pattern == "GET /api/customer/bridges"
+	customerRoute := r.Pattern == "GET /api/customer/bridges" || r.Pattern == "GET /api/customer/wallet"
 	if (customerRoute && session.User.Role != "CUSTOMER") || (!customerRoute && session.User.Role != "OPERATOR") {
 		fail(w, 403, "forbidden")
 		return
@@ -57,6 +58,8 @@ func (a *Server) productRead(w http.ResponseWriter, r *http.Request) {
 		target.Path = "/api/servicing/portfolio"
 	case "GET /api/operator/customers":
 		target.Path = "/api/servicing/customers"
+	case "GET /api/customer/wallet":
+		target.Path = "/api/servicing/wallet"
 	case "GET /api/customer/bridges":
 		target.Path = "/api/bridges"
 	default:
@@ -124,7 +127,11 @@ func (a *Server) productRead(w http.ResponseWriter, r *http.Request) {
 		fail(w, 502, "invalid servicing response")
 		return
 	}
-	if customerRoute {
+	if r.Pattern == "GET /api/customer/wallet" && (body["customer_id"] != binding.CustomerID || body["currency"] != "USD") {
+		fail(w, 502, "invalid wallet scope")
+		return
+	}
+	if r.Pattern == "GET /api/customer/bridges" {
 		items, ok := body["items"].([]any)
 		if !ok || len(items) > 25 {
 			fail(w, 502, "invalid servicing response")

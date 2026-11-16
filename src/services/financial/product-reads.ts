@@ -1,6 +1,7 @@
 import { FinancialReadError } from './client.js';
 import type {
   Portfolio,
+  WalletBalance,
   CustomerPage,
   CustomerDetail,
   ProductCustomer,
@@ -90,6 +91,19 @@ export class ProductReadClient {
     } catch {
       throw new FinancialReadError(502);
     }
+  }
+  async wallet(): Promise<WalletBalance> {
+    const v = await this.read('/api/customer/wallet');
+    need(
+      str(v.customer_id) &&
+        v.currency === 'USD' &&
+        money(v.available_balance_cents) &&
+        str(v.provider_mode) &&
+        str(v.requested_at) &&
+        str(v.observed_at) &&
+        Number.isFinite(Date.parse(v.observed_at))
+    );
+    return v as unknown as WalletBalance;
   }
   async portfolio(): Promise<Portfolio> {
     const v = await this.read('/api/operator/portfolio');

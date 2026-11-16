@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "VITE_BROWSER_GATEWAY_ENABLED=true vite --config vite.browser-gateway.config.ts",
+    "dev": "VITE_BROWSER_GATEWAY_ENABLED=true vite --config vite.product.config.ts",
     "dev:legacy": "vite",
     "server:build": "node scripts/build-server.mjs",
     "server:start": "npm run server:build && node .dev/server/server/src/main.js",
@@ -18,7 +18,8 @@
     "test": "vitest run",
     "bridge:stats": "vitest run tests/features/bridge-capital/customerStats.report.test.ts --reporter=verbose",
     "dev:product": "VITE_BROWSER_GATEWAY_ENABLED=true vite --config vite.product.config.ts",
-    "build:product": "tsc -b && VITE_BROWSER_GATEWAY_ENABLED=true vite build --config vite.product.config.ts"
+    "build:product": "tsc -b && VITE_BROWSER_GATEWAY_ENABLED=true vite build --config vite.product.config.ts",
+    "dev:developer": "VITE_BROWSER_GATEWAY_ENABLED=true vite --config vite.browser-gateway.config.ts"
   },
   "dependencies": {
     "pg": "^8.16.3",

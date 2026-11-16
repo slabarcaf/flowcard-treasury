@@ -42,14 +42,12 @@ const row = {
   active_bridge_id: null,
 };
 function client(body: unknown, status = 200) {
-  const fetcher = vi
-    .fn<typeof fetch>()
-    .mockResolvedValue(
-      new Response(JSON.stringify(body), {
-        status,
-        headers: { 'content-type': 'application/json' },
-      })
-    );
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    })
+  );
   return { api: new ProductReadClient(fetcher), fetcher };
 }
 describe('connected product read contracts', () => {
@@ -117,4 +115,29 @@ describe('connected product read contracts', () => {
       client({ ...source, items: null, next_cursor: null }).api.bridges()
     ).rejects.toMatchObject({ status: 502 });
   });
+});
+
+it('reads a scoped current provider balance without trusting account selectors', async () => {
+  const { api, fetcher } = client({
+    ...source,
+    customer_id: 'owned-customer',
+    currency: 'USD',
+    available_balance_cents: 200000,
+    requested_at: source.as_of,
+    observed_at: source.as_of,
+    provider_mode: 'MOCK_HTTP',
+  });
+  expect((await api.wallet()).available_balance_cents).toBe(200000);
+  expect(fetcher.mock.calls[0][0]).toBe('/api/customer/wallet');
+  await expect(
+    client({
+      ...source,
+      customer_id: 'owned-customer',
+      currency: 'USD',
+      available_balance_cents: 9007199254740992,
+      requested_at: source.as_of,
+      observed_at: source.as_of,
+      provider_mode: 'MOCK_HTTP',
+    }).api.wallet()
+  ).rejects.toMatchObject({ status: 502 });
 });

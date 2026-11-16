@@ -69,3 +69,12 @@ export interface BridgePage extends ProductSource {
   items: ProductBridge[];
   next_cursor: string | null;
 }
+
+export interface WalletBalance extends ProductSource {
+  customer_id: string;
+  currency: 'USD';
+  available_balance_cents: number;
+  requested_at: string;
+  observed_at: string;
+  provider_mode: string;
+}
