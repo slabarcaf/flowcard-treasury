@@ -104,12 +104,28 @@ func TestCollectionReversalAndAccrual(t *testing.T) {
 		reversalBucket != "CONTRACT_FEE" || reversalAmount != 10_000 {
 		t.Fatalf("actual reversal allocation = %s/%d err %v, want CONTRACT_FEE/10000", reversalBucket, reversalAmount, err)
 	}
+	// Provider observations use the host clock; recorded_at uses PostgreSQL.
+	// Preserve source ordering while allowing the existing five-second skew.
+	portfolioResponse, readErr := h.Request(http.MethodGet, "/api/servicing/portfolio", servicefixture.OperatorSubject, servicefixture.OperatorSecret, "", nil)
+	if readErr != nil || portfolioResponse.StatusCode != 200 {
+		t.Fatal("portfolio read after reversal failed")
+	}
+	var portfolio struct {
+		Collected *int64 `json:"fees_collected_cents"`
+	}
+	if json.NewDecoder(portfolioResponse.Body).Decode(&portfolio) != nil {
+		t.Fatal("portfolio response invalid")
+	}
+	portfolioResponse.Body.Close()
+	if portfolio.Collected == nil || *portfolio.Collected != 9000 {
+		t.Fatalf("net fee metric after reversal=%v, want 9000", portfolio.Collected)
+	}
 	var effectiveAt, observedAt, recordedAt time.Time
 	if err := h.Pool.QueryRow(ctx, `SELECT reversed_at,observed_at,recorded_at
 		FROM servicing.collection_reversals WHERE mode='DEMO' AND original_operation_id=(
 			SELECT id FROM servicing.operations WHERE mode='DEMO' AND request_id=$1)`,
 		firstCollectionIntent.RequestID).Scan(&effectiveAt, &observedAt, &recordedAt); err != nil ||
-		!effectiveAt.Before(observedAt) || observedAt.After(recordedAt) {
+		!effectiveAt.Before(observedAt) || observedAt.After(recordedAt.Add(5*time.Second)) {
 		t.Fatalf("reversal effective/observed/recorded times = %s/%s/%s err %v, want immutable backdated source time", effectiveAt, observedAt, recordedAt, err)
 	}
 	bridgeResponse, err := h.Request(http.MethodGet, "/api/bridges/"+funding.BridgeID,

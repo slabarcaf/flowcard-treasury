@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	dependencyCommit = "d2aeb7ff1987fb7ae6ac4c47fc40e5ca8bae3766"
+	dependencyCommit = "f51ff163997b5755331093f3b8793693169d64f6"
 	pinnedPolicyID   = "bridge-capital-go-v1"
 	pinnedPolicyHash = "0a0cf42f72e101a458c260be8fbca315704d9a093264049acbf366f8cd4d38f0"
 )
@@ -271,4 +271,12 @@ func hasFields(fields map[string]json.RawMessage, required ...string) bool {
 func isUTC(value time.Time) bool {
 	_, offset := value.Zone()
 	return offset == 0
+}
+
+// DescribeCapital describes facility accounting with the loaded policy rules.
+func (e *Evaluator) DescribeCapital(input policy.FacilitySnapshot) policy.CapitalDescription {
+	if e == nil {
+		return policy.CapitalDescription{}
+	}
+	return policy.DescribeCapital(input, e.config)
 }

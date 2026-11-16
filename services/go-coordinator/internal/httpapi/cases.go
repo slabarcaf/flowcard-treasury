@@ -403,7 +403,7 @@ func (h *caseHandler) detail(w http.ResponseWriter, r *http.Request) {
 			}
 			response.Collection = &collection
 			if collection.Current {
-				response.NextActions = collection.EffectiveActions
+				response.NextActions = append([]string{}, collection.EffectiveActions...)
 			} else {
 				response.NextActions = []string{}
 			}
@@ -756,7 +756,7 @@ func safeCollection(snapshot postgres.CollectionSnapshot, refreshNeeded, sourceS
 	if len(operations) > 20 {
 		operations = operations[:20]
 	}
-	return collectionView{BridgeVersion: snapshot.BridgeVersion, ObservedAt: snapshot.ObservedAt, Current: !refreshNeeded && !sourceStale, SourceStale: sourceStale, Lifecycle: state.Bridge.Lifecycle, Delinquency: state.Bridge.Delinquency, DaysPastDue: state.Bridge.DaysPastDue, PrincipalOwedCents: state.Bridge.PrincipalOwedCents, ContractFeeOwedCents: state.Bridge.ContractFeeOwedCents, LateFeeOwedCents: state.Bridge.LateFeeOwedCents, DueOn: state.Bridge.DueOn, LastAttemptID: state.Bridge.LastAttemptID, LastAttemptState: state.Bridge.LastAttemptState, NextEligibleRetryAt: state.Bridge.NextEligibleRetryAt, AccrualCurrent: state.Bridge.AccrualCurrent, AccrualCurrentThrough: state.Bridge.AccrualCurrentThrough, DebtAsOf: state.DebtAsOf, DebtStale: state.DebtStale, HoldReasons: state.Bridge.HoldReasons, EffectiveActions: state.AllowedActions, Operations: operations, HistoryCount: len(state.Attempts), HistoryComplete: state.HistoryComplete, HistoryTruncated: !state.HistoryComplete || state.NextCursor != nil}, nil
+	return collectionView{BridgeVersion: snapshot.BridgeVersion, ObservedAt: snapshot.ObservedAt, Current: !refreshNeeded && !sourceStale, SourceStale: sourceStale, Lifecycle: state.Bridge.Lifecycle, Delinquency: state.Bridge.Delinquency, DaysPastDue: state.Bridge.DaysPastDue, PrincipalOwedCents: state.Bridge.PrincipalOwedCents, ContractFeeOwedCents: state.Bridge.ContractFeeOwedCents, LateFeeOwedCents: state.Bridge.LateFeeOwedCents, DueOn: state.Bridge.DueOn, LastAttemptID: state.Bridge.LastAttemptID, LastAttemptState: state.Bridge.LastAttemptState, NextEligibleRetryAt: state.Bridge.NextEligibleRetryAt, AccrualCurrent: state.Bridge.AccrualCurrent, AccrualCurrentThrough: state.Bridge.AccrualCurrentThrough, DebtAsOf: state.DebtAsOf, DebtStale: state.DebtStale, HoldReasons: state.Bridge.HoldReasons, EffectiveActions: append([]string{}, state.AllowedActions...), Operations: operations, HistoryCount: len(state.Attempts), HistoryComplete: state.HistoryComplete, HistoryTruncated: !state.HistoryComplete || state.NextCursor != nil}, nil
 }
 
 func encodeCursor(cursor caseCursor) (string, error) {

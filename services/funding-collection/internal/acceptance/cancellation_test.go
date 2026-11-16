@@ -85,6 +85,23 @@ func TestUnsentFundingCancellation(t *testing.T) {
 	if err != nil || retryReceipt.BridgeID == "" || retryReceipt.OperationID == "" || retryReceipt.BridgeID == firstReceipt.BridgeID {
 		t.Fatalf("reserve fresh offer after cancellation = %+v err %v, want a new durable bridge and operation", retryReceipt, err)
 	}
+	listResponse, readErr := h.Request(http.MethodGet, "/api/bridges", servicefixture.CustomerSubject, servicefixture.CustomerSecret, "", nil)
+	if readErr != nil || listResponse.StatusCode != 200 {
+		t.Fatal("customer retry history unavailable")
+	}
+	var listed struct {
+		Items []struct {
+			ID        string `json:"id"`
+			Lifecycle string `json:"lifecycle"`
+		} `json:"items"`
+	}
+	if json.NewDecoder(listResponse.Body).Decode(&listed) != nil {
+		t.Fatal("invalid customer retry history")
+	}
+	listResponse.Body.Close()
+	if len(listed.Items) != 2 || listed.Items[0].ID != retryReceipt.BridgeID || listed.Items[1].ID != firstReceipt.BridgeID || listed.Items[1].Lifecycle != "VOID_UNFUNDED" {
+		t.Fatalf("retry history=%+v, want new reserved then prior void", listed.Items)
+	}
 	if h.ProviderHTTP.CreateRequestCount() != 0 {
 		t.Fatalf("provider creates after retry reservation = %d, want 0", h.ProviderHTTP.CreateRequestCount())
 	}

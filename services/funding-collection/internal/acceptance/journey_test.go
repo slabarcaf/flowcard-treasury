@@ -50,6 +50,20 @@ func TestServicingJourney(t *testing.T) {
 		bridge.FundedAt == nil || len(bridge.HoldReasons) != 0 || !fundingSettled {
 		t.Fatalf("final bridge read = %+v, want source-bound ever-funded zero-debt closure", bridge)
 	}
+	portfolioResponse, readErr := h.Request(http.MethodGet, "/api/servicing/portfolio", servicefixture.OperatorSubject, servicefixture.OperatorSecret, "", nil)
+	if readErr != nil || portfolioResponse.StatusCode != 200 {
+		t.Fatal("portfolio read after settlement failed")
+	}
+	var portfolio struct {
+		Collected *int64 `json:"fees_collected_cents"`
+	}
+	if json.NewDecoder(portfolioResponse.Body).Decode(&portfolio) != nil {
+		t.Fatal("portfolio response invalid")
+	}
+	portfolioResponse.Body.Close()
+	if portfolio.Collected == nil || *portfolio.Collected != 19000 {
+		t.Fatalf("net settled fee metric=%v, want 19000", portfolio.Collected)
+	}
 	stateResponse, err := h.Request(http.MethodGet, "/api/servicing/state?customer_id="+servicefixture.CustomerID,
 		"underwriting-reader", servicefixture.ReaderKey, "", nil)
 	if err != nil || stateResponse.StatusCode != http.StatusOK {

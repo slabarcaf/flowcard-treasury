@@ -13,7 +13,7 @@ import type { View } from '../../features/bridge-capital/backoffice/useBackOffic
 
 const initialView = (): View => ({ screen: 'applications', listState: { previousCursors: [] } });
 
-export function BrowserGatewayApp() {
+export function BrowserGatewayApp({operatorOnly=false,onSessionChanged}:{operatorOnly?:boolean;onSessionChanged?:(session:BrowserSession|null)=>void} = {}) {
   const [session, setSession] = useState<BrowserSession | null>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
@@ -45,7 +45,7 @@ export function BrowserGatewayApp() {
   }, []);
   async function logout() {
     setBusy(true); setError('');
-    try { await new BrowserSessionClient().logout(); setSession(null); setView(initialView()); setDraft(false); setFinancial(false); }
+    try { await new BrowserSessionClient().logout(); setSession(null); onSessionChanged?.(null); setView(initialView()); setDraft(false); setFinancial(false); }
     catch (caught) {
       if (caught instanceof SessionError && caught.status === 401) { setSession(null); setView(initialView()); setDraft(false); setFinancial(false); }
       else setError('Sign-out could not be confirmed. Your session remains displayed. Try again when the service is available.');
@@ -60,7 +60,7 @@ export function BrowserGatewayApp() {
       setFinancial(['#bridge-capital', '#financial-records'].includes(window.location.hash));
       setView(initialView());
     }
-    setSession(value); setRelogin(false);
+    setSession(value); onSessionChanged?.(value); setRelogin(false);
   }}>
     <div className="min-h-screen bg-[#0D1421] text-white">
       <header className="flex flex-wrap justify-between gap-4 p-5 border-b border-slate-700">
@@ -70,7 +70,7 @@ export function BrowserGatewayApp() {
       {error && <p role="alert" className="p-5 text-amber-200">{error}</p>}
       {session && relogin && <div className="max-w-md mx-auto p-5"><p className="mb-4">Sign in to restore your session. Your draft remains on this page.</p><BrowserLoginForm /></div>}
       {session === undefined ? <main className="max-w-md mx-auto p-8"><p>{busy ? 'Checking session…' : 'Session not available.'}</p><button type="button" disabled={busy} onClick={() => void restore()}>Check session</button></main>
-        : <BrowserAccess session={session} customer={<CustomerFinancialWorkspace key={session?.user.id} />}><section key={session?.user.id}>
+        : <BrowserAccess session={session} customer={operatorOnly?<main className="p-8">This developer interface requires an operator session.</main>:<CustomerFinancialWorkspace key={session?.user.id} />}><section key={session?.user.id}>
           <nav className="flex gap-5 p-5"><button type="button" onClick={() => { setFinancial(false); setDraft(false); setView(initialView()); }}>Applications</button><button type="button" onClick={() => { setFinancial(false); setDraft(true); }}>New company draft</button><button type="button" onClick={() => { setDraft(false); setFinancial(true); }}>Financial records</button></nav>
           <p className="px-5 text-sm text-slate-400">Onboarding and saved financial records. Explicit DEMO commands require verified bindings. Saving a draft does not submit it to the provider.</p>
           {financial ? <FinancialRecordsScreen /> : draft ? <OnboardingWizard onComplete={() => { setDraft(false); setView(initialView()); }} />
