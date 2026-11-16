@@ -136,8 +136,14 @@ func exportShortfallContract(ctx context.Context, api *sandboxAPI, cfg credentia
 			hashes[envelope.Name] = hex.EncodeToString(hash[:])
 		}
 	}
-	if eventID == "" || len(hashes) != 2 {
+	if len(hashes) != 2 {
 		return errors.New("sandbox_signed_event_pair_unverified")
+	}
+	if eventID == "" {
+		eventID, err = scoped.findInitialEvent(ctx, path, "issuing-callback-event-list-page-", attempt.ParentTransactionID, card.ResourceID)
+		if err != nil {
+			return err
+		}
 	}
 	if canonical == nil {
 		var state string
