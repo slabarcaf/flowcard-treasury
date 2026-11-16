@@ -109,7 +109,7 @@ func TestUnderwritingJourney(t *testing.T) {
 	}
 	databaseName := "flowcard_underwriting_demo_task_f_" + nameSuffix
 	if err := runGoCommand(ctx, root, nil, "run", "./cmd/demo", "prepare", "--scenario", "all",
-		"--as-of", time.Now().UTC().Truncate(time.Second).Add(123456789*time.Nanosecond).Format(time.RFC3339Nano),
+		"--as-of", time.Now().UTC().Truncate(time.Microsecond).Add(789*time.Nanosecond).Format(time.RFC3339Nano),
 		"--out", ".dev/demo", "--database-name", databaseName); err != nil {
 		t.Fatal("actual cmd/demo prepare failed")
 	}
@@ -378,7 +378,7 @@ func TestUnderwritingJourney(t *testing.T) {
 		t.Fatal("build task API command:", err)
 	}
 	if err := runGoCommand(ctx, root, nil, "run", "./cmd/demo", "prepare", "--scenario", "all",
-		"--as-of", time.Now().UTC().Truncate(time.Second).Add(123456789*time.Nanosecond).Format(time.RFC3339Nano), "--out", ".dev/demo", "--database-name", databaseName); err != nil {
+		"--as-of", time.Now().UTC().Truncate(time.Microsecond).Add(789*time.Nanosecond).Format(time.RFC3339Nano), "--out", ".dev/demo", "--database-name", databaseName); err != nil {
 		t.Fatal("actual fresh cmd/demo prepare failed")
 	}
 	manifestPath = filepath.Join(root, ".dev", "demo", "manifest.json")
@@ -739,7 +739,7 @@ func TestUnderwritingJourney(t *testing.T) {
 		t.Fatal("host API did not release task port:", err)
 	}
 	if err := runGoCommand(ctx, root, nil, "run", "./cmd/demo", "prepare", "--scenario", "all",
-		"--as-of", time.Now().UTC().Truncate(time.Second).Add(123456789*time.Nanosecond).Format(time.RFC3339Nano), "--out", ".dev/demo", "--database-name", databaseName); err != nil {
+		"--as-of", time.Now().UTC().Truncate(time.Microsecond).Add(789*time.Nanosecond).Format(time.RFC3339Nano), "--out", ".dev/demo", "--database-name", databaseName); err != nil {
 		t.Fatal("prepare fresh container run:", err)
 	}
 	manifestPath = filepath.Join(root, ".dev", "demo", "manifest.json")
@@ -771,6 +771,14 @@ func TestUnderwritingJourney(t *testing.T) {
 		"run", "./cmd/demo", "evaluate", "--manifest", manifestPath,
 		"--api-url", "http://127.0.0.1:8083")
 	if err != nil {
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			for _, stage := range []string{"DEMO facility snapshot import failed", "DEMO customer snapshot import failed", "DEMO evaluation POST failed", "prepared DEMO run is stale"} {
+				if bytes.Contains(exitError.Stderr, []byte(stage)) {
+					t.Logf("container evaluation failure stage: %s", stage)
+				}
+			}
+		}
 		t.Fatal("actual cmd/demo evaluate against container failed")
 	}
 	var containerSummary struct {
