@@ -63,16 +63,17 @@ Ramil selected real customer/operator login on November 15, 2026. Follow
 - [x] Complete D source/owned DEMO verification: immutable verified bindings,
   current actor constraints, distinct-user acceptance/approval, durable command
   recovery and real API/worker/adapter funding plus fee-first repayment. See
-  [the Task D plan](/docs/plans/20261115-browser-customer-writes.md).
-  The local persistent instance is being wired separately.
+  [the Task D plan](/docs/plans/completed/20261115-browser-customer-writes.md).
+  The persistent local instance and browser funding/repayment walkthrough are
+  complete; see [the local guide](/docs/demo/local-go-browser.md).
 
 A-C were merged at `6a499b6` and verified together with UI cleanup `9e3ec34`.
 The integration checks and limits are recorded in
 [the merge note](/docs/demo/browser-gateway-integration.md).
-The normal legacy preview
-remains unchanged unless explicitly started with the Go gateway flag. Existing
-manual services, root environment and user records were not modified. No real
-provider/model call, customer consent or financial write is inferred.
+The A-C preview originally required the Go gateway flag. The local developer
+entry now selects Go, while the running older instance and hosted build remain
+preserved. Root environment and existing user records were not modified.
+Live provider/model execution remains outside the local DEMO acceptance.
 
 ### Remaining onboarding webhook intake and forwarding
 
@@ -106,17 +107,19 @@ the Node backlog are unchanged.
 
 ### Browser default and mapping administration
 
-The verified Go operator workspace can become the local default independently
-of the full customer portal. This cleanup does not change the default.
+The local developer entry now uses the verified Go browser workspace. The
+retained legacy entry is `npm run dev:legacy`. See the
+[local browser guide](/docs/demo/local-go-browser.md) for provisioning and
+walkthrough evidence. Existing legacy processes and hosted builds remain.
 
-- [ ] Provision the gateway schema, restricted runtime connection and invited
+- [x] Provision the gateway schema, restricted runtime connection and invited
   operator accounts through the existing privileged tools. Configure exact
   trusted origins and the actual Go onboarding/Coordinator/Funding endpoints.
-- [ ] Switch the normal frontend entry/config and API proxy target to Go only
+- [x] Switch the normal frontend entry/config and API proxy target to Go only
   after login/restore/logout, Applications and financial reads pass in that
   intended local runtime. Resolve public docs routing explicitly. Retain the
   old instance until the replacement works.
-- [ ] Complete and verify Task D before making the full customer financial
+- [x] Complete and verify Task D before making the full customer financial
   portal the default: trusted bindings, exact acceptance/approval, persisted
   uncertain receipts and distinct customer/operator authorization.
 - [ ] Replace the retained roster CLI with a trusted Go administrative CLI
@@ -135,7 +138,7 @@ intake and hosted traffic cutover remain separate from a local browser switch.
   running old financial writer or switching provider callbacks. Go currently
   supports known-empty DEMO opening books, not nonempty legacy cutover.
   Preserve operation identities and settlement provenance.
-- [ ] Complete customer-bound Go offer/actor commands in Task D. The old
+- [x] Complete customer-bound Go offer/actor commands in Task D. The old
   `BridgeApiClient` and historical ledger HTTP handler have been removed;
   operator reads use Go. No legacy request is translated into customer consent.
 - [ ] Replace remaining onboarding/session/roster/tooling responsibilities

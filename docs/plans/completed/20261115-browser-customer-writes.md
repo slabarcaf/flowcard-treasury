@@ -1,5 +1,10 @@
 # Customer-bound browser commands
 
+COMPLETED locally: Task D is merged into develop. The local Go browser
+walkthrough and retained profile are documented in
+[the local browser guide](/docs/demo/local-go-browser.md). Live provider and
+hosted traffic cutover remain outside this completed slice.
+
 Task D connects real invited users to existing servicing actors, then tests
 explicit customer/operator actions on uniquely owned DEMO targets. No live
 provider enablement, shared-data change, persistent provisioning or deployment.
