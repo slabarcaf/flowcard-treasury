@@ -61,7 +61,7 @@ A CLI-only provider proof is useful for contract discovery but leaves browser
 identity and acceptance untested. Reviving Node execution would duplicate
 financial ownership. Neither substitutes for the selected Go browser journey.
 
-## Current source and verified evidence
+## Original planning baseline
 
 Planning inspected feature branch `feat/browser-gateway-auth` at `c06dad6`,
 including Tasks A through D. Local `develop` currently points to `c54f9f0`.
@@ -418,3 +418,36 @@ See [the completed runbook](/docs/demo/airwallex-go-sandbox-runbook.md) for exac
 boundaries, checks, commands, cleanup and limitations. Provider reversal/refund
 semantics remain conservatively held. No production operation or card retry
 was performed.
+
+## Original product UI acceptance, November 16
+
+The restored product interface also completed the actual sandbox lifecycle on
+its own isolated installation. Its operator created an offer, the distinct
+customer accepted the exact terms, and the operator approved and requested
+funding. The normal worker settled 700000 cents of funding, 19000 cents of
+fee collection and 700000 cents of principal collection from one external
+719000-cent deposit. The same bridge reached REPAID with zero debt and no holds.
+
+The provider changed that deposit's settlement timestamp by one second. Ramil
+explicitly approved ignoring timestamp equality when identity and economic
+facts match. Commit `edc383a`, integrated into develop at `e21531f`, applies
+that rule at receipt, planning and dispatch. A privileged, audited maintenance
+recheck released the prior timestamp-only hold while preserving the original
+deposit timestamp and every original provider observation. No replacement
+deposit was used to bypass the hold.
+
+Fresh actual provider GETs verified all three transfers. The canonical journey
+verifier passed before and after a real stack restart. Replaying the original
+browser funding request with the same key and payload returned the identical
+bridge and operation receipt. Operation identities, balances, saved assessment,
+evidence and source-confirmed collection closure remained unchanged.
+
+The full funding suite passed 58 top-level tests with no skipped test cases;
+four focused scenarios also passed on merged develop. A source overlay proves
+the timestamp regression fails against the old implementation. Original
+operator and mobile customer views show repayment, with role isolation intact.
+
+See [the original UI verification report](/docs/demo/original-ui-airwallex-verification.md)
+and [the timestamp recheck procedure](/docs/demo/deposit-timestamp-rechecks.md).
+The execution scope is complete and archived. Production, real CRM/model
+acceptance and card retry remain outside this plan's scope.
