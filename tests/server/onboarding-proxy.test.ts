@@ -332,9 +332,7 @@ describe("Onboarding Node Proxy Route (End-to-End)", () => {
     return createRequestHandler({
       port: 0,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: allowedOrigins,
@@ -450,9 +448,7 @@ describe("Onboarding Node Proxy Route (End-to-End)", () => {
     const handler = createRequestHandler({
       port: 8000,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: [allowedOrigin],
@@ -482,9 +478,7 @@ describe("Onboarding Node Proxy Route (End-to-End)", () => {
     const handler = createRequestHandler({
       port: 8000,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: [allowedOrigin],
@@ -510,9 +504,7 @@ describe("Onboarding Node Proxy Route (End-to-End)", () => {
     const handler = createRequestHandler({
       port: 8000,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: [allowedOrigin],
@@ -541,9 +533,7 @@ describe("Onboarding Node Proxy Route (End-to-End)", () => {
     const handler = createRequestHandler({
       port: 8000,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: [allowedOrigin],
@@ -603,9 +593,7 @@ describe("Onboarding Node Proxy Route (End-to-End)", () => {
     const handler = createRequestHandler({
       port: 8000,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: [allowedOrigin],
@@ -636,9 +624,7 @@ describe("Onboarding Node Proxy Route (End-to-End)", () => {
     const handler = createRequestHandler({
       port: 8000,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: [allowedOrigin],

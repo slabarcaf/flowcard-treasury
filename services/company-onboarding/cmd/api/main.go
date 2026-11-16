@@ -28,6 +28,7 @@ import (
 
 func main() {
 	portFlag := flag.Int("port", 0, "HTTP port for company-onboarding API server (overrides PORT environment variable)")
+	webhookOnlyFlag := flag.Bool("webhook-only", false, "Expose only direct onboarding webhook intake and liveness")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -35,6 +36,7 @@ func main() {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 
+	cfg.WebhookOnly = *webhookOnlyFlag
 	if *portFlag > 0 {
 		cfg.Port = *portFlag
 	}
@@ -102,6 +104,23 @@ func buildHandlerWithDependencies(ctx context.Context, cfg *config.Config, opAut
 		repo = postgres.NewRepository(pool)
 	} else {
 		log.Println("DATABASE_URL not configured; repository running unconfigured (endpoints return safe 503)")
+	}
+
+	if cfg.WebhookOnly {
+		if repo == nil || cfg.WebhookSecret == "" || cfg.WebhookEnvironment == "" {
+			if closeFn != nil {
+				closeFn()
+			}
+			return nil, nil, errors.New("webhook_only_requires_database_secret_and_environment")
+		}
+		providerHandler, err := webhooks.NewProviderHandler(repo, []byte(cfg.WebhookSecret), cfg.WebhookEnvironment)
+		if err != nil {
+			if closeFn != nil {
+				closeFn()
+			}
+			return nil, nil, err
+		}
+		return webhookOnlyRoutes(providerHandler), closeFn, nil
 	}
 
 	// 1. Authenticator: configure from ServiceAuthSecret if set, or default to DenyAll (fails closed)
