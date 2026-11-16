@@ -40,10 +40,16 @@ jobs:
         with:
           node-version: '22.12.0'
           cache: npm
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: services/company-onboarding/go.mod
+          cache-dependency-path: services/company-onboarding/go.sum
       - run: npm ci
       - run: npm run lint
       - run: npm run build:product
       - run: npm run server:build
+      - name: Precompile the real docs test server before its bounded health check
+        run: go -C services/company-onboarding build -mod=readonly -o "$RUNNER_TEMP/onboarding-docs-testserver" ./cmd/testserver
       - name: Safe product tests (legacy fixed-database suites are explicitly excluded)
         run: >-
           npx vitest run
