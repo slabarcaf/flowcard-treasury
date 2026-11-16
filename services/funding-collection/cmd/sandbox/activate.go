@@ -69,7 +69,13 @@ func accountTransition(ctx context.Context, api *sandboxAPI, cfg credentials, pa
 			return err
 		}
 	}
-	if err := withManifest(path, runID, cfg.platform, false, func(m *sandboxManifest) error { return reserveIntent(m, name, runID+"-"+name, payload) }); err != nil {
+	if err := withManifest(path, runID, cfg.platform, false, func(m *sandboxManifest) error {
+		requestID := requestIDFor(runID, name)
+		if existing := m.Intents[name]; existing.RequestID != "" {
+			requestID = existing.RequestID
+		}
+		return reserveIntent(m, name, requestID, payload)
+	}); err != nil {
 		return err
 	}
 	_, code, state := api.post(ctx, endpoint, payload)

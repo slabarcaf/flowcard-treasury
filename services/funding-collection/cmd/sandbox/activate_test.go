@@ -13,14 +13,23 @@ import (
 )
 
 func TestSandboxActivationUsesOnlyOwnedSubmittedAccounts(t *testing.T) {
-	for _, lost := range []bool{false, true} {
-		t.Run(map[bool]string{false: "normal", true: "lost submit response"}[lost], func(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		lost     bool
+		runID    string
+		profiled bool
+	}{
+		{name: "normal", runID: "fc-sbx-12345678"},
+		{name: "lost submit response", lost: true, runID: "fc-sbx-12345678"},
+		{name: "maximum marker with completed profiles", runID: "fc-sbx-" + strings.Repeat("a", 32), profiled: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			dir := t.TempDir()
 			if err := os.Chmod(dir, 0700); err != nil {
 				t.Fatal(err)
 			}
 			path := filepath.Join(dir, "manifest.json")
-			runID := "fc-sbx-12345678"
+			runID, lost := test.runID, test.lost
 			cfg := credentials{platform: "test-platform"}
 			accounts := map[string]ownedAccount{}
 			for _, role := range []string{"funding", "borrower"} {
@@ -36,6 +45,9 @@ func TestSandboxActivationUsesOnlyOwnedSubmittedAccounts(t *testing.T) {
 				m.SandboxAgreementsAcceptedAt = "2026-11-15T00:00:00Z"
 				for _, role := range []string{"funding", "borrower"} {
 					m.Intents["account-"+role] = setupIntent{ResourceID: "test-" + role, State: "VERIFIED"}
+					if test.profiled {
+						m.Intents["profile-v1-"+role] = setupIntent{State: "VERIFIED"}
+					}
 				}
 				return nil
 			}); err != nil {
@@ -96,5 +108,39 @@ func TestSandboxActivationUsesOnlyOwnedSubmittedAccounts(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestActivationPreservesLegacyUnknownIntent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "manifest.json")
+	runID, name := "fc-sbx-12345678", "submit-funding"
+	legacyKey := runID + "-" + name
+	payload := []byte(`{}`)
+	cfg := credentials{platform: "test-platform"}
+	if err := withManifest(path, runID, cfg.platform, true, func(m *sandboxManifest) error {
+		return reserveIntent(m, name, legacyKey, payload)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	api := &sandboxAPI{client: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("unexpected provider request")
+	})}}
+	err := accountTransition(context.Background(), api, cfg, path, runID, "funding", "submit", "test-funding", payload, "/api/v1/accounts/test-funding/submit")
+	if err == nil || err.Error() != "sandbox_setup_reconciliation_required" || calls != 0 {
+		t.Fatalf("legacy unknown transition: err=%v HTTP calls=%d, want reconciliation and no HTTP", err, calls)
+	}
+	if err := withManifest(path, runID, cfg.platform, false, func(m *sandboxManifest) error {
+		if got := m.Intents[name]; got.RequestID != legacyKey || got.State != "UNKNOWN" {
+			t.Fatal("legacy unknown identity or state changed")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
