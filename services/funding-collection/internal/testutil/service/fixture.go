@@ -65,6 +65,7 @@ const (
 // Harness owns the service components for one source-only final-test fixture.
 type Harness struct {
 	Pool             *pgxpool.Pool
+	Maintenance      *pgxpool.Pool
 	Config           config.Config
 	Evaluator        *underwriting.Evaluator
 	Provider         *provider.AirwallexAdapter
@@ -176,7 +177,7 @@ func New(t testing.TB, now time.Time, reserveBPS int) (*Harness, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Harness{Pool: pool, Config: cfg, Evaluator: synthetic.Evaluator,
+	return &Harness{Pool: pool, Maintenance: book.MaintenancePool(), Config: cfg, Evaluator: synthetic.Evaluator,
 		Provider: adapter, ProviderHTTP: providerDouble,
 		API: api, Worker: serialWorker, Clock: clock, UpstreamBehavior: behavior}, nil
 }

@@ -182,6 +182,10 @@ func (e *Environment) SeedMapping(ctx context.Context, mapping Mapping) error {
 	return nil
 }
 
+// MaintenancePool exposes only this test-owned database's migration owner for
+// explicit privileged-maintenance acceptance checks. Runtime URLs stay restricted.
+func (e *Environment) MaintenancePool() *pgxpool.Pool { return e.adminDB }
+
 // OpenRuntimePool returns the checked, least-privileged service pool and keeps
 // ownership so Close shuts it before removing the owned database.
 func (e *Environment) OpenRuntimePool(ctx context.Context) (*pgxpool.Pool, error) {
