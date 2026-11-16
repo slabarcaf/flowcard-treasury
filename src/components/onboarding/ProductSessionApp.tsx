@@ -124,6 +124,14 @@ export function ProductSessionApp() {
   return (
     <BrowserSessionChanged value={(value) => authenticated(value)}>
       <div key={session.user.id}>
+        {import.meta.env.VITE_SANDBOX_HISTORY === 'true' && (
+          <div
+            role="status"
+            style={{ padding: '10px 20px', background: '#fff1cf', color: '#5b4108', fontSize: 13 }}
+          >
+            Sandbox history review · transfers disabled
+          </div>
+        )}
         {error && publicError}
         {relogin && (
           <div

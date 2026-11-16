@@ -515,6 +515,37 @@ func TestCoordinatorRecovery(t *testing.T) {
 		t.Fatalf("older collection base version published: %v", err)
 	}
 	t.Logf("case_id=%s bridge_id=%s base_version=%d current_version=%d stale_publication=rejected", collectionClaim.ID, bridgeID, version1, version2)
+
+	currentState := json.RawMessage(`{"bridge":{"id":"bridge-g-stale","version":2},"allowed_next_actions":[]}`)
+	if err := repo.CompleteRefreshDisposition(ctx, collectionClaim.ID, *collectionClaim.LeaseToken, version2, bridgeID, time.Now().UTC(), currentState, postgres.RefreshDisposition{Status: "ACTION_REQUIRED", NextStage: "MONITORING"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ReplayCase(ctx, collectionClaim.ID, binding, "DEMO", "fixture-operator", "ordinary replay remains restricted"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("ordinary replay accepted an idle monitoring case: %v", err)
+	}
+	if _, err := repo.RefreshCollectionCase(ctx, collectionClaim.ID, "foreign-binding", "DEMO", "fixture-operator", "foreign scope"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("collection refresh accepted foreign binding: %v", err)
+	}
+	refresh, err := repo.RefreshCollectionCase(ctx, collectionClaim.ID, binding, "DEMO", "fixture-operator", "reread current servicing facts")
+	if err != nil || refresh.Stage != "REFRESH_BRIDGE" || refresh.Revision != 1 {
+		t.Fatalf("queue scoped collection refresh: receipt=%#v err=%v", refresh, err)
+	}
+	refreshedClaim, err := repo.ClaimNext(ctx, 30*time.Second, binding, "DEMO")
+	if err != nil || refreshedClaim.ID != collectionClaim.ID || !refreshedClaim.RefreshNeeded {
+		t.Fatalf("claim requested source refresh: %#v %v", refreshedClaim, err)
+	}
+	if _, err := repo.RefreshCollectionCase(ctx, collectionClaim.ID, binding, "DEMO", "fixture-operator", "active lease"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("collection refresh interrupted an active lease: %v", err)
+	}
+	if err := repo.CompleteRefreshDisposition(ctx, refreshedClaim.ID, *refreshedClaim.LeaseToken, version2, bridgeID, time.Now().UTC(), currentState, postgres.RefreshDisposition{Status: "CLOSED", NextStage: "MONITORING"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.RefreshCollectionCase(ctx, collectionClaim.ID, binding, "DEMO", "fixture-operator", "closed case"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("collection refresh reopened a closed case: %v", err)
+	}
+	if _, err := repo.RefreshCollectionCase(ctx, shortCaseID, binding, "DEMO", "fixture-operator", "shortfall budget"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("collection refresh accepted a shortfall investigation: %v", err)
+	}
 }
 
 func evaluationResponse(shortfallID, customerID, accountID, transactionID string) []byte {

@@ -126,6 +126,11 @@ func TestCLIRejectsImplicitOrProductionExecution(t *testing.T) {
 			t.Fatal("unsafe invocation accepted or leaked input")
 		}
 	}
+	var out strings.Builder
+	err := run(context.Background(), []string{"setup-accounts", "--history", "--environment", "SANDBOX", "--env-file", "must-not-be-read"}, &out)
+	if err == nil || err.Error() != "sandbox_history_only_for_serve_local" || out.Len() != 0 {
+		t.Fatal("history mode reached a provider setup command or credential loading")
+	}
 }
 
 func TestAuthenticationExpiryFormats(t *testing.T) {

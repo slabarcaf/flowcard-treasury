@@ -151,6 +151,25 @@ Then run `export-shortfall-contract`, `export-execution-contract` and
 `bind-local-users`. Exporters verify current account/card and exact probe facts
 plus original signed samples. Stop the capture receiver before `serve-local`.
 
+### Review retained results
+
+Use `serve-local --history` with the retained private manifest and run marker
+to review a completed installation. It serves the original operator/customer
+interface on port 18073 for up to six hours. Provider dispatch, both provider
+workers, public webhook ingress and automatic snapshot publication are
+disabled. The interface labels this history view. Financial execution
+contracts are not loaded in this mode, so their expiry does not prevent
+historical reads. Current provider wallet reads remain available.
+
+Supply the existing optional `BROWSER_GATEWAY_ONBOARDING_URL` and
+`BROWSER_GATEWAY_ONBOARDING_SECRET` together, server-side, to connect
+Applications to the local Go onboarding API. The gateway retains its normal
+URL, credential and role validation. Keep the secret in a private file or
+process environment, never a command argument or browser variable.
+
+Use a fresh verified installation and ordinary `serve-local` for a new
+financial acceptance run. Preserve the completed ledger and provider objects.
+
 ### Browser acceptance
 
 ```sh

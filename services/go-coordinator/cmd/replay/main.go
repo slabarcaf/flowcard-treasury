@@ -16,6 +16,7 @@ import (
 func main() {
 	caseID := flag.String("case", "", "coordinator case ID")
 	reason := flag.String("reason", "", "operator reason for resuming the same workflow revision")
+	refresh := flag.Bool("refresh-collection", false, "Queue a source reread for an idle collection monitoring case")
 	flag.Parse()
 	if *caseID == "" || *reason == "" {
 		fatal(errors.New("case_and_reason_required"))
@@ -36,7 +37,12 @@ func main() {
 		fatal(err)
 	}
 	defer repo.Close()
-	receipt, err := repo.ReplayCase(ctx, *caseID, bindingID, mode, operator.Username, *reason)
+	var receipt postgres.ReplayReceipt
+	if *refresh {
+		receipt, err = repo.RefreshCollectionCase(ctx, *caseID, bindingID, mode, operator.Username, *reason)
+	} else {
+		receipt, err = repo.ReplayCase(ctx, *caseID, bindingID, mode, operator.Username, *reason)
+	}
 	if err != nil {
 		fatal(err)
 	}
