@@ -66,7 +66,8 @@ func exportShortfallContract(ctx context.Context, api *sandboxAPI, cfg credentia
 		return errors.New("sandbox_signed_evidence_unavailable")
 	}
 	hashes := map[string]string{}
-	eventID := ""
+	eventID := attempt.ResourceID
+	var canonical []byte
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
@@ -113,9 +114,19 @@ func exportShortfallContract(ctx context.Context, api *sandboxAPI, cfg credentia
 		matched := false
 		switch envelope.Name {
 		case "issuing.card_transaction_event.failed":
+			if envelope.Data.ID == "" || envelope.Data.Parent == "" {
+				return errors.New("sandbox_signed_event_reference_missing")
+			}
+			sample, _, sampleState := scoped.get(ctx, "/api/v1/issuing/card_transaction_events/"+url.PathEscape(envelope.Data.ID))
+			if sampleState != "VERIFIED" || !verifiedCanonicalDecline(sample, envelope.Data.ID, envelope.Data.Parent, card.ResourceID) {
+				return errors.New("sandbox_canonical_signed_event_unverified")
+			}
+			// The two notification shapes need not be delivered for the same
+			// transaction. Verify each observed shape's own provider reference.
+			matched = true
 			if envelope.Data.Parent == attempt.ParentTransactionID {
 				eventID = envelope.Data.ID
-				matched = true
+				canonical = sample
 			}
 		case "issuing.card_transaction.declined":
 			matched = envelope.Data.ID == attempt.ParentTransactionID
@@ -128,20 +139,20 @@ func exportShortfallContract(ctx context.Context, api *sandboxAPI, cfg credentia
 	if eventID == "" || len(hashes) != 2 {
 		return errors.New("sandbox_signed_event_pair_unverified")
 	}
-	raw, _, state := scoped.get(ctx, "/api/v1/issuing/card_transaction_events/"+url.PathEscape(eventID))
-	var event canonicalEvent
-	if state != "VERIFIED" || json.Unmarshal(raw, &event) != nil || event.ID != eventID || event.Parent != attempt.ParentTransactionID || event.CardID != card.ResourceID || event.Type != "AUTHORIZATION" || event.Subtype != "AUTHORIZATION" || event.Category != "PURCHASE" || event.Result != "DECLINED" || event.Reason != "INSUFFICIENT_FUNDS" || event.BillingCurrency != "USD" {
+	if canonical == nil {
+		var state string
+		canonical, _, state = scoped.get(ctx, "/api/v1/issuing/card_transaction_events/"+url.PathEscape(eventID))
+		if state != "VERIFIED" {
+			return errors.New("sandbox_canonical_callback_event_unverified")
+		}
+	}
+	if !verifiedCanonicalDecline(canonical, eventID, attempt.ParentTransactionID, card.ResourceID) {
 		return errors.New("sandbox_canonical_callback_event_unverified")
 	}
-	amount, ok := majorAmount(event.BillingAmount)
-	expected, _ := majorAmount(json.RawMessage(`9000`))
-	if !ok || amount.Cmp(expected) != 0 {
-		return errors.New("sandbox_canonical_callback_amount_unverified")
-	}
-	if err := captureContract(path, "issuing-callback-event", raw); err != nil {
+	if err := captureContract(path, "issuing-callback-event", canonical); err != nil {
 		return err
 	}
-	hash := sha256.Sum256(raw)
+	hash := sha256.Sum256(canonical)
 	contract := struct {
 		SchemaVersion    int       `json:"schema_version"`
 		Environment      string    `json:"environment"`
@@ -162,4 +173,14 @@ func exportShortfallContract(ctx context.Context, api *sandboxAPI, cfg credentia
 		return errors.New("sandbox_shortfall_contract_invalid")
 	}
 	return writePrivateFile(filepath.Join(filepath.Dir(path), "shortfall-contract.json"), encoded)
+}
+
+func verifiedCanonicalDecline(raw []byte, eventID, parentID, cardID string) bool {
+	var event canonicalEvent
+	if json.Unmarshal(raw, &event) != nil || event.ID != eventID || event.Parent != parentID || event.CardID != cardID || event.Type != "AUTHORIZATION" || event.Subtype != "AUTHORIZATION" || event.Category != "PURCHASE" || event.Result != "DECLINED" || event.Reason != "INSUFFICIENT_FUNDS" || event.BillingCurrency != "USD" {
+		return false
+	}
+	amount, ok := majorAmount(event.BillingAmount)
+	expected, _ := majorAmount(json.RawMessage(`9000`))
+	return ok && amount.Cmp(expected) == 0
 }

@@ -17,8 +17,18 @@ import (
 )
 
 func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
-	for _, forged := range []bool{false, true} {
-		t.Run(map[bool]string{false: "verified evidence", true: "tampered evidence refused"}[forged], func(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		forged      bool
+		separate    bool
+		wrongParent bool
+	}{
+		{name: "verified evidence"},
+		{name: "tampered evidence refused", forged: true},
+		{name: "signed forms on separate declines", separate: true},
+		{name: "separate sample canonical parent mismatch refused", separate: true, wrongParent: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			dir := t.TempDir()
 			if err := os.Chmod(dir, 0700); err != nil {
 				t.Fatal(err)
@@ -31,6 +41,9 @@ func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
 				m.Intents["card-borrower"] = setupIntent{ResourceID: "test-card", State: "VERIFIED"}
 				m.Intents["cardholder-borrower"] = setupIntent{ResourceID: "test-holder", State: "VERIFIED"}
 				m.Intents["callback-decline"] = setupIntent{ParentTransactionID: "test-parent"}
+				if test.separate {
+					m.Intents["callback-decline"] = setupIntent{ParentTransactionID: "test-parent", ResourceID: "test-callback-event"}
+				}
 				return nil
 			}); err != nil {
 				t.Fatal(err)
@@ -52,6 +65,9 @@ func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
 				id, parent := "test-parent", ""
 				if strings.HasSuffix(name, "event.failed") {
 					id, parent = "test-event", "test-parent"
+					if test.separate {
+						parent = "test-other-parent"
+					}
 				}
 				body, _ := json.Marshal(map[string]any{"id": "delivery-" + name, "name": name, "account_id": "test-borrower", "version": "2026-08-21", "data": map[string]string{"id": id, "card_id": "test-card", "card_transaction_id": parent}})
 				timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
@@ -59,7 +75,7 @@ func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
 				mac.Write([]byte(timestamp))
 				mac.Write(body)
 				signature := hex.EncodeToString(mac.Sum(nil))
-				if forged {
+				if test.forged {
 					signature = strings.Repeat("0", 64)
 				}
 				record, _ := json.Marshal(map[string]any{"run_id": runID, "source": "SHORTFALL", "event_id": "delivery-" + name, "event_name": name, "x_timestamp": timestamp, "x_signature": signature, "raw_body_base64": body})
@@ -97,19 +113,35 @@ func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
 				case "/api/v1/issuing/card_transaction_events/test-event":
 					canonicalGets++
 					response = []byte(`{"id":"test-event","card_id":"test-card","card_transaction_id":"test-parent","type":"AUTHORIZATION","subtype":"AUTHORIZATION","transaction_category":"PURCHASE","process_result":"DECLINED","failure_reason":"INSUFFICIENT_FUNDS","billing_amount":9000,"billing_currency":"USD"}`)
+					if test.separate && !test.wrongParent {
+						response = []byte(strings.Replace(string(response), "test-parent", "test-other-parent", 1))
+					}
+				case "/api/v1/issuing/card_transaction_events/test-callback-event":
+					canonicalGets++
+					response = []byte(`{"id":"test-callback-event","card_id":"test-card","card_transaction_id":"test-parent","type":"AUTHORIZATION","subtype":"AUTHORIZATION","transaction_category":"PURCHASE","process_result":"DECLINED","failure_reason":"INSUFFICIENT_FUNDS","billing_amount":9000,"billing_currency":"USD"}`)
 				default:
 					t.Fatalf("unexpected provider route %s", r.URL.Path)
 				}
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(response)))}, nil
 			})}}
 			err = exportShortfallContract(context.Background(), api, cfg, path, runID)
-			if forged {
+			if test.forged {
 				if err == nil || canonicalGets != 0 {
 					t.Fatal("forged evidence reached canonical read or created contract")
 				}
 				return
 			}
-			if err != nil || canonicalGets != 1 {
+			if test.wrongParent {
+				if err == nil || canonicalGets != 1 {
+					t.Fatal("signed evidence was not bound to its own canonical parent")
+				}
+				return
+			}
+			wantGets := 1
+			if test.separate {
+				wantGets = 2
+			}
+			if err != nil || canonicalGets != wantGets {
 				t.Fatalf("verified contract unavailable: %v", err)
 			}
 			target := filepath.Join(dir, "shortfall-contract.json")
