@@ -141,7 +141,9 @@ func createCompleteCompanyAppAndSub(
 			{Type: "EIN", Value: "12-3456789", IssuingCountry: "US"},
 		},
 		BusinessProfile: domain.BusinessProfile{
-			Products: "SaaS bridge underwriting infrastructure",
+			Products:           "SaaS bridge underwriting infrastructure",
+			OperatingCountries: []string{"US"},
+			OperatingAddress:   &domain.Address{Line1: "100 Market St", City: "San Francisco", State: "CA", PostalCode: "94105", Country: "US"},
 			RegisteredAddress: domain.Address{
 				Line1:      "100 Market St",
 				Line2:      "Suite 400",
@@ -153,13 +155,14 @@ func createCompleteCompanyAppAndSub(
 		},
 		People: []domain.Person{
 			{
-				ID:          "person_001",
-				FirstName:   "Alex",
-				LastName:    "Morgan",
-				Email:       "operator.contact@acme-innovations.example.com",
-				Phone:       "+14155550199",
-				DateOfBirth: domain.Date("1985-06-15"),
-				Nationality: "US",
+				ID:              "person_001",
+				FirstName:       "Alex",
+				LastName:        "Morgan",
+				Email:           "operator.contact@acme-innovations.example.com",
+				Phone:           "+14155550199",
+				DateOfBirth:     domain.Date("1985-06-15"),
+				Nationality:     "US",
+				Identifications: []domain.Identification{{ID: "ident_001", Type: "SSN", Number: "123456789", IssuingCountry: "US"}},
 			},
 		},
 	})
@@ -178,6 +181,7 @@ func createCompleteCompanyAppAndSub(
 	if err := app.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{
 		PrimaryContactPersonID: "person_001",
 		IndustryCategoryCode:   "5734",
+		IntendedProducts:       []string{"CREATE_CARDS"},
 		EstimatedRevenue: domain.RevenueEstimate{
 			Amount:   "100000",
 			Currency: "USD",
@@ -196,8 +200,9 @@ func createCompleteCompanyAppAndSub(
 		},
 		People: []domain.PersonPlatformDetails{
 			{
-				PersonID:      "person_001",
-				PlatformRoles: []string{"DIRECTOR"},
+				PersonID:                "person_001",
+				PlatformRoles:           []string{"AUTHORISED_PERSON", "BENEFICIAL_OWNER", "CONTROLLING_PERSON"},
+				PrimaryIdentificationID: "ident_001",
 				ResidentialAddress: domain.Address{
 					Line1:      "100 Market St",
 					City:       "San Francisco",

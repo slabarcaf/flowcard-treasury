@@ -40,10 +40,16 @@ jobs:
         with:
           node-version: '22.12.0'
           cache: npm
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: services/company-onboarding/go.mod
+          cache-dependency-path: services/company-onboarding/go.sum
       - run: npm ci
       - run: npm run lint
       - run: npm run build:product
       - run: npm run server:build
+      - name: Precompile the real docs test server before its bounded health check
+        run: go -C services/company-onboarding build -mod=readonly -o "$RUNNER_TEMP/onboarding-docs-testserver" ./cmd/testserver
       - name: Safe product tests (legacy fixed-database suites are explicitly excluded)
         run: >-
           npx vitest run
@@ -81,6 +87,14 @@ jobs:
         with:
           go-version-file: services/${{ matrix.module }}/go.mod
           cache-dependency-path: services/**/go.sum
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: matrix.module == 'company-onboarding'
+        with:
+          node-version: '22.12.0'
+          cache: npm
+      - name: Build the retained cross-language authentication fixture
+        if: matrix.module == 'company-onboarding'
+        run: npm ci && npm run server:build
       - name: Prepare synthetic isolated test credentials
         shell: bash
         run: |
@@ -89,6 +103,13 @@ jobs:
           for name in BROWSER_GATEWAY_TEST_ADMIN_URL_FILE FUNDING_TEST_ADMIN_URL_FILE COORDINATOR_TEST_ADMIN_URL_FILE ONBOARDING_WEBHOOK_TEST_ADMIN_URL_FILE; do
             echo "$name=$RUNNER_TEMP/go-test-admin-url" >> "$GITHUB_ENV"
           done
+      - name: Prepare stable NOLOGIN role prerequisites in the fresh gateway test cluster
+        if: matrix.module == 'browser-gateway'
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: >-
+          docker exec "$POSTGRES_CONTAINER" psql -v ON_ERROR_STOP=1 -U test_onboarding -d postgres
+          -c 'CREATE ROLE onboarding_service NOLOGIN; CREATE ROLE coordinator_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS; CREATE ROLE servicing_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;'
       - name: Build, vet and verify formatting
         working-directory: services/${{ matrix.module }}
         run: |

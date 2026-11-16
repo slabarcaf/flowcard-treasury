@@ -489,7 +489,7 @@ func TestUnderwritingJourney(t *testing.T) {
 		firstBody, firstStatus := journeyAPIRequest(t, ctx, client, serviceSecret, endpoint,
 			http.MethodPost, requestBody, scenario.IdempotencyKey)
 		if firstStatus != http.StatusCreated {
-			t.Fatalf("scenario %s first POST status = %d, want 201", scenario.ID, firstStatus)
+			t.Fatalf("scenario %s first POST status = %d, want 201; error=%s", scenario.ID, firstStatus, firstBody)
 		}
 		var response domain.EvaluationResponse
 		if json.Unmarshal(firstBody, &response) != nil || response.SourceMode != "DEMO" ||
