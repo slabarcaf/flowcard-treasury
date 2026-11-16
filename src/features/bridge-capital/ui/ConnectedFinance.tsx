@@ -38,7 +38,7 @@ export function SourceNote({ mode }: { mode?: string }) {
       {mode === 'DEMO'
         ? 'DEMO · synthetic financial records and local provider · real Go processing'
         : mode === 'SANDBOX'
-          ? 'SANDBOX · provider acceptance remains unverified'
+          ? 'Airwallex sandbox test funds · synthetic financial history and receivables'
           : 'Financial source not yet confirmed'}
     </p>
   );
@@ -234,7 +234,8 @@ export function OfferCard({
                       disabled={disabled}
                       onChange={(e) => setAccepted(e.target.checked)}
                     />
-                    I accept these exact DEMO terms: {cents(value.principal_cents)} principal,{' '}
+                    I accept these exact {value.source_mode === 'SANDBOX' ? 'sandbox test' : 'DEMO'}{' '}
+                    terms: {cents(value.principal_cents)} principal,{' '}
                     {cents(value.contract_fee_cents)} fee, {cents(value.total_due_cents)} total, due{' '}
                     {value.due_on}.
                   </label>

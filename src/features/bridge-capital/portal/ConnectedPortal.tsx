@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { BrowserSession } from '../../../services/browser-session/client.js';
-import type { Offer } from '../../../services/financial/client.js';
+import type { Offer, SourceMode } from '../../../services/financial/client.js';
 import { cents } from '../../../services/financial/client.js';
 import { ProductReadClient } from '../../../services/financial/product-reads.js';
 import { useProductQuery } from '../ui/useProductQuery.js';
@@ -14,7 +14,7 @@ import type { TabId } from './components/TabBar.js';
 import { color, font, glow, layout, space } from './tokens.js';
 const product = new ProductReadClient();
 type PortalView = { screen: TabId | 'offer' | 'bridge'; id?: string };
-async function loadCustomerOffers(customerID: string): Promise<Offer[]> {
+async function loadCustomerOffers(customerID: string, expectedMode: SourceMode): Promise<Offer[]> {
   const ids = await financeCommand.offers();
   const offers: Offer[] = [];
   let next = 0;
@@ -23,7 +23,7 @@ async function loadCustomerOffers(customerID: string): Promise<Offer[]> {
       while (next < ids.length) {
         const index = next++;
         const offer = await financeRead.offer(ids[index]);
-        if (offer.source_mode !== 'DEMO' || offer.customer_id !== customerID)
+        if (offer.source_mode !== expectedMode || offer.customer_id !== customerID)
           throw new Error('Offer does not match the signed-in customer.');
         offers[index] = offer;
       }
@@ -135,7 +135,7 @@ function CustomerFinancing({
     async () => {
       const page = await product.bridges(undefined, cursor);
       if (
-        page.source_mode !== 'DEMO' ||
+        page.source_mode !== binding.mode ||
         page.items.some((x) => x.customer_id !== binding.customer_id)
       )
         throw new Error('Bridge records do not match your verified customer.');
@@ -145,7 +145,7 @@ function CustomerFinancing({
   );
   const offers = useProductQuery(
     'own-offers',
-    () => loadCustomerOffers(binding.customer_id!),
+    () => loadCustomerOffers(binding.customer_id!, binding.mode!),
     5000
   );
   const openBridge = (id: string) => setView({ screen: 'bridge', id });
@@ -306,7 +306,14 @@ function CustomerFinancing({
             <Heading>Your account</Heading>
             <Card>
               <Row label="Signed in as" value={session.user.username} />
-              <Row label="Source" value="Synthetic DEMO installation" />
+              <Row
+                label="Source"
+                value={
+                  String(binding.mode) === 'SANDBOX'
+                    ? 'Airwallex sandbox test funds and scenario facts'
+                    : 'Synthetic DEMO installation'
+                }
+              />
               <Row label="Servicing customer" value={binding.customer_id} />
               <Row label="Account link" value="Verified by the service" />
               <Row label="Credit line" value="Available on individual assessed offers" />
