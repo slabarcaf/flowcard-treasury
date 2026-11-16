@@ -1,8 +1,8 @@
 # Original demo UI connected to Go
 
-Status: LOCAL DEMO IMPLEMENTED and verified in `feat/demo-ui-go`; local
-integration and archive bookkeeping follow. Actual Airwallex sandbox acceptance
-is a subsequent goal.
+Status: COMPLETE for the local UI/API scope. Integrated into local `develop`
+at `fcb06c3`, verified with 120 frontend tests and actual local financing.
+Actual Airwallex sandbox acceptance is a subsequent active goal.
 Prepared against local `develop`
 `c54f9f0`, November 15, 2026.
 
@@ -457,7 +457,7 @@ reads and commands, isolated credentials and all fixture/live limits visible.
   and legacy script descriptions truthfully. Do not maintain two independent
   financial implementations. Keep deploy/build compatibility explicit before
   any future hosted switch; this local acceptance deploys nothing.
-- [ ] Update the plan index, mark only passed tasks, commit scoped changes when
+- [x] Update the plan index, mark only passed tasks, commit scoped changes when
   authorized, merge locally only when authorized, then archive this plan when
   its stated acceptance is complete. Preserve unresolved external gates.
 
