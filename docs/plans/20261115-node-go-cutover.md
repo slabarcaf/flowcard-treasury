@@ -55,7 +55,11 @@ Ramil selected real customer/operator login on November 15, 2026. Follow
 - [x] Implement C: operator-only Coordinator/Funding reads, exact cents and
   versions, no financial writes or silent fixture fallback. See the
   [financial reads plan](/docs/plans/20261115-browser-financial-reads.md).
-- [ ] Complete D: trusted customer bindings and actor-bound financial writes.
+- [x] Complete D source/owned DEMO verification: trusted bindings, current
+  registry restrictions, distinct-user decisions, durable recovery and actual
+  API/worker/adapter funding plus fee-first repayment on owned local doubles.
+  [Task D plan](/docs/plans/20261115-browser-customer-writes.md) records the
+  browser freshness hold separately from the green API/worker journey.
 
 A-C are verified locally in the opt-in Go workspace. The normal legacy preview
 remains unchanged unless explicitly started with the Go gateway flag. Existing

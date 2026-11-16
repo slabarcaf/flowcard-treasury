@@ -2,9 +2,9 @@
 
 Invite-only real OPERATOR and CUSTOMER accounts with PostgreSQL sessions. This
 service owns browser authentication and an exact operator onboarding proxy.
-Customers have no financial binding or privileged capabilities. The dedicated
-opt-in frontend uses the Go boundary and reads saved Coordinator/Funding
-records. Customer financial bindings and commands remain in Task D.
+Customers receive financial access only after CLI-verified DEMO binding. The
+dedicated opt-in frontend reads saved Coordinator/Funding records. Local DEMO
+commands use exact terms, role bindings and durable recovery.
 
 [TOC]
 
@@ -40,6 +40,10 @@ GRANT CONNECT ON DATABASE flowcard_browser TO browser_runtime;
 GRANT USAGE ON SCHEMA browser_gateway TO browser_runtime;
 GRANT SELECT ON browser_gateway.users TO browser_runtime;
 GRANT SELECT, INSERT, DELETE ON browser_gateway.sessions TO browser_runtime;
+GRANT SELECT ON browser_gateway.servicing_bindings TO browser_runtime;
+GRANT SELECT, INSERT ON browser_gateway.financial_commands,
+    browser_gateway.financial_receipts, browser_gateway.customer_offers
+    TO browser_runtime;
 ```
 
 The runtime login must own no database, application schema or relation, have
@@ -326,3 +330,105 @@ Its browser/listeners and all three owned database/login pairs were removed.
 
 The complete file inventory, commands, fixture/production distinctions and
 remaining Task D boundary are in `.dev/browser-auth/task-c-report.md`.
+
+## Verified local DEMO bindings and commands
+
+Task D adds a separately gated local DEMO profile. With the mode/key variables
+absent, financial POST routes remain unregistered. To enable them, supply
+`BROWSER_GATEWAY_FINANCIAL_WRITE_MODE=DEMO`, the existing distinct Funding
+operator/customer keys in `BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET` and
+`BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET`, and the verified paired servicing
+read configuration. All three role keys must differ. The upstream must be
+loopback. SANDBOX/remote command profiles fail closed.
+
+The actual Funding actor self-read must also report a DEMO installation with
+MOCK_HTTP loopback provider. Gateway runtime has no Funding SQL access and
+never creates actors or financial customer mappings. An administrator uses
+normal Funding provisioning first, then binds the existing actor to an invited
+user through the gateway's privileged CLI. No company-name or provider-ID join
+is inferred. Apply the new numbered gateway migration before runtime startup.
+
+```sh
+go run ./cmd/migrate --database-name flowcard_browser
+
+go run ./cmd/bindings create --username operator.one \
+  --subject EXISTING_OPERATOR_AUTHENTICATION_SUBJECT \
+  --database-name flowcard_browser
+
+go run ./cmd/bindings create --username customer.one \
+  --subject EXISTING_CUSTOMER_AUTHENTICATION_SUBJECT \
+  --database-name flowcard_browser
+
+go run ./cmd/bindings disable --username customer.one \
+  --database-name flowcard_browser
+```
+
+These are post-review commands using private administrative/server settings,
+not evidence of real provisioning. The mandatory expected gateway database is
+checked before any write. Creation verifies the actual active actor, user's
+immutable role, mapped customer and installation through the authenticated
+Funding API. The binding is immutable apart from disabling and each subject/
+actor belongs to one gateway user. Reassignment requires separately reviewed
+provisioning, not a browser role/customer switch. Disabling needs only the
+administrative DB connection, so it works during source outages.
+
+Funding's existing actor importer supports reassignment. The additive service
+assertion constraint checks actor ID/type/customer and mode/facility/source
+binding against the current registry. It only narrows the already-authenticated
+subject and cannot grant identity or role. Existing direct CLI callers remain
+compatible; gateway delegation always carries constraints. Backend actor drift,
+inactive mapping or changed installation denies subsequent delegated requests.
+
+New public gateway endpoints include authenticated servicing binding status,
+this user's durable command history, and this customer's indexed offer IDs.
+Only verified CUSTOMER sessions can read their offered terms/bridges/history
+using their own constrained actor credential. They cannot read broad change
+feeds, Coordinator data or another customer's offer. Unlinked users retain
+no financial authority. Operator C reads remain separate from write binding.
+
+Financial POSTs are exactly create-offer, acceptance, approval, funding,
+collection-review and reconciliation. Server derives the principal from its
+binding; request JSON cannot provide actor/customer/role, amount or policy.
+Create-offer source is checked against the saved Coordinator case/evaluation,
+then Funding independently derives/rechecks terms. Actual create/read receipts
+now expose source mode/customer ID so the gateway verifies the customer index
+against its owning financial source. Customer acceptance and operator approval
+use distinct users and exact saved terms hash/aggregate version. Backend owns
+all consent guards, policy, reservation, settlement and ledger accounting.
+
+Each canonical intent is committed before sending, with original path/payload,
+request hash, user/binding and idempotency key. Definitive receipts and verified
+customer index entries are appended atomically. Runtime can SELECT bindings
+and SELECT/INSERT intents/receipts/index only; it cannot alter/delete them or
+provision users/bindings. Unknown results survive restart. Conflicting body/key
+returns 409; manual retry reuses the same saved payload/key. No transport error
+causes a blind retry, fake settlement or new-key replay. Cached originals are
+recovered before current Coordinator source checks. History remains readable
+from local ownership during source outages; new commands require current actor
+verification. Recovery is bounded to 50 entries with unknown outcomes first.
+Customer index shows the latest 50 IDs explicitly; detail is always re-read.
+
+The customer page displays exact DEMO amount/fee/total/due date, revision,
+aggregate version, hash, disclosure/waterfall/late-fee metadata and expiry.
+Acceptance starts unchecked. Operator approval requires explicit action and
+reason; funding/review/reconcile remain separate. A snapshot locks after any
+attempt. Unknown commands block new actions for that record until recovered.
+Known queued/reserved receipts are labelled as receipts, not settled funds.
+No password, session token or financial payload is stored in browser storage.
+
+Owned verification drives real sessions/bindings, actual Funding API, durable
+operations, real worker and production Go adapter against the local provider
+double. Only mock payment/deposit/transfer observations are controlled; normal
+signed local webhook wakes and worker commands produce every ledger effect.
+The journey covers lost receipt/restart replay, cross-customer/role/hash/drift
+and disable denials, $7,000 funding, $190 fee, $100 then $7,090 deposits,
+fee-first collection and zero-debt REPAID closure. It establishes DEMO fixture
+execution only, not live consent/provider acceptance or actual card retry.
+
+The isolated browser verified consent, distinct operator approval, durable
+manual recovery and customer privacy. An initial funding attempt correctly
+rejected stale provider evidence. A subsequent owned browser walkthrough
+explicitly refreshed the local provider double's payment observation, requested
+funding, then read an ACTIVE bridge with $7,000 principal/$190 fee and a SETTLED
+operation. The RESERVED receipt alone was never treated as settlement. The
+separate API journey proves full repayment. No production guard was changed.

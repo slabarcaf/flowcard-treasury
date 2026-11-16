@@ -34,6 +34,8 @@ export interface Change {
 }
 export interface Changes { mode: SourceMode; items: Change[]; next_after_seq: number; has_more: boolean }
 export interface Offer {
+  source_mode?: SourceMode; customer_id?: string;
+  waterfall_version?: number;
   id: string; version: number; offer_revision: number; terms_hash: string; state: string;
   principal_cents: number; contract_fee_cents: number; total_due_cents: number; term_days: number;
   offered_on: string; due_on: string; expires_at: string; disclosures_version: string;

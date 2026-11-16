@@ -34,6 +34,8 @@ type decisionRequest struct {
 	ReasonCode      string `json:"reason_code,omitempty"`
 }
 type offerResponse struct {
+	Mode               string  `json:"source_mode"`
+	CustomerID         string  `json:"customer_id"`
 	ID                 string  `json:"id"`
 	Version            int64   `json:"version"`
 	Revision           int64   `json:"offer_revision"`
@@ -173,6 +175,7 @@ func (h *handler) readOffer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "RESOURCE_NOT_FOUND", "Offer not found")
 		return
 	}
+	response.Mode, response.CustomerID = h.cfg.Mode, customerID
 	response.ReadURL = "/api/offers/" + response.ID
 	if response.ContractFeeCents > math.MaxInt64-response.PrincipalCents {
 		writeError(w, 503, "STORAGE_UNAVAILABLE", "Offer terms are unavailable")

@@ -70,3 +70,26 @@ func TestFinancialDestinations(t *testing.T) {
 		}
 	}
 }
+
+func TestDemoWriteGate(t *testing.T) {
+	c, err := (Config{}).WithFinancial("", "", "http://127.0.0.1:8085", "owned-reader-key-at-least-32-bytes-long")
+	if err != nil {
+		t.Fatal(err)
+	}
+	operator, customer := "owned-operator-key-at-least-32-bytes-long", "owned-customer-key-at-least-32-bytes-long"
+	if _, err := c.WithDemoWrites("DEMO", operator, customer); err != nil {
+		t.Fatal("valid local DEMO profile rejected")
+	}
+	for _, tt := range []struct{ mode, operator, customer string }{{"SANDBOX", operator, customer}, {"", operator, customer}, {"DEMO", operator, operator}, {"DEMO", operator, ""}, {"DEMO", c.ServicingSecret, customer}} {
+		if _, err := c.WithDemoWrites(tt.mode, tt.operator, tt.customer); err == nil {
+			t.Fatal("unsafe financial profile accepted")
+		}
+	}
+	remote, err := (Config{}).WithFinancial("", "", "https://servicing.example", "owned-reader-key-at-least-32-bytes-long")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := remote.WithDemoWrites("DEMO", operator, customer); err == nil {
+		t.Fatal("remote financial commands enabled")
+	}
+}

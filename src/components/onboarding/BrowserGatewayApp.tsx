@@ -4,6 +4,7 @@ import type { BrowserSession } from '../../services/browser-session/client.js';
 import { BrowserLoginForm } from './BrowserLoginForm.js';
 import { BrowserAccess } from './BrowserAccess.js';
 import { FinancialRecordsScreen } from '../../features/bridge-capital/backoffice/screens/FinancialRecordsScreen.js';
+import { CustomerFinancialWorkspace } from '../../features/bridge-capital/portal/screens/CustomerFinancialWorkspace.js';
 import { BrowserSessionChanged } from '../../services/browser-session/context.js';
 import { OnboardingWizard } from './OnboardingWizard.js';
 import { ApplicationsScreen } from '../../features/bridge-capital/backoffice/screens/ApplicationsScreen.js';
@@ -53,7 +54,14 @@ export function BrowserGatewayApp() {
   function go(next: View) {
     if (next.screen === 'applications' || next.screen === 'application') setView(next);
   }
-  return <BrowserSessionChanged value={value => { setSession(value); setRelogin(false); }}>
+  return <BrowserSessionChanged value={value => {
+    if (!session || session.user.id !== value.user.id) {
+      setDraft(window.location.hash === '#onboarding');
+      setFinancial(['#bridge-capital', '#financial-records'].includes(window.location.hash));
+      setView(initialView());
+    }
+    setSession(value); setRelogin(false);
+  }}>
     <div className="min-h-screen bg-[#0D1421] text-white">
       <header className="flex flex-wrap justify-between gap-4 p-5 border-b border-slate-700">
         <p>FlowCard · Go workspace</p>
@@ -62,9 +70,9 @@ export function BrowserGatewayApp() {
       {error && <p role="alert" className="p-5 text-amber-200">{error}</p>}
       {session && relogin && <div className="max-w-md mx-auto p-5"><p className="mb-4">Sign in to restore your session. Your draft remains on this page.</p><BrowserLoginForm /></div>}
       {session === undefined ? <main className="max-w-md mx-auto p-8"><p>{busy ? 'Checking session…' : 'Session not available.'}</p><button type="button" disabled={busy} onClick={() => void restore()}>Check session</button></main>
-        : <BrowserAccess session={session}><section key={session?.user.id}>
+        : <BrowserAccess session={session} customer={<CustomerFinancialWorkspace key={session?.user.id} />}><section key={session?.user.id}>
           <nav className="flex gap-5 p-5"><button type="button" onClick={() => { setFinancial(false); setDraft(false); setView(initialView()); }}>Applications</button><button type="button" onClick={() => { setFinancial(false); setDraft(true); }}>New company draft</button><button type="button" onClick={() => { setDraft(false); setFinancial(true); }}>Financial records</button></nav>
-          <p className="px-5 text-sm text-slate-400">Onboarding and read-only financial records. Legacy financial fixture screens are excluded. Saving a draft does not submit it to the provider.</p>
+          <p className="px-5 text-sm text-slate-400">Onboarding and saved financial records. Explicit DEMO commands require verified bindings. Saving a draft does not submit it to the provider.</p>
           {financial ? <FinancialRecordsScreen /> : draft ? <OnboardingWizard onComplete={() => { setDraft(false); setView(initialView()); }} />
             : view.screen === 'application' ? <ApplicationDetailScreen applicationId={view.applicationId} listState={view.listState} go={go} />
             : <ApplicationsScreen listState={view.screen === 'applications' ? view.listState : { previousCursors: [] }} go={go} />}
