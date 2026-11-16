@@ -7,6 +7,23 @@ model or move money.
 
 [TOC]
 
+## Refresh an idle collection view
+
+For a collection case in `MONITORING` or `ACTION_REQUIRED` at the monitoring
+stage, the local replay CLI can request a fresh servicing read:
+
+```sh
+go -C services/go-coordinator run ./cmd/replay \
+  --refresh-collection --case CASE_UUID --reason "Operator review of current servicing facts"
+```
+
+Use the existing restricted runtime connection, `COORDINATOR_MODE` and exact
+`COORDINATOR_SOURCE_BINDING_ID`. The command records the operator and reason,
+preserves the workflow revision and queues `REFRESH_BRIDGE`. The scheduler
+then reads authoritative servicing state before deciding whether to close.
+Foreign scopes, active leases, closed cases and shortfall investigations are
+rejected. Ordinary replay keeps its existing held/expired-lease restriction.
+
 ## Profile and service boundaries
 
 The coordinator uses a task-owned profile assembled from the lead's partial

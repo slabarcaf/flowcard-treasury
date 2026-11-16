@@ -21,6 +21,16 @@ type ReplayReceipt struct {
 
 // ReplayCase resumes only a held case or a case whose lease expired, preserving revisions and budgets.
 func (r *Repository) ReplayCase(ctx context.Context, caseID, bindingID, mode, actorID, reason string) (ReplayReceipt, error) {
+	return r.replayCase(ctx, caseID, bindingID, mode, actorID, reason, false)
+}
+
+// RefreshCollectionCase queues a source reread for an idle monitoring case.
+// It cannot reopen a closed case or reset a shortfall investigation's budget.
+func (r *Repository) RefreshCollectionCase(ctx context.Context, caseID, bindingID, mode, actorID, reason string) (ReplayReceipt, error) {
+	return r.replayCase(ctx, caseID, bindingID, mode, actorID, reason, true)
+}
+
+func (r *Repository) replayCase(ctx context.Context, caseID, bindingID, mode, actorID, reason string, collectionRefresh bool) (ReplayReceipt, error) {
 	var receipt ReplayReceipt
 	actorID = strings.TrimSpace(actorID)
 	reason = strings.TrimSpace(reason)
@@ -47,14 +57,21 @@ func (r *Repository) ReplayCase(ctx context.Context, caseID, bindingID, mode, ac
 	if err != nil {
 		return receipt, errors.New("case_replay_case_read_failed")
 	}
-	if priorStatus != "HELD" && !leaseExpired {
+	if collectionRefresh {
+		if kind != "COLLECTION" || (priorStatus != "MONITORING" && priorStatus != "ACTION_REQUIRED") || nextStage != "MONITORING" || (leaseToken != nil && !leaseExpired) {
+			return receipt, domain.ErrConflict
+		}
+	} else if priorStatus != "HELD" && !leaseExpired {
 		return receipt, domain.ErrConflict
 	}
 	stage := nextStage
-	if priorStatus != "HELD" && leaseStage != nil && *leaseStage != "" {
+	if !collectionRefresh && priorStatus != "HELD" && leaseStage != nil && *leaseStage != "" {
 		stage = *leaseStage
 	}
 	priorStage := stage
+	if collectionRefresh {
+		stage = "REFRESH_BRIDGE"
+	}
 	switch stage {
 	case "LOAD_DETAIL", "EVALUATE", "INVESTIGATE":
 		if kind != "SHORTFALL" && stage != "INVESTIGATE" {
