@@ -76,12 +76,26 @@ fix. Tests include economic-conflict rejection, unrelated-hold preservation,
 runtime privilege denial, recovery replay and refusal to reuse an old receipt
 to clear a later hold. Build, vet, gofmt and diff checks passed.
 
-The earlier integrated checkpoint passed 371 frontend tests in 34 files,
-52 funding tests, 20 gateway race tests and 8 shortfall tests. Three legacy Node
-suites targeting shared test data were excluded explicitly. Those frontend and
-gateway sources were unchanged by this Go-only correction. Optional
+The final frontend suite passed 374 tests in 35 files. Three legacy Node suites
+targeting shared test data were excluded explicitly. The earlier integrated
+checkpoint also passed 52 funding tests, 20 gateway race tests and 8 shortfall
+tests. Gateway and shortfall sources were unchanged by this correction. Optional
 golangci-lint remains incompatible with the target Go toolchain; goimports and
 staticcheck are unavailable. No dependency or toolchain upgrades were made.
+
+## Browser file boundary
+
+A final controlled probe found that the development server could serve a
+private runtime JSON file from `.dev`, despite the root `.env` being blocked.
+The shared development-server policy now denies this checkout's `.dev` and
+nested `.worktrees` directories, preserving Vite's default credential and
+certificate exclusions. Checkout-relative absolute globs keep public app
+source readable when the checkout itself is a Git worktree.
+
+Real HTTP regressions cover the default, developer and product configurations,
+including direct, filesystem, raw and module-import requests. All three tests
+fail before the fix and pass afterward; normal HTML and app source remain
+available. Private runtime contents are excluded from the verification logs.
 
 ## Retained evidence and local review
 
