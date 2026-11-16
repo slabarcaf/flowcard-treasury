@@ -29,7 +29,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	command := args[0]
 	switch command {
-	case "cleanup-webhooks", "inventory-local", "cleanup-local", "verify-journey", "preflight", "reference-industries", "inspect-webhook", "setup-accounts", "activate-accounts", "inspect-accounts", "complete-profiles", "probe-products", "setup-receiving", "setup-cardholder", "setup-card", "seed-opening-balances", "inspect-balances", "simulate-decline", "capture-event", "setup-webhooks", "simulate-callback-decline", "export-shortfall-contract", "prepare-local", "probe-deposit", "probe-transfers", "seed-local-books", "export-execution-contract", "serve-local", "bind-local-users", "relay-shortfall", "refresh-local-snapshots", "simulate-journey-decline", "simulate-recovery-decline", "simulate-income", "simulate-recovery-income":
+	case "recheck-held-deposit", "cleanup-webhooks", "inventory-local", "cleanup-local", "verify-journey", "preflight", "reference-industries", "inspect-webhook", "setup-accounts", "activate-accounts", "inspect-accounts", "complete-profiles", "probe-products", "setup-receiving", "setup-cardholder", "setup-card", "seed-opening-balances", "inspect-balances", "simulate-decline", "capture-event", "setup-webhooks", "simulate-callback-decline", "export-shortfall-contract", "prepare-local", "probe-deposit", "probe-transfers", "seed-local-books", "export-execution-contract", "serve-local", "bind-local-users", "relay-shortfall", "refresh-local-snapshots", "simulate-journey-decline", "simulate-recovery-decline", "simulate-income", "simulate-recovery-income":
 	default:
 		return errors.New("sandbox_command_unknown")
 	}
@@ -89,6 +89,9 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	if command == "cleanup-local" {
 		return cleanupAcceptanceLocal(ctx, *manifest, *runID, *testAdminFile, *databaseName, out)
+	}
+	if command == "recheck-held-deposit" {
+		return recheckHeldDeposit(ctx, cfg, *manifest, *runID, *testAdminFile, *databaseName, out)
 	}
 	if command == "verify-journey" {
 		return verifyJourney(ctx, cfg, *manifest, *runID, *databaseName, out)

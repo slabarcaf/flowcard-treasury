@@ -403,15 +403,15 @@ func (r *Repository) PlanCollection(ctx context.Context, input CollectionPlanFac
 		return CollectionPlanResult{}, err
 	}
 	var depositCustomer, depositAccount, bridgeAccount, depositProviderID, depositStatus, depositKind string
-	var depositNet int64
+	var depositGross, depositNet, depositFee int64
 	var depositSettledAt, fundedAt time.Time
 	err = tx.QueryRow(txCtx, `SELECT d.customer_id,d.account_ref,b.canonical_account_id,
-		d.provider_deposit_id,d.net_cents,d.status,d.kind,d.settled_at,b.funded_at
+		d.provider_deposit_id,d.gross_cents,d.net_cents,d.provider_fee_cents,d.status,d.kind,d.settled_at,b.funded_at
 		FROM servicing.deposits d JOIN servicing.bridges b ON b.mode=d.mode AND b.customer_id=d.customer_id
 		WHERE d.mode=$1 AND d.id=$2 AND b.id=$3 AND b.facility_id=$4
 		FOR UPDATE OF d`, string(candidate.Mode), candidate.DepositID,
 		candidate.BridgeID, candidate.FacilityID).Scan(&depositCustomer, &depositAccount,
-		&bridgeAccount, &depositProviderID, &depositNet, &depositStatus, &depositKind,
+		&bridgeAccount, &depositProviderID, &depositGross, &depositNet, &depositFee, &depositStatus, &depositKind,
 		&depositSettledAt, &fundedAt)
 	if err != nil {
 		return CollectionPlanResult{}, errors.New("collection_deposit_lock_failed")
@@ -425,14 +425,11 @@ func (r *Repository) PlanCollection(ctx context.Context, input CollectionPlanFac
 		return CollectionPlanResult{}, err
 	}
 	canonicalMatches := depositCustomer == candidate.CustomerID && depositAccount == candidate.AccountRef &&
-		bridgeAccount == candidate.AccountRef &&
-		depositProviderID == candidate.ProviderDepositID && depositStatus == "SETTLED" &&
-		depositKind == "EXTERNAL_SETTLED" && evidence.Deposit.AccountRef == depositAccount &&
-		evidence.Deposit.CustomerID == depositCustomer && evidence.Deposit.DepositID == depositProviderID &&
-		evidence.Deposit.Currency == "USD" && evidence.Deposit.Status == "SETTLED" &&
-		evidence.Deposit.Kind == "EXTERNAL_SETTLED" && evidence.Deposit.NetCents == depositNet &&
-		evidence.Deposit.SettledAt != nil && evidence.Deposit.SettledAt.Equal(depositSettledAt) &&
-		depositSettledAt.After(fundedAt)
+		bridgeAccount == candidate.AccountRef && depositProviderID == candidate.ProviderDepositID &&
+		(depositFacts{account: depositAccount, customer: depositCustomer, id: depositProviderID,
+			currency: "USD", status: depositStatus, kind: depositKind,
+			gross: depositGross, net: depositNet, fee: depositFee}).matches(evidence.Deposit) &&
+		depositSettledAt.After(fundedAt) && evidence.Deposit.SettledAt.After(fundedAt)
 	if !canonicalMatches {
 		if depositStatus == "SETTLED" {
 			if _, err := tx.Exec(txCtx, `UPDATE servicing.deposits SET status='HELD'
@@ -884,22 +881,22 @@ func (r *Repository) PrepareCollectionDispatch(ctx context.Context, claim Operat
 		return DispatchPreparation{}, err
 	}
 	var depositStatus, depositKind, depositAccount, providerDepositID, depositCustomer string
-	var depositNet int64
+	var depositGross, depositNet, depositFee int64
 	var depositSettledAt, fundedAt time.Time
 	if err := tx.QueryRow(txCtx, `SELECT d.status,d.kind,d.account_ref,d.provider_deposit_id,
-		d.customer_id,d.net_cents,d.settled_at,b.funded_at FROM servicing.deposits d
+		d.customer_id,d.gross_cents,d.net_cents,d.provider_fee_cents,d.settled_at,b.funded_at FROM servicing.deposits d
 		JOIN servicing.bridges b ON b.mode=d.mode AND b.customer_id=d.customer_id
 		WHERE d.mode=$1 AND d.id=$2 AND b.id=$3 FOR UPDATE OF d`, string(claim.Mode),
 		bindings.Candidate.DepositID, claim.BridgeID).Scan(&depositStatus, &depositKind,
-		&depositAccount, &providerDepositID, &depositCustomer, &depositNet, &depositSettledAt, &fundedAt); err != nil {
+		&depositAccount, &providerDepositID, &depositCustomer, &depositGross, &depositNet, &depositFee, &depositSettledAt, &fundedAt); err != nil {
 		return DispatchPreparation{}, errors.New("collection_dispatch_deposit_read_failed")
 	}
-	depositMatches := depositStatus == "SETTLED" && depositKind == "EXTERNAL_SETTLED" &&
-		depositAccount == bindings.Candidate.AccountRef && depositCustomer == claim.CustomerID &&
-		providerDepositID == bindings.Candidate.ProviderDepositID && evidence.Deposit.AccountRef == depositAccount &&
-		evidence.Deposit.DepositID == providerDepositID && evidence.Deposit.CustomerID == depositCustomer &&
-		evidence.Deposit.NetCents == depositNet && evidence.Deposit.SettledAt != nil &&
-		evidence.Deposit.SettledAt.Equal(depositSettledAt) && depositSettledAt.After(fundedAt)
+	depositMatches := depositAccount == bindings.Candidate.AccountRef && depositCustomer == claim.CustomerID &&
+		providerDepositID == bindings.Candidate.ProviderDepositID &&
+		(depositFacts{account: depositAccount, customer: depositCustomer, id: providerDepositID,
+			currency: "USD", status: depositStatus, kind: depositKind,
+			gross: depositGross, net: depositNet, fee: depositFee}).matches(evidence.Deposit) &&
+		depositSettledAt.After(fundedAt) && evidence.Deposit.SettledAt.After(fundedAt)
 	if !depositMatches {
 		if depositStatus == "SETTLED" {
 			if _, err := tx.Exec(txCtx, `UPDATE servicing.deposits SET status='HELD'
