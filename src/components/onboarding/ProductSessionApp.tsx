@@ -155,7 +155,7 @@ export function ProductSessionApp() {
                 Return to product
               </button>
               <span style={{ marginLeft: 20 }}>
-                Developer interface · synthetic DEMO operations
+                Developer interface · configured test environment
               </span>
             </div>
             <BrowserGatewayApp operatorOnly onSessionChanged={authenticated} />

@@ -301,7 +301,11 @@ export function ConnectedBackOffice({
             {portfolio.data?.current_regime && (
               <Badge tone="neutral">{human(portfolio.data.current_regime)}</Badge>
             )}
-            <span style={{ fontSize: 12, color: color.textMuted }}>DEMO · Go services</span>
+            <span style={{ fontSize: 12, color: color.textMuted }}>
+              {portfolio.data
+                ? `${portfolio.data.source_mode === 'SANDBOX' ? 'Airwallex sandbox' : 'DEMO'} · Go services`
+                : 'Go services'}
+            </span>
           </div>
         </header>
         <main style={{ padding: `0 ${space['3xl']} ${space['4xl']}`, display: 'grid', gap: 20 }}>
