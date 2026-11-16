@@ -63,8 +63,8 @@ implicit production configuration.
 - [x] Add a manual Go release workflow with sealed artifacts and scoped OIDC.
 - [x] Verify rollout ordering, failure handling and secret isolation offline.
 - [x] Build and smoke-test the common image against owned disposable data.
-- [ ] Integrate completed source and completed plan bookkeeping into develop.
-- [ ] Archive private worktree artifacts and remove only completed worktrees.
+- [x] Integrate completed Go deployment source into develop; preserve prior drafts.
+- [x] Archive private worktree artifacts and remove only completed worktrees.
 - [ ] Check unpublished history for secrets and push develop without force.
 - [ ] Inspect the actual remote SHA/checks and report operational prerequisites.
 
@@ -81,3 +81,20 @@ Local evidence, secret values and unreviewed drafts never enter Git or image
 contexts. Worktree cleanup requires ancestry/content verification, checked
 archives and safe live-process ownership. The final remote develop SHA must
 equal the locally tested integrated SHA, with no force push or deployment.
+
+## Integration and cleanup evidence
+
+Deployment source commit `964be07` was merged at `a119a37`. Local checks
+passed: 351 safe product/release tests, 60 servicing tests, 22 gateway race
+tests, infrastructure validation and the exact committed common-image smoke.
+Five completed worktrees were archived with byte-verified inventories and
+removed with their ancestor branches. Private archives remain under ignored
+`.dev/worktree-archives/20261116-publication/`. No database was deleted.
+The original review UI on port 18073 and onboarding API on port 8080 remain
+available from the main checkout. The obsolete mock preview was retired.
+
+The 20 pre-existing main changes remain outside this publication. Automatic
+approval review rejected including prior documentation and the unfinished
+shortfall draft; those files are preserved without staging. No AWS workflow
+was dispatched. The new foundation output variable, installation secrets,
+DBA prerequisites and explicit callback cutover remain deployment gates.
