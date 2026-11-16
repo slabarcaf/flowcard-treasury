@@ -273,8 +273,9 @@ func login(t *testing.T, s *httptest.Server, name, role string) (*http.Cookie, p
 	if c.Name != "flowcard_session" || c.Path != "/api" || c.Domain != "" || !c.HttpOnly || c.SameSite != http.SameSiteLaxMode || len(c.Value) != 43 || c.Secure {
 		t.Fatal("local session cookie contract mismatch")
 	}
-	if bytes.Contains(got.body, []byte(c.Value)) || session.User.Username != name || session.User.Role != role || session.User.ID == "" || time.Until(session.ExpiresAt) < 7*time.Hour || time.Until(session.ExpiresAt) > 8*time.Hour {
-		t.Fatal("public session contract mismatch")
+	// PostgreSQL expiry and the test host can differ within the service clock skew.
+	if bytes.Contains(got.body, []byte(c.Value)) || session.User.Username != name || session.User.Role != role || session.User.ID == "" || time.Until(session.ExpiresAt) < 7*time.Hour || time.Until(session.ExpiresAt) > 8*time.Hour+5*time.Second {
+		t.Fatalf("public session contract mismatch: username=%v role=%v ID-present=%v remaining=%s", session.User.Username == name, session.User.Role == role, session.User.ID != "", time.Until(session.ExpiresAt))
 	}
 	return c, session
 }

@@ -10,7 +10,7 @@ export interface CasePage { items: CaseItem[]; next_cursor: string | null }
 export interface Rule { rule_id: string; status: string; reason_code: string; actual: unknown; threshold: unknown }
 export interface Evaluation {
   id: string; customer_id: string; account_ref: string; shortfall_id: string; source_mode: SourceMode;
-  status: string; evaluated_at: string; policy_id: string; policy_hash: string; term_days: number;
+  status: string; tier?: string | null; evaluated_at: string; policy_id: string; policy_hash: string; term_days: number;
   customer_snapshot_id: string | null; customer_snapshot_version: number | null;
   facility_snapshot_id: string | null; facility_snapshot_version: number | null;
   funding_authorized: false; requires_recheck: true; approval_required: boolean;
@@ -50,7 +50,7 @@ export interface Bridge {
   version: number; as_of: string; currency: 'USD'; lifecycle: string; delinquency: string;
   originating_case_id: string | null; evaluation_id: string | null; offer_id: string | null; terms_hash: string | null;
   principal_owed_cents: number | null; contract_fee_owed_cents: number | null; late_fee_owed_cents: number | null;
-  due_on: string | null; days_past_due: number | null; debt_as_of: string | null;
+  due_on: string | null; funded_at?: string | null; days_past_due: number | null; debt_as_of: string | null;
   last_provider_observed_at?: string | null; next_eligible_retry_at?: string | null;
   last_attempt_id?: string | null; last_attempt_state?: string | null;
   accrual_current: boolean | null; accrual_current_through: string | null;

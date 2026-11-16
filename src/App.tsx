@@ -8,12 +8,12 @@ import { Portal } from './features/bridge-capital/portal/index.js';
 import { MockAdapter } from './features/bridge-capital/data/MockAdapter.js';
 import { screenFromHash, type AppScreen } from './app-routing.js';
 import { browserGatewayEnabled } from './services/browser-session/client.js';
-import { BrowserGatewayApp } from './components/onboarding/BrowserGatewayApp.js';
+import { ProductSessionApp } from './components/onboarding/ProductSessionApp.js';
 
 type Screen = AppScreen;
 
 function App() {
-  return browserGatewayEnabled ? <BrowserGatewayApp /> : <LegacyApp />;
+  return browserGatewayEnabled ? <ProductSessionApp /> : <LegacyApp />;
 }
 
 function LegacyApp() {

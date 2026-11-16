@@ -59,6 +59,9 @@ func New(c config.Config, s *postgres.Store) http.Handler {
 	for _, route := range onboardingRoutes {
 		mux.HandleFunc(route, a.onboarding)
 	}
+	for _, route := range productReadRoutes {
+		mux.HandleFunc(route, a.productRead)
+	}
 	for _, route := range financialRoutes {
 		mux.HandleFunc(route, a.financial)
 	}

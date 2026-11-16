@@ -194,6 +194,26 @@ func TestOwnedBoundCustomerMoney(t *testing.T) {
 	if got := request(t, s, "GET", "/api/customer/offers", "", unlinked, nil); got.status != 403 {
 		t.Fatal("unlinked customer got offers")
 	}
+	// Product reads use actual actor-bound owner routes, without broad reader authority.
+	portfolio := moneyJSON(t, request(t, s, "GET", "/api/operator/portfolio", "", op, nil), 200)
+	if portfolio["facility_total_cents"] == nil || portfolio["current_regime"] == nil {
+		t.Fatal("portfolio accounting unavailable")
+	}
+	for _, path := range []string{"/api/operator/portfolio", "/api/operator/customers"} {
+		if request(t, s, "GET", path, "", customer, nil).status != 403 {
+			t.Fatal("customer obtained operator product data")
+		}
+	}
+	if request(t, s, "GET", "/api/customer/bridges?customer_id=foreign", "", customer, nil).status != 400 {
+		t.Fatal("customer selected foreign bridge scope")
+	}
+	if request(t, s, "GET", "/api/customer/bridges", "", op, nil).status != 403 {
+		t.Fatal("operator impersonated customer product route")
+	}
+	if len(moneyJSON(t, request(t, s, "GET", "/api/customer/bridges", "", customer, nil), 200)["items"].([]any)) != 0 {
+		t.Fatal("empty book contains bridge")
+	}
+	moneyJSON(t, request(t, s, "GET", "/api/operator/customers", "", op, nil), 200)
 	payload := `{"evaluation_id":"synthetic-evaluation","originating_case_id":"` + readCaseID + `"}`
 	first := request(t, s, "POST", "/api/offers", payload, op, map[string]string{"Idempotency-Key": "owned-offer"})
 	if first.status != 502 || first.header.Get("X-FlowCard-Command-ID") == "" {
@@ -301,6 +321,17 @@ func TestOwnedBoundCustomerMoney(t *testing.T) {
 	}
 	if bridge["principal_owed_cents"] != float64(0) || bridge["late_fee_owed_cents"] != float64(0) {
 		t.Fatal("repaid bridge retained debt")
+	}
+	productBridges := moneyJSON(t, request(t, s, "GET", "/api/customer/bridges", "", customer, nil), 200)["items"].([]any)
+	if len(productBridges) != 1 || productBridges[0].(map[string]any)["id"] != bridgeID || productBridges[0].(map[string]any)["lifecycle"] != "REPAID" {
+		t.Fatal("customer could not discover its repaid bridge")
+	}
+	if len(moneyJSON(t, request(t, s, "GET", "/api/customer/bridges", "", other, nil), 200)["items"].([]any)) != 0 {
+		t.Fatal("foreign bridge leaked through discovery")
+	}
+	portfolio = moneyJSON(t, request(t, s, "GET", "/api/operator/portfolio", "", op, nil), 200)
+	if portfolio["history_complete"] == true && portfolio["fees_collected_cents"] != float64(19000) {
+		t.Fatalf("complete settled fee metric=%v, want 19000", portfolio["fees_collected_cents"])
 	}
 	operationID, ok := receipt["operation_id"].(string)
 	if !ok {
