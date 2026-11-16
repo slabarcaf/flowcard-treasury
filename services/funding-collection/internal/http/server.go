@@ -215,7 +215,18 @@ func (h *handler) readyHealth(w http.ResponseWriter, r *http.Request) {
 	response.FundingEnabled = response.RuntimeReady && response.FixtureOnly
 	response.CollectionEnabled = response.RuntimeReady && response.FixtureOnly
 	if h.cfg.Mode == config.ModeSandbox {
-		response.Blockers = append(response.Blockers, "SANDBOX_PROVIDER_CREATE_DISABLED")
+		if gate, ok := h.provider.(provider.ExecutionGate); ok {
+			caps := gate.ExecutionCapabilities()
+			response.ProviderAcceptanceVerified = caps.ProviderVerified
+			response.FundingEnabled = response.RuntimeReady && caps.FundingEnabled
+			response.CollectionEnabled = response.RuntimeReady && caps.CollectionEnabled
+		}
+		if !response.FundingEnabled {
+			response.Blockers = append(response.Blockers, "SANDBOX_FUNDING_DISABLED")
+		}
+		if !response.CollectionEnabled {
+			response.Blockers = append(response.Blockers, "SANDBOX_COLLECTION_DISABLED")
+		}
 	}
 	if response.RuntimeReady {
 		response.Status = "READY"
@@ -302,7 +313,7 @@ func (h *handler) auth(w http.ResponseWriter, r *http.Request, write bool) (Iden
 		writeJSON(w, 403, map[string]any{"error": map[string]string{"code": "FORBIDDEN", "message": "Actor credential class does not match registry role"}})
 		return Identity{}, false
 	}
-	if h.cfg.Mode == config.ModeSandbox && actorType == "CUSTOMER" {
+	if h.cfg.Mode == config.ModeSandbox && actorType == "CUSTOMER" && !h.cfg.SandboxDelegationEnabled {
 		writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]string{"code": "FORBIDDEN", "message": "Customer delegation is unavailable"}})
 		return Identity{}, false
 	}

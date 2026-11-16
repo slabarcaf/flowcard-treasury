@@ -228,3 +228,10 @@ Offer create/read DTOs additionally expose actual `source_mode` and
 They introduce no client-selected customer authority or policy change. All
 existing exact terms/hash/version/idempotency, live delegation, provider,
 worker, financial guard and ledger contracts remain in force.
+
+## Airwallex sandbox implementation
+
+The opt-in `cmd/sandbox` CLI provides read-only credential/capability preflight
+and marker-owned account setup. It does not enable runtime sandbox dispatch.
+See the [Go sandbox runbook](/docs/demo/airwallex-go-sandbox-runbook.md) for
+commands, secret handling, actual checkpoints and unverified acceptance gates.

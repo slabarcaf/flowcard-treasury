@@ -27,22 +27,24 @@ type ServerStore interface {
 
 // ServerConfig contains server-owned routing/auth configuration, never a live bypass.
 type ServerConfig struct {
-	Environment        string
-	Source             string
-	WebhookSecret      string
-	ServiceSecret      string
-	ProviderConfigured bool
-	Now                func() time.Time
+	Environment              string
+	Source                   string
+	WebhookSecret            string
+	ServiceSecret            string
+	ProviderConfigured       bool
+	SandboxContractExpiresAt time.Time
+	Now                      func() time.Time
 }
 
 // Server serves independent liveness, explicit live-readiness gates and internal reads.
 type Server struct {
-	store              ServerStore
-	receiver           *WebhookReceiver
-	environment        string
-	serviceSecret      []byte
-	configurationReady bool
-	now                func() time.Time
+	store                    ServerStore
+	receiver                 *WebhookReceiver
+	environment              string
+	serviceSecret            []byte
+	configurationReady       bool
+	sandboxContractExpiresAt time.Time
+	now                      func() time.Time
 }
 
 // NewServer keeps liveness available when database/configuration is unavailable.
@@ -52,7 +54,7 @@ func NewServer(store ServerStore, cfg ServerConfig) *Server {
 		cfg.Now = time.Now
 	}
 	s := &Server{store: store, environment: strings.TrimSpace(cfg.Environment),
-		serviceSecret: []byte(cfg.ServiceSecret), now: cfg.Now}
+		serviceSecret: []byte(cfg.ServiceSecret), now: cfg.Now, sandboxContractExpiresAt: cfg.SandboxContractExpiresAt}
 	receiver, err := NewWebhookReceiver(readyInbox{store}, WebhookConfig{Environment: cfg.Environment,
 		Source: cfg.Source, Secret: cfg.WebhookSecret, Now: cfg.Now})
 	if err == nil {
@@ -123,13 +125,20 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	if !s.configurationReady {
 		reason = "CONFIGURATION_UNAVAILABLE"
 	}
-	// The only runtime reference adapter is UnsupportedReferences. Neither
-	// configured credentials nor a local harness can turn this flag on.
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-		"ready": false, "service_ready": databaseReady && s.configurationReady,
+	live := databaseReady && s.configurationReady && s.environment == "SANDBOX" && s.sandboxContractExpiresAt.After(s.now())
+	parser := "unsupported"
+	status := http.StatusServiceUnavailable
+	if live {
+		parser = "verified_sandbox"
+		reason = ""
+		status = http.StatusOK
+	}
+	writeJSON(w, status, map[string]any{
+		"ready": live, "service_ready": databaseReady && s.configurationReady,
 		"database_ready": databaseReady, "configuration_ready": s.configurationReady,
-		"live_detection_ready": false, "live_parser": "unsupported", "reason": reason,
+		"live_detection_ready": live, "live_parser": parser, "reason": reason,
 	})
+
 }
 
 type pageCursor struct {

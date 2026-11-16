@@ -525,7 +525,7 @@ func lockOperationScope(ctx context.Context, tx pgx.Tx, candidate OperationCandi
 		scope.collectionDepositID == "" || scope.providerDepositID == "" ||
 		(scope.state != "SETTLED" && scope.state != "FAILED_CONFIRMED" &&
 			scope.state != "CANCELLED_UNSENT" && scope.collectionReservedDebit < scope.amount) ||
-		scope.collectionFeeContract != "MOCK_HTTP_ZERO_COLLECTION_FEE_V1" ||
+		!provider.ValidCollectionFeeQuote(mode, provider.FundingFeeQuote{ContractID: scope.collectionFeeContract, Cents: scope.collectionQuotedFee}) ||
 		!validCollectionAttemptState(scope.state, scope.collectionAttemptState) {
 		if scope.guardCode == "" {
 			scope.guardCode = "OPERATION_SCOPE_INVALID"

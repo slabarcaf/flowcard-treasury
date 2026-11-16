@@ -30,7 +30,7 @@ var migrationFiles embed.FS
 
 const migrationLockID int64 = 847294
 
-var migrationNames = []string{"001_initial.sql", "002_imports.sql", "003_accrual_lookup.sql", "004_offer_evidence.sql", "005_offer_evidence_immutable.sql", "006_funding_checks.sql", "007_worker_leases.sql", "008_dispatch_check_ref.sql", "009_servicing_webhook_jobs.sql", "010_deposit_conflict_hold.sql", "011_collections.sql", "012_offer_case_provenance.sql", "013_collection_review_requests.sql"}
+var migrationNames = []string{"001_initial.sql", "002_imports.sql", "003_accrual_lookup.sql", "004_offer_evidence.sql", "005_offer_evidence_immutable.sql", "006_funding_checks.sql", "007_worker_leases.sql", "008_dispatch_check_ref.sql", "009_servicing_webhook_jobs.sql", "010_deposit_conflict_hold.sql", "011_collections.sql", "012_offer_case_provenance.sql", "013_collection_review_requests.sql", "014_sandbox_actors.sql", "015_sandbox_import_journal.sql"}
 
 func migrationSource(name string) ([]byte, string, error) {
 	source, err := migrationFiles.ReadFile("migrations/" + name)

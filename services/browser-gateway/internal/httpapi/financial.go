@@ -2,10 +2,11 @@ package httpapi
 
 import (
 	"context"
-	"github.com/slabarcaf/flowcard-treasury/services/browser-gateway/internal/servicing"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/slabarcaf/flowcard-treasury/services/browser-gateway/internal/servicing"
 )
 
 // No financial command or broad prefix is registered, even for operators.
@@ -25,7 +26,7 @@ func (a *Server) financial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if session.User.Role != "OPERATOR" {
-		if session.User.Role == "CUSTOMER" && a.config.WriteMode == "DEMO" && !strings.HasPrefix(r.Pattern, "GET /api/coordinator/") && r.Pattern != "GET /api/servicing/changes" {
+		if session.User.Role == "CUSTOMER" && (a.config.WriteMode == "DEMO" || a.config.WriteMode == "SANDBOX") && !strings.HasPrefix(r.Pattern, "GET /api/coordinator/") && r.Pattern != "GET /api/servicing/changes" {
 			binding, key, err := a.bound(ctx, session.User)
 			if err != nil {
 				bindingFailure(w, err)

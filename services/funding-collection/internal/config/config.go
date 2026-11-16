@@ -23,29 +23,35 @@ const (
 
 // Config contains validated runtime settings. Secret fields are never serialized.
 type Config struct {
-	DatabaseURL            string `json:"-"`
-	Mode                   string
-	HTTPAddress            string
-	FacilityID             string
-	SourceBindingID        string
-	PolicyID               string
-	PolicyHash             string
-	CoordinatorSecret      string `json:"-"`
-	OperatorSecret         string `json:"-"`
-	CustomerSecret         string `json:"-"`
-	ReaderSecret           string `json:"-"`
-	UnderwritingURL        string
-	UnderwritingSecret     string `json:"-"`
-	ShortfallURL           string
-	ShortfallSecret        string `json:"-"`
-	ProviderMode           string
-	ProviderBaseURL        string
-	AirwallexWebhookSecret string `json:"-"`
-	LiveDispatchEnabled    bool
-	AirwallexClientID      string `json:"-"`
-	AirwallexAPIKey        string `json:"-"`
-	HTTPTimeout            time.Duration
-	ReadinessBlockers      []string
+	DatabaseURL                  string `json:"-"`
+	Mode                         string
+	HTTPAddress                  string
+	FacilityID                   string
+	SourceBindingID              string
+	PolicyID                     string
+	PolicyHash                   string
+	CoordinatorSecret            string `json:"-"`
+	OperatorSecret               string `json:"-"`
+	CustomerSecret               string `json:"-"`
+	ReaderSecret                 string `json:"-"`
+	UnderwritingURL              string
+	UnderwritingSecret           string `json:"-"`
+	ShortfallURL                 string
+	ShortfallSecret              string `json:"-"`
+	ProviderMode                 string
+	ProviderBaseURL              string
+	AirwallexWebhookSecret       string `json:"-"`
+	SandboxDelegationEnabled     bool
+	LiveDispatchEnabled          bool
+	AirwallexClientID            string `json:"-"`
+	AirwallexAPIKey              string `json:"-"`
+	AirwallexLoginAs             string `json:"-"`
+	SandboxPaymentContractFile   string `json:"-"`
+	SandboxExecutionContractFile string `json:"-"`
+	SandboxFundingEnabled        bool
+	SandboxCollectionEnabled     bool
+	HTTPTimeout                  time.Duration
+	ReadinessBlockers            []string
 }
 
 // ValidOwnedDatabaseName accepts safe names under an owner-specific prefix.
@@ -66,25 +72,46 @@ func ValidOwnedDatabaseName(value, prefix string) bool {
 // different environment's credentials or provider endpoint.
 func Load() (Config, error) {
 	cfg := Config{
-		DatabaseURL:            strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		Mode:                   strings.TrimSpace(os.Getenv("SERVICING_MODE")),
-		HTTPAddress:            strings.TrimSpace(os.Getenv("SERVICING_HTTP_ADDR")),
-		FacilityID:             strings.TrimSpace(os.Getenv("SERVICING_FACILITY_ID")),
-		SourceBindingID:        strings.TrimSpace(os.Getenv("SERVICING_SOURCE_BINDING_ID")),
-		CoordinatorSecret:      os.Getenv("SERVICING_COORDINATOR_SECRET"),
-		OperatorSecret:         os.Getenv("SERVICING_OPERATOR_SECRET"),
-		CustomerSecret:         os.Getenv("SERVICING_CUSTOMER_SECRET"),
-		ReaderSecret:           os.Getenv("SERVICING_READER_SECRET"),
-		UnderwritingURL:        strings.TrimSpace(os.Getenv("UNDERWRITING_BASE_URL")),
-		UnderwritingSecret:     os.Getenv("UNDERWRITING_SERVICE_SECRET"),
-		ShortfallURL:           strings.TrimSpace(os.Getenv("SHORTFALL_BASE_URL")),
-		ShortfallSecret:        os.Getenv("SHORTFALL_SERVICE_SECRET"),
-		ProviderMode:           strings.TrimSpace(os.Getenv("SERVICING_PROVIDER_MODE")),
-		ProviderBaseURL:        strings.TrimSpace(os.Getenv("SERVICING_PROVIDER_BASE_URL")),
-		AirwallexWebhookSecret: os.Getenv("AIRWALLEX_WEBHOOK_SECRET"),
-		AirwallexClientID:      os.Getenv("AIRWALLEX_CLIENT_ID"),
-		AirwallexAPIKey:        os.Getenv("AIRWALLEX_API_KEY"),
-		HTTPTimeout:            10 * time.Second,
+		DatabaseURL:                strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		Mode:                       strings.TrimSpace(os.Getenv("SERVICING_MODE")),
+		HTTPAddress:                strings.TrimSpace(os.Getenv("SERVICING_HTTP_ADDR")),
+		FacilityID:                 strings.TrimSpace(os.Getenv("SERVICING_FACILITY_ID")),
+		SourceBindingID:            strings.TrimSpace(os.Getenv("SERVICING_SOURCE_BINDING_ID")),
+		CoordinatorSecret:          os.Getenv("SERVICING_COORDINATOR_SECRET"),
+		OperatorSecret:             os.Getenv("SERVICING_OPERATOR_SECRET"),
+		CustomerSecret:             os.Getenv("SERVICING_CUSTOMER_SECRET"),
+		ReaderSecret:               os.Getenv("SERVICING_READER_SECRET"),
+		UnderwritingURL:            strings.TrimSpace(os.Getenv("UNDERWRITING_BASE_URL")),
+		UnderwritingSecret:         os.Getenv("UNDERWRITING_SERVICE_SECRET"),
+		ShortfallURL:               strings.TrimSpace(os.Getenv("SHORTFALL_BASE_URL")),
+		ShortfallSecret:            os.Getenv("SHORTFALL_SERVICE_SECRET"),
+		ProviderMode:               strings.TrimSpace(os.Getenv("SERVICING_PROVIDER_MODE")),
+		ProviderBaseURL:            strings.TrimSpace(os.Getenv("SERVICING_PROVIDER_BASE_URL")),
+		AirwallexWebhookSecret:     os.Getenv("AIRWALLEX_WEBHOOK_SECRET"),
+		AirwallexClientID:          os.Getenv("AIRWALLEX_CLIENT_ID"),
+		AirwallexAPIKey:            os.Getenv("AIRWALLEX_API_KEY"),
+		AirwallexLoginAs:           os.Getenv("AIRWALLEX_ACCOUNT_ID"),
+		SandboxPaymentContractFile: os.Getenv("SERVICING_SANDBOX_PAYMENT_CONTRACT_FILE"),
+		HTTPTimeout:                10 * time.Second,
+	}
+	rawDelegation := os.Getenv("SERVICING_SANDBOX_DELEGATION_ENABLED")
+	if rawDelegation != "" && rawDelegation != "false" && rawDelegation != "true" {
+		return cfg, errors.New("sandbox_delegation_configuration_invalid")
+	}
+	cfg.SandboxDelegationEnabled = rawDelegation == "true"
+	if cfg.SandboxDelegationEnabled && cfg.Mode != ModeSandbox {
+		return cfg, errors.New("sandbox_delegation_requires_sandbox")
+	}
+	for name, destination := range map[string]*bool{"SERVICING_SANDBOX_FUNDING_ENABLED": &cfg.SandboxFundingEnabled, "SERVICING_SANDBOX_COLLECTION_ENABLED": &cfg.SandboxCollectionEnabled} {
+		value := os.Getenv(name)
+		if value != "" && value != "true" && value != "false" {
+			return cfg, errors.New("sandbox_execution_flag_invalid")
+		}
+		*destination = value == "true"
+	}
+	cfg.SandboxExecutionContractFile = os.Getenv("SERVICING_SANDBOX_EXECUTION_CONTRACT_FILE")
+	if (cfg.SandboxFundingEnabled || cfg.SandboxCollectionEnabled) && cfg.Mode != ModeSandbox {
+		return cfg, errors.New("sandbox_execution_requires_sandbox")
 	}
 	cfg.LiveDispatchEnabled = LiveDispatchRequested()
 	if cfg.HTTPAddress == "" {
@@ -163,7 +190,7 @@ func LiveDispatchRequested() bool {
 // validateDistinctKeys enforces role separation and minimum signing-key size.
 func validateDistinctKeys(cfg Config) error {
 	keys := []string{cfg.CoordinatorSecret, cfg.OperatorSecret, cfg.ReaderSecret}
-	if cfg.Mode == ModeDemo {
+	if cfg.Mode == ModeDemo || cfg.SandboxDelegationEnabled {
 		keys = append(keys, cfg.CustomerSecret)
 	}
 	if cfg.UnderwritingSecret != "" {

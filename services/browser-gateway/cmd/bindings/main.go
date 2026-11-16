@@ -1,4 +1,4 @@
-// Command bindings provisions or disables verified, immutable DEMO delegations.
+// Command bindings provisions or disables verified, immutable source delegations.
 package main
 
 import (
@@ -21,7 +21,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	cfg, err = cfg.WithDemoWrites(os.Getenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE"), os.Getenv("BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET"), os.Getenv("BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET"))
+	cfg, err = cfg.WithFinancialWrites(os.Getenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE"), os.Getenv("BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET"), os.Getenv("BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET"))
 	if err != nil {
 		return err
 	}
@@ -29,7 +29,7 @@ func run() error {
 }
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "binding command failed (check target, verified actor and DEMO configuration)")
+		fmt.Fprintln(os.Stderr, "binding command failed (check target, verified actor and explicit source configuration)")
 		os.Exit(1)
 	}
 	fmt.Println("binding command completed")

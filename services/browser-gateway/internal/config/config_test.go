@@ -93,3 +93,30 @@ func TestDemoWriteGate(t *testing.T) {
 		t.Fatal("remote financial commands enabled")
 	}
 }
+
+func TestExplicitSandboxWriteProfile(t *testing.T) {
+	reader := "fixture-reader-secret-0000000000000000000000"
+	operator := "fixture-operator-secret-00000000000000000000"
+	customer := "fixture-customer-secret-00000000000000000000"
+	base, err := (Config{}).WithFinancial("", "", "http://127.0.0.1:18091", reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := base.WithDemoWrites("SANDBOX", operator, customer); err == nil {
+		t.Fatal("old DEMO profile enabled sandbox")
+	}
+	valid, err := base.WithFinancialWrites("SANDBOX", operator, customer)
+	if err != nil || valid.WriteMode != "SANDBOX" {
+		t.Fatal("explicit sandbox profile rejected")
+	}
+	for _, tc := range []struct{ mode, operator, customer string }{
+		{"PRODUCTION", operator, customer}, {"SANDBOX", reader, customer}, {"SANDBOX", operator, operator}, {"SANDBOX", "short", customer},
+	} {
+		if _, err := base.WithFinancialWrites(tc.mode, tc.operator, tc.customer); err == nil {
+			t.Fatal("invalid source mode or role key accepted")
+		}
+	}
+	if _, err := (Config{}).WithFinancialWrites("SANDBOX", operator, customer); err == nil {
+		t.Fatal("unconfigured source enabled writes")
+	}
+}

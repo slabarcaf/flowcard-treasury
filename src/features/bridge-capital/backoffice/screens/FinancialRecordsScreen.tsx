@@ -18,7 +18,7 @@ function Facts({ entries }: { entries: [string, string | number | boolean | null
   return <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">{entries.map(([label, value]) => <div key={label}><dt className="text-slate-400">{label}</dt><dd className="break-words whitespace-pre-wrap">{display(value)}</dd></div>)}</dl>;
 }
 function Source({ mode }: { mode: SourceMode }) {
-  return <p className="text-sm text-amber-200">{mode === 'DEMO' ? 'DEMO · synthetic source book' : 'SANDBOX · source environment'} · Saved Go backend records</p>;
+  return <p className="text-sm text-amber-200">{mode === 'DEMO' ? 'DEMO · synthetic source book' : 'SANDBOX · Airwallex test funds · synthetic financial test history'} · Saved Go backend records</p>;
 }
 function ErrorMessage({ state }: { state: { busy: boolean; error: string } }) {
   return <>{state.busy && <p role="status" className="text-slate-400">Reading saved records…</p>}{state.error && <p role="alert" className="text-amber-200">{state.error}</p>}</>;
@@ -211,7 +211,7 @@ export function FinancialRecordsScreen() {
   function lookup(event: FormEvent) { event.preventDefault(); void open({ kind, id }); }
   return <main className="p-5 space-y-6">
     <h1 className="text-2xl font-semibold">Financial records</h1>
-    <p className="text-slate-400">Saved Coordinator and Funding records. Values and versions come from the connected Go services. Verified local DEMO bindings enable explicit actions; missing sources and facts remain explicit.</p>
+    <p className="text-slate-400">Saved Coordinator and Funding records. Values and versions come from the connected Go services. Verified DEMO or sandbox bindings enable explicit actions; missing sources and facts remain explicit.</p>
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5"><Cases api={api} open={selection => void open(selection)} /><Servicing api={api} open={selection => void open(selection)} /></div>
     <Card title="Saved record detail">
       <form onSubmit={lookup} className="flex flex-wrap items-end gap-3">

@@ -54,30 +54,31 @@ export function FinancialActions({ record, refresh }: { record: ActionRecord; re
     setBusy(true); setError('');
     try { setReceipt(await action()); } catch (caught) { setError(message(caught)); } finally { setBusy(false); }
   }
-  const linked = binding?.enabled && binding.linked && binding.mode === 'DEMO';
+  const linked = binding?.enabled && binding.linked && (binding.mode === 'DEMO' || binding.mode === 'SANDBOX');
+  const modeLabel = binding?.mode === 'SANDBOX' ? 'sandbox' : 'DEMO';
   return <section className="border-t border-slate-700 pt-4 space-y-4">
     {!binding && !error && <p>Checking verified servicing binding…</p>}
-    {binding && !linked && <p className="text-sm text-slate-400">Financial commands require a verified local DEMO binding. Read-only access remains separate.</p>}
+    {binding && !linked && <p className="text-sm text-slate-400">Financial commands require a verified servicing binding. Read-only access remains separate.</p>}
     {error && <p role="alert" className="text-amber-200">{error}</p>}
     {unresolved && <p role="alert" className="text-amber-200">An earlier command for this record has an unknown outcome. Recover the same saved command and key before a new action.</p>}
-    {linked && <><h3 className="font-semibold">Explicit DEMO action</h3><p className="text-sm text-amber-200">Synthetic local financing only. The service rechecks all policy, versions, terms and authority.</p>
-      {binding.role === 'OPERATOR' && record.kind === 'case' && record.value.assessment && <button type="button" className={button} disabled={busy || attempted || unresolved} onClick={() => void run(() => api.create(record.value))}>Create DEMO offer from this saved assessment</button>}
+    {linked && <><h3 className="font-semibold">Explicit {modeLabel} action</h3><p className="text-sm text-amber-200">{binding.mode === 'SANDBOX' ? 'Airwallex sandbox uses test funds. Financial test history and receivables are synthetic.' : 'Synthetic local financing only.'} The service rechecks policy, versions, terms and authority.</p>
+      {binding.role === 'OPERATOR' && record.kind === 'case' && record.value.mode === binding.mode && record.value.assessment && <button type="button" className={button} disabled={busy || attempted || unresolved} onClick={() => void run(() => api.create(record.value))}>Create {modeLabel} offer from this saved assessment</button>}
       {record.kind === 'offer' && <>
         <p className="text-sm">Offer {record.value.id} · immutable revision {record.value.offer_revision} · aggregate version {record.value.version}</p>
         <p className="text-sm">Principal {cents(record.value.principal_cents)} · Contract fee {cents(record.value.contract_fee_cents)} · Total due {cents(record.value.total_due_cents)} · Due {record.value.due_on}</p>
         <p className="text-xs break-all">Exact terms hash {record.value.terms_hash} · Disclosures {record.value.disclosures_version} · Waterfall version {record.value.waterfall_version ?? 'Unavailable'} · Late fee convention {record.value.late_fee_convention} · Term {record.value.term_days} days · Expires {record.value.expires_at}</p>
         {binding.role === 'CUSTOMER' && binding.customer_id === record.value.customer_id && <>
-          <label className="block text-sm"><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} disabled={busy || attempted || unresolved} /> I accept these exact DEMO terms, fee, total due and repayment date for this offer and terms hash.</label>
-          <button type="button" className={button} disabled={!accepted || busy || attempted || unresolved} onClick={() => void run(() => api.accept(record.value))}>Accept these DEMO terms</button>
+          <label className="block text-sm"><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} disabled={busy || attempted || unresolved} /> I accept these exact {modeLabel} terms, fee, total due and repayment date for this offer and terms hash.</label>
+          <button type="button" className={button} disabled={!accepted || busy || attempted || unresolved} onClick={() => void run(() => api.accept(record.value))}>Accept these {modeLabel} terms</button>
         </>}
         {binding.role === 'OPERATOR' && <>
           <label className="block text-sm">Approval reason<input className="block bg-slate-900 border border-slate-600 rounded p-2" value={reason} onChange={event => setReason(event.target.value)} disabled={busy || attempted || unresolved} /></label>
-          <div className="flex gap-3"><button type="button" className={button} disabled={busy || attempted || unresolved || !reason} onClick={() => void run(() => api.approve(record.value, reason))}>Approve these DEMO terms</button><button type="button" className={button} disabled={busy || attempted || unresolved} onClick={() => void run(() => api.fund(record.value))}>Request DEMO funding</button></div>
+          <div className="flex gap-3"><button type="button" className={button} disabled={busy || attempted || unresolved || !reason} onClick={() => void run(() => api.approve(record.value, reason))}>Approve these {modeLabel} terms</button><button type="button" className={button} disabled={busy || attempted || unresolved} onClick={() => void run(() => api.fund(record.value))}>Request {modeLabel} funding</button></div>
         </>}
       </>}
       {binding.role === 'OPERATOR' && (record.kind === 'bridge' || record.kind === 'operation' && record.value.state === 'HELD') && <>
         <label className="block text-sm">Review reason<input className="block bg-slate-900 border border-slate-600 rounded p-2" value={reason} onChange={event => setReason(event.target.value)} disabled={busy || attempted || unresolved} /></label>
-        <button type="button" className={button} disabled={busy || attempted || unresolved || !reason} onClick={() => void run(() => record.kind === 'bridge' ? api.review(record.value, reason) : api.reconcile(record.value, reason))}>{record.kind === 'bridge' ? 'Request DEMO collection review' : 'Request DEMO reconciliation'}</button>
+        <button type="button" className={button} disabled={busy || attempted || unresolved || !reason} onClick={() => void run(() => record.kind === 'bridge' ? api.review(record.value, reason) : api.reconcile(record.value, reason))}>{record.kind === 'bridge' ? `Request ${modeLabel} collection review` : `Request ${modeLabel} reconciliation`}</button>
       </>}
     </>}
     {attempted && !receipt && <button type="button" className={button} disabled={busy} onClick={refresh}>Refresh saved state and recovery history</button>}

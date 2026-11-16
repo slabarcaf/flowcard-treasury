@@ -155,7 +155,7 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 
 func (w *Worker) prepareCollection(ctx context.Context,
 	candidate postgres.CollectionCandidate) (bool, error) {
-	if w.cfg.Mode != config.ModeDemo || w.cfg.ProviderMode != config.ProviderMock {
+	if !w.operationExecutionAllowed("COLLECT_PRINCIPAL") {
 		if err := w.repository.RecordCollectionHold(ctx, candidate, "LIVE_COLLECTION_EXTRACTION_UNSUPPORTED", nil); err != nil {
 			return false, err
 		}
@@ -235,8 +235,11 @@ func (w *Worker) prepareCollection(ctx context.Context,
 	}
 	quoteAmount := collectionWorkerMin(depositRemaining, authorityRemaining, facts.DebtCents,
 		balance.AvailableCents)
+	if candidate.Mode == domain.ModeSandbox && facts.FeeDebtCents > 0 {
+		quoteAmount = collectionWorkerMin(quoteAmount, facts.FeeDebtCents)
+	}
 	feeQuote, err := quoter.QuoteCollectionFee(readCtx, candidate.AccountRef, facts.FundingAccount, quoteAmount)
-	if err != nil || feeQuote.ContractID != "MOCK_HTTP_ZERO_COLLECTION_FEE_V1" || feeQuote.Cents != 0 {
+	if err != nil || !provider.ValidCollectionFeeQuote(string(candidate.Mode), feeQuote) {
 		if err != nil {
 			providerError := typedReadError(err, "COLLECTION_FEE_CONTRACT_UNAVAILABLE")
 			if providerError.Recovery == provider.RecoveryRetryRead {
@@ -295,7 +298,7 @@ func (w *Worker) processWebhookJob(ctx context.Context, job postgres.WebhookJobC
 		}
 		return w.processClaim(ctx, claim)
 	case "DEPOSIT":
-		if w.cfg.Mode != config.ModeDemo || w.cfg.ProviderMode != config.ProviderMock {
+		if !w.operationExecutionAllowed("COLLECT_PRINCIPAL") {
 			return w.repository.CompleteWebhookJob(ctx, job, "HELD", "LIVE_DEPOSIT_EXTRACTION_UNSUPPORTED")
 		}
 		scope, err := w.repository.ResolveTrustedDepositScope(ctx, job.Mode, job.CustomerID, job.CardID)
@@ -324,6 +327,13 @@ func (w *Worker) processWebhookJob(ctx context.Context, job postgres.WebhookJobC
 		}
 		return nil
 	case "UNSUPPORTED":
+		if job.Mode == domain.ModeSandbox && job.CustomerID != "" && job.CardID != "" && job.DepositID != "" {
+			scope, err := w.repository.ResolveTrustedDepositScope(ctx, job.Mode, job.CustomerID, job.CardID)
+			if err != nil {
+				return w.repository.CompleteWebhookJob(ctx, job, "HELD", "SANDBOX_REVIEW_MAPPING_UNAVAILABLE")
+			}
+			return w.repository.HoldSandboxDepositReview(ctx, job, w.cfg.FacilityID, scope)
+		}
 		return w.repository.CompleteWebhookJob(ctx, job, "HELD", "WEBHOOK_EVENT_UNSUPPORTED")
 	default:
 		return w.repository.CompleteWebhookJob(ctx, job, "HELD", "WEBHOOK_TARGET_UNSUPPORTED")
@@ -426,7 +436,7 @@ func (w *Worker) processClaim(ctx context.Context, claim postgres.OperationClaim
 }
 
 func (w *Worker) processFirstSend(ctx context.Context, claim postgres.OperationClaim) error {
-	if w.cfg.Mode != config.ModeDemo || w.cfg.ProviderMode != config.ProviderMock {
+	if !w.operationExecutionAllowed(claim.Kind) {
 		return w.finishRead(ctx, claim, postgres.OperationReadOutcome{Source: "GUARD",
 			NoDispatchCode: "SANDBOX_CREATE_DISABLED"})
 	}
@@ -519,4 +529,22 @@ func typedCreateError(err error, result provider.Result) *provider.ProviderError
 	}
 	return &provider.ProviderError{Code: "PROVIDER_CREATE_UNCERTAIN", Recovery: provider.RecoveryLookupOnly,
 		Cause: provider.RecoveryRetryRead, Certainty: provider.CertaintyUncertain}
+}
+
+func (w *Worker) operationExecutionAllowed(kind string) bool {
+	if w.cfg.Mode == config.ModeDemo && w.cfg.ProviderMode == config.ProviderMock {
+		return true
+	}
+	if w.cfg.Mode != config.ModeSandbox || w.cfg.ProviderMode != config.ProviderSandbox {
+		return false
+	}
+	gate, ok := w.provider.(provider.ExecutionGate)
+	if !ok {
+		return false
+	}
+	caps := gate.ExecutionCapabilities()
+	if kind == "FUND" {
+		return caps.FundingEnabled
+	}
+	return (kind == "COLLECT_FEE" || kind == "COLLECT_PRINCIPAL") && caps.CollectionEnabled
 }
