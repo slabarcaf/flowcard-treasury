@@ -342,7 +342,7 @@ func (h *caseHandler) detail(w http.ResponseWriter, r *http.Request) {
 		for _, rule := range result.Rules {
 			rules = append(rules, agent.Rule{ID: rule.ID, Status: rule.Status, Reason: rule.ReasonCode})
 		}
-		response.NextActions = agent.ActionsForAssessment(agent.SavedAssessment{ID: result.ID, Status: result.Status, ShortfallID: result.ShortfallID, TermDays: result.TermDays, ApprovalRequired: &result.ApprovalRequired, RuleReasons: rules, FundingAuthorized: result.FundingAuthorized, RequiresRecheck: result.RequiresRecheck})
+		response.NextActions = append(response.NextActions, agent.ActionsForAssessment(agent.SavedAssessment{ID: result.ID, Status: result.Status, ShortfallID: result.ShortfallID, TermDays: result.TermDays, ApprovalRequired: &result.ApprovalRequired, RuleReasons: rules, FundingAuthorized: result.FundingAuthorized, RequiresRecheck: result.RequiresRecheck})...)
 	} else if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		writeError(w, http.StatusServiceUnavailable, "ASSESSMENT_READ_FAILED")
 		return
@@ -379,7 +379,7 @@ func (h *caseHandler) detail(w http.ResponseWriter, r *http.Request) {
 				agentMode = packet.AgentMode
 			}
 		}
-		response.Investigation = &investigationView{SourceMode: h.mode, AgentMode: agentMode, ExplanationMode: latestDisposition.ExplanationMode, Verified: false, Current: view.Case.Kind != domain.CaseCollection, BridgeVersion: latestDisposition.BridgeVersion, Summary: latestDisposition.Finish.Summary, Findings: latestDisposition.Finish.Findings, MissingInformation: latestDisposition.Finish.MissingInformation, Conflicts: latestDisposition.Finish.Conflicts, CommentarySteps: latestDisposition.Finish.RecommendedNextSteps, NextActions: latestDisposition.NextActions, Limitation: latestDisposition.Limitation}
+		response.Investigation = &investigationView{SourceMode: h.mode, AgentMode: agentMode, ExplanationMode: latestDisposition.ExplanationMode, Verified: false, Current: view.Case.Kind != domain.CaseCollection, BridgeVersion: latestDisposition.BridgeVersion, Summary: latestDisposition.Finish.Summary, Findings: latestDisposition.Finish.Findings, MissingInformation: latestDisposition.Finish.MissingInformation, Conflicts: latestDisposition.Finish.Conflicts, CommentarySteps: latestDisposition.Finish.RecommendedNextSteps, NextActions: append([]string{}, latestDisposition.NextActions...), Limitation: latestDisposition.Limitation}
 	}
 	evidence, err := h.repo.ListEvidence(r.Context(), caseID)
 	if err != nil {
