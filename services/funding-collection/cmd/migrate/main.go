@@ -19,7 +19,7 @@ import (
 func main() {
 	databaseName := flag.String("database-name", "", "expected owned funding database name")
 	flag.Parse()
-	if flag.NArg() != 0 || !config.ValidOwnedDatabaseName(*databaseName, "flowcard_funding_demo") {
+	if flag.NArg() != 0 || !config.ValidOwnedDatabaseName(*databaseName, "flowcard") {
 		log.Print("funding migration requires a safe --database-name")
 		os.Exit(2)
 	}

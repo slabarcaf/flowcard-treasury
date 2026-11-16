@@ -97,9 +97,11 @@ describe("End-to-End OpenAPI Documentation Acceptance (Real Node + Go)", () => {
     const serviceDir = path.resolve(__dirname, "../../services/company-onboarding");
     goProcess = spawn("go", ["run", "./cmd/testserver", "-port", String(goPort)], {
       cwd: serviceDir,
+      detached: process.platform !== "win32",
       env: {
         ...process.env,
         DATABASE_URL: "",
+        DATABASE_URL_HOST: "",
       },
       stdio: "pipe",
     });
@@ -146,7 +148,18 @@ describe("End-to-End OpenAPI Documentation Acceptance (Real Node + Go)", () => {
       await new Promise<void>((resolve) => nodeServer.close(() => resolve()));
     }
     if (goProcess) {
-      goProcess.kill("SIGTERM");
+      // go run starts a separate executable; signal the owned process group so
+      // the actual server cannot outlive its test and retain a worktree cwd.
+      try {
+        if (process.platform !== "win32" && goProcess.pid) process.kill(-goProcess.pid, "SIGTERM");
+        else goProcess.kill("SIGTERM");
+      } catch { /* The owned group already exited. */ }
+      for (let i = 0; i < 30; i++) {
+        try { await httpFetch(`http://127.0.0.1:${goPort}/healthz`); }
+        catch { return; }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      throw new Error("Owned Go docs test server did not stop");
     }
   });
 

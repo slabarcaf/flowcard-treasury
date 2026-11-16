@@ -1,0 +1,372 @@
+{
+  "schema_version": 1,
+  "generation": "go-stack-v1",
+  "modules": [
+    "browser-gateway",
+    "company-onboarding",
+    "shortfall-detection",
+    "underwriting-engine",
+    "funding-collection",
+    "go-coordinator"
+  ],
+  "runtime_family": "flowcard-demo-node-gateway",
+  "migration_family": "flowcard-demo-go-migration",
+  "service_name": "flowcard-demo-node-gateway",
+  "legacy_services": [
+    "flowcard-demo-go-api",
+    "flowcard-demo-go-worker"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "services": [
+    {
+      "name": "node-gateway",
+      "module": "browser-gateway",
+      "command": "api",
+      "environment": {
+        "NODE_ENV": "production",
+        "PGSSLROOTCERT": "/etc/ssl/certs/rds-global-bundle.pem",
+        "BROWSER_GATEWAY_HTTP_ADDR": "0.0.0.0:3000",
+        "BROWSER_GATEWAY_ALLOWED_ORIGINS": "${allowed_origins}",
+        "BROWSER_GATEWAY_ALLOW_LOOPBACK_HTTP": "false",
+        "BROWSER_GATEWAY_ONBOARDING_URL": "http://127.0.0.1:8080",
+        "BROWSER_GATEWAY_COORDINATOR_URL": "http://127.0.0.1:8090",
+        "BROWSER_GATEWAY_SERVICING_URL": "http://127.0.0.1:8085",
+        "AWS_REGION": "${aws_region}"
+      },
+      "secrets": {
+        "DATABASE_URL": "app:go_gateway_url",
+        "BROWSER_GATEWAY_ONBOARDING_SECRET": "service_auth",
+        "BROWSER_GATEWAY_COORDINATOR_READ_SECRET": "app:go_coordinator_reader_secret",
+        "BROWSER_GATEWAY_SERVICING_READ_SECRET": "app:go_servicing_coordinator_secret"
+      },
+      "port": 3000,
+      "health": "/healthz",
+      "worker": false
+    },
+    {
+      "name": "onboarding-api",
+      "module": "company-onboarding",
+      "command": "api",
+      "environment": {
+        "NODE_ENV": "production",
+        "PGSSLROOTCERT": "/etc/ssl/certs/rds-global-bundle.pem",
+        "PORT": "8080",
+        "ONBOARDING_HTTP_HOST": "0.0.0.0",
+        "AIRWALLEX_BASE_URL": "https://api.sandbox.airwallex.com",
+        "AIRWALLEX_ENVIRONMENT": "sandbox",
+        "ONBOARDING_WEBHOOK_ENVIRONMENT": "sandbox",
+        "AWS_REGION": "${aws_region}",
+        "S3_BUCKET_DOCUMENTS": "${documents_bucket}",
+        "S3_KMS_KEY_ID": "${documents_kms_key}"
+      },
+      "secrets": {
+        "AIRWALLEX_CLIENT_ID": "airwallex:client_id",
+        "AIRWALLEX_API_KEY": "airwallex:api_key",
+        "ONBOARDING_SERVICE_SECRET": "service_auth",
+        "ONBOARDING_WEBHOOK_SECRET": "airwallex:onboarding_webhook_secret",
+        "DATABASE_URL": "app:go_onboarding_api_url"
+      },
+      "port": 8080,
+      "health": "/healthz",
+      "worker": false
+    },
+    {
+      "name": "shortfall-api",
+      "module": "shortfall-detection",
+      "command": "api",
+      "environment": {
+        "NODE_ENV": "production",
+        "PGSSLROOTCERT": "/etc/ssl/certs/rds-global-bundle.pem",
+        "SHORTFALL_ENVIRONMENT": "SANDBOX",
+        "SHORTFALL_HTTP_ADDR": "0.0.0.0:8082",
+        "SHORTFALL_WEBHOOK_SOURCE": "airwallex",
+        "SHORTFALL_ISSUING_API_VERSION": "2026-08-21",
+        "AIRWALLEX_BASE_URL": "https://api.sandbox.airwallex.com",
+        "AWS_REGION": "${aws_region}"
+      },
+      "secrets": {
+        "AIRWALLEX_CLIENT_ID": "airwallex:client_id",
+        "AIRWALLEX_API_KEY": "airwallex:api_key",
+        "AIRWALLEX_ACCOUNT_ID": "airwallex:account_id",
+        "DATABASE_URL": "app:go_shortfall_url",
+        "SHORTFALL_SERVICE_SECRET": "app:go_shortfall_secret",
+        "SHORTFALL_WEBHOOK_SECRET": "airwallex:shortfall_webhook_secret"
+      },
+      "port": 8082,
+      "health": "/healthz",
+      "worker": false
+    },
+    {
+      "name": "underwriting-api",
+      "module": "underwriting-engine",
+      "command": "api",
+      "environment": {
+        "NODE_ENV": "production",
+        "PGSSLROOTCERT": "/etc/ssl/certs/rds-global-bundle.pem",
+        "UNDERWRITING_MODE": "SANDBOX",
+        "UNDERWRITING_HTTP_ADDR": "127.0.0.1:8083",
+        "UNDERWRITING_FACILITY_ID": "${facility_id}",
+        "SHORTFALL_BASE_URL": "http://127.0.0.1:8082",
+        "AWS_REGION": "${aws_region}"
+      },
+      "secrets": {
+        "DATABASE_URL": "app:go_underwriting_url",
+        "UNDERWRITING_SERVICE_SECRET": "app:go_underwriting_secret",
+        "SHORTFALL_SERVICE_SECRET": "app:go_shortfall_secret"
+      },
+      "port": 8083,
+      "health": "/healthz",
+      "worker": false
+    },
+    {
+      "name": "funding-api",
+      "module": "funding-collection",
+      "command": "api",
+      "environment": {
+        "NODE_ENV": "production",
+        "PGSSLROOTCERT": "/etc/ssl/certs/rds-global-bundle.pem",
+        "SERVICING_MODE": "SANDBOX",
+        "SERVICING_HTTP_ADDR": "0.0.0.0:8085",
+        "SERVICING_FACILITY_ID": "${facility_id}",
+        "SERVICING_SOURCE_BINDING_ID": "${source_binding_id}",
+        "SERVICING_PROVIDER_MODE": "AIRWALLEX_SANDBOX",
+        "SERVICING_PROVIDER_BASE_URL": "https://api.sandbox.airwallex.com",
+        "UNDERWRITING_BASE_URL": "http://127.0.0.1:8083",
+        "SHORTFALL_BASE_URL": "http://127.0.0.1:8082",
+        "SERVICING_SANDBOX_DELEGATION_ENABLED": "false",
+        "SERVICING_LIVE_DISPATCH_ENABLED": "false",
+        "SERVICING_SANDBOX_FUNDING_ENABLED": "false",
+        "SERVICING_SANDBOX_COLLECTION_ENABLED": "false",
+        "SERVICING_ALLOW_PRIVATE_NETWORK_LISTENER": "true",
+        "AWS_REGION": "${aws_region}"
+      },
+      "secrets": {
+        "AIRWALLEX_CLIENT_ID": "airwallex:client_id",
+        "AIRWALLEX_API_KEY": "airwallex:api_key",
+        "AIRWALLEX_ACCOUNT_ID": "airwallex:account_id",
+        "DATABASE_URL": "app:go_servicing_url",
+        "SERVICING_COORDINATOR_SECRET": "app:go_servicing_coordinator_secret",
+        "SERVICING_READER_SECRET": "app:go_servicing_reader_secret",
+        "SERVICING_OPERATOR_SECRET": "app:go_operator_secret",
+        "SERVICING_CUSTOMER_SECRET": "app:go_customer_secret",
+        "UNDERWRITING_SERVICE_SECRET": "app:go_underwriting_secret",
+        "SHORTFALL_SERVICE_SECRET": "app:go_shortfall_secret",
+        "AIRWALLEX_WEBHOOK_SECRET": "airwallex:servicing_webhook_secret"
+      },
+      "port": 8085,
+      "health": "/health/live",
+      "worker": false
+    },
+    {
+      "name": "coordinator-api",
+      "module": "go-coordinator",
+      "command": "api",
+      "environment": {
+        "NODE_ENV": "production",
+        "PGSSLROOTCERT": "/etc/ssl/certs/rds-global-bundle.pem",
+        "COORDINATOR_MODE": "SANDBOX",
+        "COORDINATOR_HTTP_ADDR": "127.0.0.1:8090",
+        "COORDINATOR_SOURCE_BINDING_ID": "${source_binding_id}",
+        "COORDINATOR_AGENT_MODE": "FIXTURE",
+        "SHORTFALL_BASE_URL": "http://127.0.0.1:8082",
+        "UNDERWRITING_BASE_URL": "http://127.0.0.1:8083",
+        "SERVICING_BASE_URL": "http://127.0.0.1:8085",
+        "AWS_REGION": "${aws_region}"
+      },
+      "secrets": {
+        "DATABASE_URL": "app:go_coordinator_url",
+        "COORDINATOR_READER_SECRET": "app:go_coordinator_reader_secret",
+        "SHORTFALL_SERVICE_SECRET": "app:go_shortfall_secret",
+        "UNDERWRITING_SERVICE_SECRET": "app:go_underwriting_secret",
+        "SERVICING_SERVICE_SECRET": "app:go_servicing_coordinator_secret"
+      },
+      "port": 8090,
+      "health": "/healthz",
+      "worker": false
+    },
+    {
+      "name": "onboarding-worker",
+      "module": "company-onboarding",
+      "command": "worker",
+      "environment": {
+        "NODE_ENV": "production",
+        "PGSSLROOTCERT": "/etc/ssl/certs/rds-global-bundle.pem",
+        "PORT": "8080",
+        "ONBOARDING_HTTP_HOST": "0.0.0.0",
+        "AIRWALLEX_BASE_URL": "https://api.sandbox.airwallex.com",
+        "AIRWALLEX_ENVIRONMENT": "sandbox",
+        "ONBOARDING_WEBHOOK_ENVIRONMENT": "sandbox",
+        "AWS_REGION": "${aws_region}",
+        "S3_BUCKET_DOCUMENTS": "${documents_bucket}",
+        "S3_KMS_KEY_ID": "${documents_kms_key}"
+      },
+      "secrets": {
+        "AIRWALLEX_CLIENT_ID": "airwallex:client_id",
+        "AIRWALLEX_API_KEY": "airwallex:api_key",
+        "ONBOARDING_SERVICE_SECRET": "service_auth",
+        "ONBOARDING_WEBHOOK_SECRET": "airwallex:onboarding_webhook_secret",
+        "DATABASE_URL": "app:go_onboarding_worker_url"
+      },
+      "worker": true
+    },
+    {
+      "name": "shortfall-worker",
+      "module": "shortfall-detection",
+      "command": "worker",
+      "environment": {
+        "NODE_ENV": "production",
+        "PGSSLROOTCERT": "/etc/ssl/certs/rds-global-bundle.pem",
+        "SHORTFALL_ENVIRONMENT": "SANDBOX",
+        "SHORTFALL_HTTP_ADDR": "0.0.0.0:8082",
+        "SHORTFALL_WEBHOOK_SOURCE": "airwallex",
+        "SHORTFALL_ISSUING_API_VERSION": "2026-08-21",
+        "AIRWALLEX_BASE_URL": "https://api.sandbox.airwallex.com",
+        "AWS_REGION": "${aws_region}"
+      },
+      "secrets": {
+        "AIRWALLEX_CLIENT_ID": "airwallex:client_id",
+        "AIRWALLEX_API_KEY": "airwallex:api_key",
+        "AIRWALLEX_ACCOUNT_ID": "airwallex:account_id",
+        "DATABASE_URL": "app:go_shortfall_url",
+        "SHORTFALL_SERVICE_SECRET": "app:go_shortfall_secret",
+        "SHORTFALL_WEBHOOK_SECRET": "airwallex:shortfall_webhook_secret"
+      },
+      "worker": true
+    },
+    {
+      "name": "funding-worker",
+      "module": "funding-collection",
+      "command": "worker",
+      "environment": {
+        "NODE_ENV": "production",
+        "PGSSLROOTCERT": "/etc/ssl/certs/rds-global-bundle.pem",
+        "SERVICING_MODE": "SANDBOX",
+        "SERVICING_HTTP_ADDR": "0.0.0.0:8085",
+        "SERVICING_FACILITY_ID": "${facility_id}",
+        "SERVICING_SOURCE_BINDING_ID": "${source_binding_id}",
+        "SERVICING_PROVIDER_MODE": "AIRWALLEX_SANDBOX",
+        "SERVICING_PROVIDER_BASE_URL": "https://api.sandbox.airwallex.com",
+        "UNDERWRITING_BASE_URL": "http://127.0.0.1:8083",
+        "SHORTFALL_BASE_URL": "http://127.0.0.1:8082",
+        "SERVICING_SANDBOX_DELEGATION_ENABLED": "false",
+        "SERVICING_LIVE_DISPATCH_ENABLED": "false",
+        "SERVICING_SANDBOX_FUNDING_ENABLED": "false",
+        "SERVICING_SANDBOX_COLLECTION_ENABLED": "false",
+        "SERVICING_ALLOW_PRIVATE_NETWORK_LISTENER": "true",
+        "AWS_REGION": "${aws_region}"
+      },
+      "secrets": {
+        "AIRWALLEX_CLIENT_ID": "airwallex:client_id",
+        "AIRWALLEX_API_KEY": "airwallex:api_key",
+        "AIRWALLEX_ACCOUNT_ID": "airwallex:account_id",
+        "DATABASE_URL": "app:go_servicing_url",
+        "SERVICING_COORDINATOR_SECRET": "app:go_servicing_coordinator_secret",
+        "SERVICING_READER_SECRET": "app:go_servicing_reader_secret",
+        "SERVICING_OPERATOR_SECRET": "app:go_operator_secret",
+        "SERVICING_CUSTOMER_SECRET": "app:go_customer_secret",
+        "UNDERWRITING_SERVICE_SECRET": "app:go_underwriting_secret",
+        "SHORTFALL_SERVICE_SECRET": "app:go_shortfall_secret",
+        "AIRWALLEX_WEBHOOK_SECRET": "airwallex:servicing_webhook_secret"
+      },
+      "worker": true
+    }
+  ],
+  "database_bindings": [
+    {
+      "name": "gateway",
+      "key": "go_gateway_url",
+      "role": "",
+      "env": "GATEWAY_DATABASE_URL"
+    },
+    {
+      "name": "onboarding_api",
+      "key": "go_onboarding_api_url",
+      "role": "onboarding_service",
+      "env": "ONBOARDING_API_DATABASE_URL"
+    },
+    {
+      "name": "onboarding_worker",
+      "key": "go_onboarding_worker_url",
+      "role": "onboarding_service",
+      "env": "ONBOARDING_WORKER_DATABASE_URL"
+    },
+    {
+      "name": "shortfall",
+      "key": "go_shortfall_url",
+      "role": "shortfall_runtime",
+      "env": "SHORTFALL_DATABASE_URL"
+    },
+    {
+      "name": "underwriting",
+      "key": "go_underwriting_url",
+      "role": "underwriting_runtime",
+      "env": "UNDERWRITING_DATABASE_URL"
+    },
+    {
+      "name": "servicing",
+      "key": "go_servicing_url",
+      "role": "servicing_runtime",
+      "env": "SERVICING_DATABASE_URL"
+    },
+    {
+      "name": "coordinator",
+      "key": "go_coordinator_url",
+      "role": "coordinator_runtime",
+      "env": "COORDINATOR_DATABASE_URL"
+    }
+  ],
+  "secret_fields": {
+    "app": [
+      "go_gateway_url",
+      "go_coordinator_reader_secret",
+      "go_servicing_coordinator_secret",
+      "go_onboarding_api_url",
+      "go_shortfall_url",
+      "go_shortfall_secret",
+      "go_underwriting_url",
+      "go_underwriting_secret",
+      "go_servicing_url",
+      "go_servicing_reader_secret",
+      "go_operator_secret",
+      "go_customer_secret",
+      "go_coordinator_url",
+      "go_onboarding_worker_url"
+    ],
+    "airwallex": [
+      "client_id",
+      "api_key",
+      "onboarding_webhook_secret",
+      "account_id",
+      "shortfall_webhook_secret",
+      "servicing_webhook_secret"
+    ],
+    "migration": [
+      "go_stack_url",
+      "go_bootstrap_json"
+    ]
+  },
+  "native_routes": [
+    {
+      "name": "onboarding",
+      "path": "/webhooks/airwallex",
+      "port": 8080,
+      "container": "onboarding-api",
+      "health": "/healthz"
+    },
+    {
+      "name": "shortfall",
+      "path": "/webhooks/airwallex/shortfalls",
+      "port": 8082,
+      "container": "shortfall-api",
+      "health": "/healthz"
+    },
+    {
+      "name": "servicing",
+      "path": "/webhooks/airwallex/servicing",
+      "port": 8085,
+      "container": "funding-api",
+      "health": "/health/live"
+    }
+  ]
+}

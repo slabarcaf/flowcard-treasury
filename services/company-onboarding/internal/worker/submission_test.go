@@ -376,9 +376,9 @@ func createTestCompanyAndApp(t *testing.T, repo *postgres.Repository, store stor
 		},
 		People: []domain.PersonPlatformDetails{
 			{
-				PersonID:                  "person_001",
-				PlatformRoles:             []string{"AUTHORISED_PERSON", "BENEFICIAL_OWNER", "CONTROLLING_PERSON"},
-				PrimaryIdentificationID:   "ident_001",
+				PersonID:                "person_001",
+				PlatformRoles:           []string{"AUTHORISED_PERSON", "BENEFICIAL_OWNER", "CONTROLLING_PERSON"},
+				PrimaryIdentificationID: "ident_001",
 				ResidentialAddress: domain.Address{
 					Line1:      "100 Market St",
 					City:       "San Francisco",

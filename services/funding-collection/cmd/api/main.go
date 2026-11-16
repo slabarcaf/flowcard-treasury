@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/config"
 	fundinghttp "github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/http"
 	"github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/postgres"
@@ -44,10 +45,8 @@ func run(ctx context.Context) error {
 		return errors.New("database_runtime_not_ready")
 	}
 	var fundingAccountRef string
-	if err = pool.QueryRow(startupCtx, `SELECT funding_account_ref FROM servicing.facilities WHERE mode=$1 AND id=$2`, cfg.Mode, cfg.FacilityID).Scan(&fundingAccountRef); err != nil {
-		return errors.New("funding_facility_unavailable")
-	}
-	providerAdapter, err := provider.NewFromConfig(cfg, fundingAccountRef, "", nil, nil)
+	facilityErr := pool.QueryRow(startupCtx, `SELECT funding_account_ref FROM servicing.facilities WHERE mode=$1 AND id=$2`, cfg.Mode, cfg.FacilityID).Scan(&fundingAccountRef)
+	providerAdapter, err := apiProvider(cfg, fundingAccountRef, facilityErr)
 	if err != nil {
 		return errors.New("provider_configuration_unavailable")
 	}
@@ -81,4 +80,17 @@ func run(ctx context.Context) error {
 		}
 		return errors.New("funding_server_unavailable")
 	}
+}
+
+// An empty, migrated installation can expose truthful read/health routes before
+// its operator imports a facility. It gains no provider or financial authority.
+func apiProvider(cfg config.Config, account string, facilityErr error) (provider.Boundary, error) {
+	if errors.Is(facilityErr, pgx.ErrNoRows) && cfg.Mode == config.ModeSandbox &&
+		!cfg.LiveDispatchEnabled && !cfg.SandboxFundingEnabled && !cfg.SandboxCollectionEnabled {
+		return provider.Unsupported{}, nil
+	}
+	if facilityErr != nil {
+		return nil, errors.New("funding_facility_unavailable")
+	}
+	return provider.NewFromConfig(cfg, account, "", nil, nil)
 }

@@ -155,6 +155,9 @@ resource "aws_ecs_service" "node_gateway" {
     container_port   = 3000
   }
 
+  # Release tooling owns active revisions/counts/target attachments after bootstrap.
+  lifecycle { ignore_changes = [task_definition, desired_count, load_balancer] }
+
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -261,6 +264,9 @@ resource "aws_ecs_service" "go_api" {
     registry_arn = aws_service_discovery_service.go_api.arn
   }
 
+  # Release tooling owns active revisions/counts/target attachments after bootstrap.
+  lifecycle { ignore_changes = [task_definition, desired_count, load_balancer] }
+
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -350,6 +356,9 @@ resource "aws_ecs_service" "go_worker" {
     security_groups  = [var.go_worker_security_group_id]
     assign_public_ip = false
   }
+
+  # Release tooling owns active revisions/counts/target attachments after bootstrap.
+  lifecycle { ignore_changes = [task_definition, desired_count, load_balancer] }
 
   deployment_circuit_breaker {
     enable   = true

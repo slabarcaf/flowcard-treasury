@@ -129,7 +129,7 @@ func Load() (Config, error) {
 	if cfg.Mode == ModeSandbox && cfg.ProviderMode != ProviderSandbox {
 		return cfg, errors.New("sandbox_provider_mode_invalid")
 	}
-	if err := validateAddress(cfg.HTTPAddress); err != nil {
+	if err := validateRuntimeAddress(cfg.HTTPAddress, cfg.Mode, os.Getenv("SERVICING_ALLOW_PRIVATE_NETWORK_LISTENER")); err != nil {
 		return cfg, err
 	}
 	if err := validateDistinctKeys(cfg); err != nil {
@@ -225,6 +225,19 @@ func validateAddress(address string) error {
 		return errors.New("servicing_http_address_must_be_loopback")
 	}
 	return nil
+}
+
+func validateRuntimeAddress(address, mode, allow string) error {
+	if allow != "" && allow != "false" && allow != "true" {
+		return errors.New("private_listener_option_invalid")
+	}
+	if allow == "true" {
+		host, port, err := net.SplitHostPort(address)
+		if mode == ModeSandbox && err == nil && host == "0.0.0.0" && port != "" {
+			return nil
+		}
+	}
+	return validateAddress(address)
 }
 
 func validateLoopbackHTTPURL(value string) error {
