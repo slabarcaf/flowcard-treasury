@@ -180,7 +180,25 @@ resource "aws_iam_policy" "github_deployer" {
         ]
         Resource = ["${var.frontend_bucket_arn}/*"]
       },
-      ], var.cloudfront_distribution_arn == null ? [] : [{
+      ], length(var.go_native_rule_arns) == 0 ? [] : [{
+        Sid      = "GoNativeRouteActivation"
+        Effect   = "Allow"
+        Action   = ["elasticloadbalancing:ModifyRule"]
+        Resource = var.go_native_rule_arns
+        }], length(var.go_native_target_arns) == 0 ? [] : [{
+        Sid    = "GoTargetHealth"
+        Effect = "Allow"
+        Action = ["elasticloadbalancing:DescribeTargetHealth", "elasticloadbalancing:DescribeRules"]
+        # ELB Describe APIs do not support resource-level IAM permissions.
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:RequestedRegion" = var.aws_region } }
+        }], [{
+        Sid       = "ListDemoRuntimeTasks"
+        Effect    = "Allow"
+        Action    = ["ecs:ListTasks"]
+        Resource  = "*"
+        Condition = { ArnEquals = { "ecs:cluster" = var.ecs_cluster_arn } }
+        }], var.cloudfront_distribution_arn == null ? [] : [{
         # 10. CloudFront read, invalidation creation, and completion checks stay on one exact distribution.
         Sid    = "CloudFrontInvalidation"
         Effect = "Allow"

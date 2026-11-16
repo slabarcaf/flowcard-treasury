@@ -1,0 +1,149 @@
+name: Go and Product CI
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  infrastructure:
+    name: Terraform configuration and formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: '1.10.5'
+      - run: terraform fmt -check -recursive infra
+      - run: terraform -chdir=infra/environments/demo init -backend=false
+      - run: terraform -chdir=infra/environments/demo validate
+
+  product:
+    name: Product, release contracts and static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.12.0'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build:product
+      - run: npm run server:build
+      - name: Safe product tests (legacy fixed-database suites are explicitly excluded)
+        run: >-
+          npx vitest run
+          --exclude tests/server/onboarding-e2e-acceptance.test.ts
+          --exclude tests/server/onboarding-webhook-forwarding.test.ts
+          --exclude tests/server/postgres-integration.test.ts
+      - name: Verify Go deployment contract
+        run: node infra/scripts/verify-go-release.mjs
+
+  go:
+    name: Go ${{ matrix.module }} (owned isolated databases)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [company-onboarding, browser-gateway, shortfall-detection, underwriting-engine, funding-collection, go-coordinator]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: flowcard_onboarding_test
+          POSTGRES_USER: test_onboarding
+          POSTGRES_PASSWORD: test_password
+        ports: ['54329:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
+    env:
+      POLICY_ACCEPTANCE_DATABASE_URL: postgres://test_onboarding:test_password@127.0.0.1:54329/flowcard_onboarding_test?sslmode=disable
+      SHORTFALL_TEST_ADMIN_URL: postgres://test_onboarding:test_password@127.0.0.1:54329/postgres?sslmode=disable
+      UNDERWRITING_TEST_ADMIN_DATABASE_URL: postgres://test_onboarding:test_password@127.0.0.1:54329/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: services/${{ matrix.module }}/go.mod
+          cache-dependency-path: services/**/go.sum
+      - name: Prepare synthetic isolated test credentials
+        shell: bash
+        run: |
+          umask 077
+          printf '%s' 'postgres://test_onboarding:test_password@127.0.0.1:54329/postgres?sslmode=disable' > "$RUNNER_TEMP/go-test-admin-url"
+          for name in BROWSER_GATEWAY_TEST_ADMIN_URL_FILE FUNDING_TEST_ADMIN_URL_FILE COORDINATOR_TEST_ADMIN_URL_FILE ONBOARDING_WEBHOOK_TEST_ADMIN_URL_FILE; do
+            echo "$name=$RUNNER_TEMP/go-test-admin-url" >> "$GITHUB_ENV"
+          done
+      - name: Build, vet and verify formatting
+        working-directory: services/${{ matrix.module }}
+        run: |
+          test -z "$(gofmt -l .)"
+          go build -mod=readonly ./...
+          go vet ./...
+      - name: Test actual module and owned database scenarios
+        env:
+          MODULE: ${{ matrix.module }}
+        run: |
+          if [ "$MODULE" = go-coordinator ]; then
+            bash services/go-coordinator/scripts/run-g-local.sh
+          else
+            go -C "services/$MODULE" test -mod=readonly -race -p 1 -count=1 ./...
+          fi
+      - name: OpenAPI freshness
+        if: matrix.module == 'company-onboarding'
+        run: go -C services/company-onboarding run ./cmd/openapi -check
+
+  image:
+    name: Linux amd64 common Go image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: test_onboarding
+          POSTGRES_PASSWORD: test_password
+        ports: ['54329:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+      - uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.12.0'
+          cache: npm
+      - run: npm ci
+      - run: >-
+          docker buildx build --platform linux/amd64 --load
+          --build-arg SOURCE_COMMIT=${{ github.sha }}
+          --file infra/runtime/Dockerfile.go-stack --tag flowcard-go-ci:${{ github.sha }} .
+      - name: Check non-root runtime and certificate bundle
+        run: |
+          test "$(docker inspect --format '{{.Os}}/{{.Architecture}} {{.Config.User}}' flowcard-go-ci:${{ github.sha }})" = 'linux/amd64 10001:10001'
+          docker run --rm --entrypoint /bin/sh flowcard-go-ci:${{ github.sha }} -ec 'test -s /etc/ssl/certs/rds-global-bundle.pem; test -x /opt/flowcard/funding-collection/worker; test -x /opt/flowcard/browser-gateway/deploytool'
+      - name: Smoke all six real APIs, migrations and real login in the common image
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          umask 077
+          printf '%s' 'postgres://test_onboarding:test_password@127.0.0.1:54329/postgres?sslmode=disable' > "$RUNNER_TEMP/go-smoke-admin"
+          export GO_DEPLOY_TEST_ADMIN_URL_FILE="$RUNNER_TEMP/go-smoke-admin"
+          node infra/scripts/smoke-go-stack.mjs --image "flowcard-go-ci:${GITHUB_SHA}" --postgres-container "$POSTGRES_CONTAINER"

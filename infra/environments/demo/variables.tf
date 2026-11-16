@@ -311,3 +311,8 @@ variable "allowed_origins" {
   description = "Additional allowed origins for CORS on Node gateway"
   default     = []
 }
+variable "enable_go_stack_foundation" {
+  type        = bool
+  default     = false
+  description = "Prepare Go routing and bootstrap permissions; does not deploy images or switch callbacks"
+}

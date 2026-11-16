@@ -56,3 +56,8 @@ variable "cloudfront_prefix_list_id" {
   description = "Managed prefix list ID for CloudFront origin-facing IPs"
   default     = null
 }
+variable "enable_go_native_routes" {
+  type        = bool
+  default     = false
+  description = "Prepare preview-gated target groups for native Go webhook receivers"
+}

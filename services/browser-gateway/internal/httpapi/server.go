@@ -36,6 +36,8 @@ func New(c config.Config, s *postgres.Store) http.Handler {
 	a := &Server{config: c, store: s, work: make(chan struct{}, 4), upstream: upstreamClient()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	// Retain the existing private ALB health path during the Go gateway cutover.
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
