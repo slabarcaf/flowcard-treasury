@@ -13,6 +13,8 @@ services:
       UNDERWRITING_SERVICE_SECRET: ${UNDERWRITING_SERVICE_SECRET:?set the underwriting secret}
       SHORTFALL_BASE_URL: ${SHORTFALL_BASE_URL:?set the loopback shortfall mock URL}
       SHORTFALL_SERVICE_SECRET: ${SHORTFALL_SERVICE_SECRET:?set the shortfall secret}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:8083:8083"
     volumes:

@@ -116,6 +116,9 @@ jobs:
           test -z "$(gofmt -l .)"
           go build -mod=readonly ./...
           go vet ./...
+      - name: Build the underwriting journey's actual container before generating fresh fixtures
+        if: matrix.module == 'underwriting-engine'
+        run: docker build --tag flowcard-underwriting-task-f-underwriting-demo services/underwriting-engine
       - name: Test actual module and owned database scenarios
         env:
           MODULE: ${{ matrix.module }}
