@@ -354,6 +354,8 @@ type snapshotQuerier interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
+// PostgreSQL stores microseconds. Compare the immutable JSON instant at that
+// precision so sub-microsecond source digits do not make valid rows unreadable.
 func currentCustomer(ctx context.Context, querier snapshotQuerier, mode, customerID string) (*domain.CustomerSnapshotRecord, error) {
 	var record domain.CustomerSnapshotRecord
 	var sourceMode, storedCustomerID, accountID, cardID string
@@ -375,7 +377,7 @@ func currentCustomer(ctx context.Context, querier snapshotQuerier, mode, custome
 	if json.Unmarshal(snapshotJSON, &record.Snapshot) != nil ||
 		record.Snapshot.SourceMode != sourceMode || record.Snapshot.CustomerID != storedCustomerID ||
 		record.Snapshot.AccountID != accountID || record.Snapshot.CardID != cardID ||
-		!record.Snapshot.CapturedAt.Equal(capturedAt) {
+		!record.Snapshot.CapturedAt.Truncate(time.Microsecond).Equal(capturedAt) {
 		return nil, errors.New("storage_unavailable")
 	}
 	record.Snapshot.CapturedAt = capturedAt.UTC()
@@ -401,7 +403,7 @@ func currentFacility(ctx context.Context, querier snapshotQuerier, mode, facilit
 	}
 	if json.Unmarshal(snapshotJSON, &record.Snapshot) != nil ||
 		record.Snapshot.SourceMode != sourceMode || record.Snapshot.FacilityID != storedFacilityID ||
-		!record.Snapshot.CapturedAt.Equal(capturedAt) {
+		!record.Snapshot.CapturedAt.Truncate(time.Microsecond).Equal(capturedAt) {
 		return nil, errors.New("storage_unavailable")
 	}
 	record.Snapshot.CapturedAt = capturedAt.UTC()

@@ -109,7 +109,8 @@ func TestUnderwritingJourney(t *testing.T) {
 	}
 	databaseName := "flowcard_underwriting_demo_task_f_" + nameSuffix
 	if err := runGoCommand(ctx, root, nil, "run", "./cmd/demo", "prepare", "--scenario", "all",
-		"--as-of", "now", "--out", ".dev/demo", "--database-name", databaseName); err != nil {
+		"--as-of", time.Now().UTC().Truncate(time.Second).Add(123456789*time.Nanosecond).Format(time.RFC3339Nano),
+		"--out", ".dev/demo", "--database-name", databaseName); err != nil {
 		t.Fatal("actual cmd/demo prepare failed")
 	}
 	manifestPath := filepath.Join(root, ".dev", "demo", "manifest.json")
@@ -377,7 +378,7 @@ func TestUnderwritingJourney(t *testing.T) {
 		t.Fatal("build task API command:", err)
 	}
 	if err := runGoCommand(ctx, root, nil, "run", "./cmd/demo", "prepare", "--scenario", "all",
-		"--as-of", "now", "--out", ".dev/demo", "--database-name", databaseName); err != nil {
+		"--as-of", time.Now().UTC().Truncate(time.Second).Add(123456789*time.Nanosecond).Format(time.RFC3339Nano), "--out", ".dev/demo", "--database-name", databaseName); err != nil {
 		t.Fatal("actual fresh cmd/demo prepare failed")
 	}
 	manifestPath = filepath.Join(root, ".dev", "demo", "manifest.json")
@@ -738,7 +739,7 @@ func TestUnderwritingJourney(t *testing.T) {
 		t.Fatal("host API did not release task port:", err)
 	}
 	if err := runGoCommand(ctx, root, nil, "run", "./cmd/demo", "prepare", "--scenario", "all",
-		"--as-of", "now", "--out", ".dev/demo", "--database-name", databaseName); err != nil {
+		"--as-of", time.Now().UTC().Truncate(time.Second).Add(123456789*time.Nanosecond).Format(time.RFC3339Nano), "--out", ".dev/demo", "--database-name", databaseName); err != nil {
 		t.Fatal("prepare fresh container run:", err)
 	}
 	manifestPath = filepath.Join(root, ".dev", "demo", "manifest.json")
