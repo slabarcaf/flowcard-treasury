@@ -232,7 +232,10 @@ func refreshDisposition(b servicing.Bridge, historyComplete bool, effectiveActio
 		return StepResult{Status: "ACTION_REQUIRED", NextStage: "MONITORING", HeldReason: stringPtr("UNRESOLVED_COLLECTION_ATTEMPT")}
 	}
 	for _, op := range b.Operations {
-		if !terminalOperation(op.State) || op.HoldReason != nil && *op.HoldReason != "" {
+		// A source-confirmed unsent cancellation retains its historical refusal
+		// code. It is resolved and must not keep a repaid bridge open.
+		activeHold := op.State != "CANCELLED_UNSENT" && op.HoldReason != nil && *op.HoldReason != ""
+		if !terminalOperation(op.State) || activeHold {
 			return StepResult{Status: "ACTION_REQUIRED", NextStage: "MONITORING", HeldReason: stringPtr("UNRESOLVED_OPERATION")}
 		}
 	}
