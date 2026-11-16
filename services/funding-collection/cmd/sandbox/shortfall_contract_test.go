@@ -22,10 +22,12 @@ func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
 		forged      bool
 		separate    bool
 		wrongParent bool
+		missingID   bool
 	}{
 		{name: "verified evidence"},
 		{name: "tampered evidence refused", forged: true},
 		{name: "signed forms on separate declines", separate: true},
+		{name: "native response contains only parent reference", separate: true, missingID: true},
 		{name: "separate sample canonical parent mismatch refused", separate: true, wrongParent: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -42,7 +44,11 @@ func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
 				m.Intents["cardholder-borrower"] = setupIntent{ResourceID: "test-holder", State: "VERIFIED"}
 				m.Intents["callback-decline"] = setupIntent{ParentTransactionID: "test-parent"}
 				if test.separate {
-					m.Intents["callback-decline"] = setupIntent{ParentTransactionID: "test-parent", ResourceID: "test-callback-event"}
+					callback := setupIntent{ParentTransactionID: "test-parent"}
+					if !test.missingID {
+						callback.ResourceID = "test-callback-event"
+					}
+					m.Intents["callback-decline"] = callback
 				}
 				return nil
 			}); err != nil {
@@ -84,6 +90,7 @@ func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
 				}
 			}
 			canonicalGets := 0
+			canonicalLists := 0
 			api := &sandboxAPI{client: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if r.Method != "GET" {
 					t.Fatal("contract verification mutated provider")
@@ -119,6 +126,12 @@ func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
 				case "/api/v1/issuing/card_transaction_events/test-callback-event":
 					canonicalGets++
 					response = []byte(`{"id":"test-callback-event","card_id":"test-card","card_transaction_id":"test-parent","type":"AUTHORIZATION","subtype":"AUTHORIZATION","transaction_category":"PURCHASE","process_result":"DECLINED","failure_reason":"INSUFFICIENT_FUNDS","billing_amount":9000,"billing_currency":"USD"}`)
+				case "/api/v1/issuing/card_transaction_events":
+					canonicalLists++
+					if r.URL.Query().Get("card_transaction_id") != "test-parent" {
+						t.Fatal("canonical list lost signed parent scope")
+					}
+					response = []byte(`{"items":[{"id":"test-callback-event","card_id":"test-card","card_transaction_id":"test-parent","type":"AUTHORIZATION","subtype":"AUTHORIZATION"}],"page_after":""}`)
 				default:
 					t.Fatalf("unexpected provider route %s", r.URL.Path)
 				}
@@ -138,11 +151,15 @@ func TestShortfallContractRequiresSignedPairAndCanonicalRead(t *testing.T) {
 				return
 			}
 			wantGets := 1
+			wantLists := 0
 			if test.separate {
 				wantGets = 2
 			}
-			if err != nil || canonicalGets != wantGets {
-				t.Fatalf("verified contract unavailable: %v", err)
+			if test.missingID {
+				wantLists = 1
+			}
+			if err != nil || canonicalGets != wantGets || canonicalLists != wantLists {
+				t.Fatalf("verified contract: err=%v canonical GETs=%d want%d lists=%d want%d", err, canonicalGets, wantGets, canonicalLists, wantLists)
 			}
 			target := filepath.Join(dir, "shortfall-contract.json")
 			info, err := os.Stat(target)

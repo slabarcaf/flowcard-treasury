@@ -167,6 +167,47 @@ type canonicalEvent struct {
 	BillingCurrency string          `json:"billing_currency"`
 }
 
+func (a *sandboxAPI) findInitialEvent(ctx context.Context, path, evidencePrefix, parentID, cardID string) (string, error) {
+	query := url.Values{"card_transaction_id": {parentID}, "page_size": {"100"}}
+	seen := map[string]bool{}
+	var candidates []canonicalEvent
+	complete := false
+	for page := 0; page < 100; page++ {
+		raw, code, state := a.get(ctx, "/api/v1/issuing/card_transaction_events?"+query.Encode())
+		var result struct {
+			Items []canonicalEvent `json:"items"`
+			After string           `json:"page_after"`
+		}
+		if state != "VERIFIED" || json.Unmarshal(raw, &result) != nil || result.Items == nil {
+			return "", errors.New("sandbox_event_list_unavailable_http_" + strconv.Itoa(code))
+		}
+		if err := captureContract(path, evidencePrefix+strconv.Itoa(page), raw); err != nil {
+			return "", err
+		}
+		for _, event := range result.Items {
+			if event.Parent != parentID || event.CardID != cardID {
+				return "", errors.New("sandbox_event_list_ownership_mismatch")
+			}
+			if event.Type == "AUTHORIZATION" && event.Subtype == "AUTHORIZATION" {
+				candidates = append(candidates, event)
+			}
+		}
+		if result.After == "" {
+			complete = true
+			break
+		}
+		if seen[result.After] {
+			return "", errors.New("sandbox_event_pagination_invalid")
+		}
+		seen[result.After] = true
+		query.Set("page", result.After)
+	}
+	if !complete || len(candidates) != 1 || candidates[0].ID == "" {
+		return "", errors.New("sandbox_canonical_event_ambiguous_or_unavailable")
+	}
+	return candidates[0].ID, nil
+}
+
 func captureEvent(ctx context.Context, api *sandboxAPI, cfg credentials, path, runID string, out io.Writer) error {
 	scoped, err := ownedScopedAPI(ctx, api, cfg, path, runID, "borrower")
 	if err != nil {
@@ -201,44 +242,10 @@ func captureEvent(ctx context.Context, api *sandboxAPI, cfg credentials, path, r
 	}
 	id := intent.ResourceID
 	if id == "" {
-		query := url.Values{"card_transaction_id": {intent.ParentTransactionID}, "page_size": {"100"}}
-		seen := map[string]bool{}
-		candidates := []canonicalEvent{}
-		complete := false
-		for page := 0; page < 100; page++ {
-			raw, code, state := scoped.get(ctx, "/api/v1/issuing/card_transaction_events?"+query.Encode())
-			var result struct {
-				Items []canonicalEvent `json:"items"`
-				After string           `json:"page_after"`
-			}
-			if state != "VERIFIED" || json.Unmarshal(raw, &result) != nil || result.Items == nil {
-				return errors.New("sandbox_event_list_unavailable_http_" + strconv.Itoa(code))
-			}
-			if err := captureContract(path, "issuing-event-list-page-"+strconv.Itoa(page), raw); err != nil {
-				return err
-			}
-			for _, event := range result.Items {
-				if event.Parent != intent.ParentTransactionID || event.CardID != card.ResourceID {
-					return errors.New("sandbox_event_list_ownership_mismatch")
-				}
-				if event.Type == "AUTHORIZATION" && event.Subtype == "AUTHORIZATION" {
-					candidates = append(candidates, event)
-				}
-			}
-			if result.After == "" {
-				complete = true
-				break
-			}
-			if seen[result.After] {
-				return errors.New("sandbox_event_pagination_invalid")
-			}
-			seen[result.After] = true
-			query.Set("page", result.After)
+		id, err = scoped.findInitialEvent(ctx, path, "issuing-event-list-page-", intent.ParentTransactionID, card.ResourceID)
+		if err != nil {
+			return err
 		}
-		if !complete || len(candidates) != 1 || candidates[0].ID == "" {
-			return errors.New("sandbox_canonical_event_ambiguous_or_unavailable")
-		}
-		id = candidates[0].ID
 	}
 	raw, status, state := scoped.get(ctx, "/api/v1/issuing/card_transaction_events/"+url.PathEscape(id))
 	if state != "VERIFIED" {
