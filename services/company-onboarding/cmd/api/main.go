@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -57,13 +58,13 @@ func run(ctx context.Context, cfg *config.Config) error {
 		defer closeFn()
 	}
 
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
+	listener, err := net.Listen("tcp", net.JoinHostPort(cfg.HTTPHost, strconv.Itoa(cfg.Port)))
 	if err != nil {
 		return fmt.Errorf("failed to listen on port %d: %w", cfg.Port, err)
 	}
 	defer listener.Close()
 
-	log.Printf("company-onboarding API server listening on :%d (%s)", cfg.Port, cfg.Environment)
+	log.Printf("company-onboarding API server listening on %s (%s)", listener.Addr().String(), cfg.Environment)
 	return runWithListener(ctx, cfg, listener, handler, 5*time.Second)
 }
 

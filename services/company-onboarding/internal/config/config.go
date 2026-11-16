@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ var (
 // Config holds runtime configuration values parsed from environment variables.
 type Config struct {
 	Port               int
+	HTTPHost           string
 	DatabaseURL        string
 	Environment        string
 	AWSRegion          string
@@ -67,6 +69,12 @@ func LoadWithLookup(lookup func(string) string) (*Config, error) {
 			return nil, fmt.Errorf("%w: received %q", ErrInvalidPort, rawPort)
 		}
 		cfg.Port = p
+	}
+	if host := strings.TrimSpace(lookup("ONBOARDING_HTTP_HOST")); host != "" {
+		if host != "localhost" && net.ParseIP(host) == nil {
+			return nil, errors.New("ONBOARDING_HTTP_HOST must be an IP address or localhost")
+		}
+		cfg.HTTPHost = host
 	}
 
 	if dbURL := strings.TrimSpace(lookup("DATABASE_URL")); dbURL != "" {

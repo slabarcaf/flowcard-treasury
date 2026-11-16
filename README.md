@@ -6,7 +6,9 @@ Bridge financing underwriting demo and platform.
 
 ## Quick start
 
-Requires Node 20.19+ or 22.12+.
+Requires Node 20.19+ or 22.12+. The Go workspace requires the local Go
+backend profile and invited users described in
+[local demo setup](/docs/demo/local-go-browser.md).
 
 ```sh
 npm install
@@ -15,6 +17,9 @@ npm run dev
 
 ## Key commands
 
+- `npm run dev` starts the local Go browser workspace on port 5175.
+- `npm run dev:legacy` starts the preserved fixture UI.
+- `npm run build:go` builds the Go workspace separately from hosted legacy output.
 - `npm test` runs Vitest.
 - `npm run lint` runs oxlint.
 - `npm run build` type-checks and builds the frontend in `.dev/dist/`.
