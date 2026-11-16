@@ -5,9 +5,8 @@ import type { DatabasePool } from "../../server/src/db/pool.js";
 import { createRequestHandler } from "../../server/src/http/server.js";
 
 const config: ServerConfig = {
-  port: 3000, databaseUrl: "fixture", airwallexBaseUrl: "http://127.0.0.1",
-  airwallexClientId: "synthetic-client", airwallexApiKey: "synthetic-key",
-  airwallexWebhookSecret: "synthetic-webhook-secret",
+  port: 3000, databaseUrl: "fixture",
+
 };
 
 describe("retired Node ledger API", () => {

@@ -29,6 +29,8 @@ var (
 
 // Config holds runtime configuration values parsed from environment variables.
 type Config struct {
+	// WebhookOnly is selected by the API CLI, never inferred from credentials.
+	WebhookOnly        bool
 	Port               int
 	HTTPHost           string
 	DatabaseURL        string

@@ -1,7 +1,6 @@
 import { loadConfig } from "./config.js";
 import { createHttpServer } from "./http/server.js";
 import { createDatabasePool } from "./db/pool.js";
-import { OnboardingWebhookForwarder } from "./webhooks/onboarding-forwarder.js";
 import { createGracefulShutdown } from "./lifecycle.js";
 
 if (process.argv[2]) {
@@ -11,17 +10,7 @@ if (process.argv[2]) {
 
 const config = loadConfig();
 const pool = await createDatabasePool(config);
-let onboardingForwarder: OnboardingWebhookForwarder | undefined;
-if (config.onboardingServiceUrl && config.onboardingServiceSecret) {
-  onboardingForwarder = new OnboardingWebhookForwarder({
-    pool,
-    onboardingServiceUrl: config.onboardingServiceUrl,
-    serviceSecret: config.onboardingServiceSecret,
-  });
-  onboardingForwarder.start();
-}
-
-const server = createHttpServer(config, pool, onboardingForwarder);
+const server = createHttpServer(config, pool);
 server.listen(config.port, "0.0.0.0", () => {
   console.log(`Compatibility API listening on port ${config.port}`);
 });
@@ -29,7 +18,6 @@ server.listen(config.port, "0.0.0.0", () => {
 const shutdown = createGracefulShutdown({
   server,
   pool,
-  onboardingForwarder,
 });
 
 process.on("SIGTERM", () => { void shutdown(); });

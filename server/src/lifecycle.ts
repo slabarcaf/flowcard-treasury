@@ -5,13 +5,12 @@
 export interface ShutdownDependencies {
   server?: { close: (cb: (err?: Error) => void) => void; closeAllConnections?: () => void };
   pool?: { end: () => Promise<void> };
-  onboardingForwarder?: { stop: () => Promise<void> };
   exitProcess?: (code: number) => void;
 }
 
 /**
  * Creates an idempotent, bounded graceful shutdown handler.
- * Shuts down HTTP server, intervals, background workers, forwarders, and database pool.
+ * Shuts down HTTP server and database pool.
  * A second signal while shutdown is in progress forces immediate exit with code 1.
  */
 export function createGracefulShutdown(deps: ShutdownDependencies, timeoutMs = 10_000): () => Promise<void> {
@@ -53,11 +52,7 @@ export function createGracefulShutdown(deps: ShutdownDependencies, timeoutMs = 1
         });
       }
 
-      // 2. Stop the retained webhook forwarder while HTTP requests drain.
-      const forwarderStopPromise = deps.onboardingForwarder ? deps.onboardingForwarder.stop() : Promise.resolve();
-
-      // Await both HTTP server drain and forwarder termination concurrently
-      await Promise.all([serverDrainPromise, forwarderStopPromise]);
+      await serverDrainPromise;
 
       if (timedOut) {
         return;

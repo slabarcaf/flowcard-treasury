@@ -8,9 +8,8 @@ import { createRequestHandler } from "../../server/src/http/server.js";
 
 const secret = "synthetic-webhook-secret-0000000000000000";
 const config: ServerConfig = {
-  port: 3000, databaseUrl: "fixture", airwallexBaseUrl: "http://127.0.0.1",
-  airwallexClientId: "synthetic-client", airwallexApiKey: "synthetic-key",
-  airwallexWebhookSecret: secret,
+  port: 3000, databaseUrl: "fixture",
+
 };
 
 function request(url: string, body: string, headers: Record<string, string> = {}): IncomingMessage {
@@ -58,31 +57,23 @@ describe("retired Node financial execution", () => {
     expect(connect).not.toHaveBeenCalled();
   });
 
-  it("refuses servicing events even when signed, and verifies signatures before classifying them", async () => {
+  it("retires every provider callback without receipt, forwarding or signature consumption", async () => {
     const { pool, query, connect } = database();
     const handler = createRequestHandler(config, pool);
-    for (const type of ["connected_account_transfer.settled", "charge.settled", "deposit.settled"]) {
-      const result = await invoke(handler, signedEvent(type));
+    for (const name of ["account.active", "rfi.created", "connected_account_transfer.settled", "deposit.settled"]) {
+      const req = signedEvent(name);
+      const result = await invoke(handler, req);
       expect(result.status).toBe(410);
-      expect(result.body.error).toBe("legacy_servicing_retired");
+      expect(result.headers["cache-control"]).toBe("no-store");
+      expect(result.body.error).toBe("legacy_webhook_retired");
+      expect(result.headers.location).toBeUndefined();
+      expect(req.readableEnded).toBe(false);
     }
-    const invalid = signedEvent("account.updated");
+    const invalid = signedEvent("account.active");
     invalid.headers["x-signature"] = "invalid";
-    expect((await invoke(handler, invalid)).status).toBe(401);
+    expect((await invoke(handler, invalid)).status).toBe(410);
+    expect((await invoke(handler, request("/webhooks/airwallex/?old=1", "{}"))).status).toBe(410);
     expect(query).not.toHaveBeenCalled();
     expect(connect).not.toHaveBeenCalled();
-  });
-
-  it("keeps signed onboarding events durable and nudges the retained forwarder", async () => {
-    const { pool, query } = database();
-    const nudge = vi.fn();
-    const handler = createRequestHandler(config, pool, { nudge } as never);
-    const result = await invoke(handler, signedEvent("account.updated"));
-    expect(result.status).toBe(200);
-    expect(result.body).toEqual({ received: true });
-    expect(query.mock.calls).toHaveLength(2);
-    expect(query.mock.calls[0]?.[0]).toContain("INSERT INTO webhook_inbox");
-    expect(query.mock.calls[1]?.[0]).toContain("INSERT INTO onboarding_webhook_forwarding");
-    expect(nudge).toHaveBeenCalledOnce();
   });
 });

@@ -128,9 +128,7 @@ describe("End-to-End OpenAPI Documentation Acceptance (Real Node + Go)", () => {
     nodeServer = createHttpServer({
       port: nodePort,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: [allowedOrigin],
@@ -252,9 +250,7 @@ describe("End-to-End OpenAPI Documentation Acceptance (Real Node + Go)", () => {
       const unconfiguredHandler = createRequestHandler({
         port: 9000,
         databaseUrl: "fixture",
-        airwallexClientId: "fixture",
-        airwallexApiKey: "fixture",
-        airwallexWebhookSecret: "fixture",
+
         kit5OperatorToken: operatorToken,
         kit5OperatorId: operatorId,
         kit5AllowedOrigins: [allowedOrigin],
@@ -266,9 +262,7 @@ describe("End-to-End OpenAPI Documentation Acceptance (Real Node + Go)", () => {
       const nodeServerUnconfigured = createHttpServer({
         port: freePort,
         databaseUrl: "fixture",
-        airwallexClientId: "fixture",
-        airwallexApiKey: "fixture",
-        airwallexWebhookSecret: "fixture",
+
         kit5OperatorToken: operatorToken,
         kit5OperatorId: operatorId,
         kit5AllowedOrigins: [allowedOrigin],

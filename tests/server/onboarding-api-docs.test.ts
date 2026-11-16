@@ -254,9 +254,7 @@ describe("Onboarding Documentation Gateway Proxy (End-to-End)", () => {
     return createRequestHandler({
       port: 8000,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: [allowedOrigin],

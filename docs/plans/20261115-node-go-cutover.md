@@ -105,6 +105,11 @@ the Node backlog are unchanged.
   after replacement acceptance and callback cutover. Retain historical
   migrations and delivery records.
 
+Source retirement and an audit-first Go receipt transfer are now prepared in
+`feat/retire-node-webhooks`. They remain a candidate until actual subscription
+delivery and backlog acceptance. See
+[the retirement runbook](/docs/demo/node-webhook-retirement.md).
+
 ### Browser default and mapping administration
 
 The local developer entry now uses the verified Go browser workspace. The

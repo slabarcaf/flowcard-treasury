@@ -53,3 +53,17 @@ existing truncating tests against shared/manual data.
 Keep Node intake, its pending deliveries, migrations and deployed routing until
 normal migration, subscription/routing and backlog-drain prechecks are accepted.
 No infrastructure, provider subscription, live event or root `.env` change.
+
+## Retirement candidate
+
+The isolated retirement change adds a callback-only launch of the existing Go
+API and a privileged, audit-first legacy receipt transfer CLI. Public callback
+mode exposes the signed `/webhooks/airwallex/onboarding` route and liveness;
+normal business and internal JWT routes are absent from that mode. Legacy
+receipt transfer uses mandatory expected database names, an exact audited
+source hash, read-only Node access and the normal Go durable inbox writer.
+Original bytes, event IDs and historical Node rows remain preserved.
+
+See [the cutover runbook](/docs/demo/node-webhook-retirement.md). Actual provider
+delivery and backlog acceptance still gate runtime retirement. The candidate
+does not switch a hosted callback or remove historical migrations/data.
