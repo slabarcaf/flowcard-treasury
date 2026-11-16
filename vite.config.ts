@@ -2,6 +2,7 @@ import { ServerResponse } from 'node:http'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { configDefaults, defineConfig } from 'vitest/config'
+import { privateRuntimeFileAccess } from './vite.private-files.js';
 
 const browserGatewayTarget = process.env.BROWSER_GATEWAY_PROXY_TARGET;
 if (browserGatewayTarget) {
@@ -15,6 +16,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: { outDir: '.dev/dist' },
   server: {
+    fs: privateRuntimeFileAccess(),
     allowedHosts: ['unsoulful-observantly-ahmed.ngrok-free.dev'],
     proxy: {
       '/api': {

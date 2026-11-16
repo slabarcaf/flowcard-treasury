@@ -752,10 +752,9 @@ func (r *Repository) StoreVerifiedDepositWebhook(ctx context.Context, job Webhoo
 		return errors.New("webhook_deposit_observation_insert_failed")
 	}
 	if depositExists {
-		matches := existingCustomer == scope.CustomerID && existingCurrency == observation.Currency &&
-			existingGross == observation.GrossCents && existingNet == observation.NetCents &&
-			existingFee == fee && existingStatus == "SETTLED" && existingKind == observation.Kind &&
-			existingSettled.Equal(observation.SettledAt.UTC())
+		matches := (depositFacts{account: scope.AccountRef, customer: existingCustomer,
+			id: job.DepositID, currency: existingCurrency, status: existingStatus,
+			kind: existingKind, gross: existingGross, net: existingNet, fee: existingFee}).matches(observation)
 		if matches {
 			if err := CompleteWebhookJobTx(txCtx, tx, job, "DONE", "WEBHOOK_DEPOSIT_DUPLICATE"); err != nil {
 				return err
