@@ -72,22 +72,25 @@ provider/model call, customer consent or financial write is inferred.
 
 ### Remaining onboarding webhook intake and forwarding
 
-OPEN: direct Go receivers exist for shortfalls and servicing. Onboarding
+PARTIAL: direct Go receivers exist for shortfalls and servicing. Onboarding
 `account.*` and `rfi.*` events still enter Node at `/webhooks/airwallex`.
 Node verifies the provider signature, persists delivery work and forwards a
 service-signed request to Go onboarding at `/api/webhooks/airwallex`. The
-existing Go endpoint verifies an internal assertion, not a provider signature.
-The browser gateway login/proxy slice does not replace this public intake.
+existing internal Go endpoint verifies a service assertion. Direct provider-
+authenticated Go intake is now locally implemented/tested in
+`feat/go-onboarding-webhook-intake`, uncommitted and unmerged. See its
+[runbook](/docs/demo/onboarding-webhook-intake.md). Public callback routing and
+the Node backlog are unchanged.
 
-- [ ] Add direct provider-authenticated intake to Go company-onboarding,
+- [x] Add direct provider-authenticated intake to Go company-onboarding,
   retaining the existing protected internal delivery contract during cutover.
   Verify the original body and provider signature before accepting an event;
   do not expose the internal JWT endpoint as an unauthenticated callback.
-- [ ] Preserve durable receipt before acknowledgement, provider-event
+- [x] Preserve durable receipt before acknowledgement, provider-event
   deduplication, controlled conflicting-event handling, restart recovery and
   existing account/RFI application updates. Reuse the Go onboarding inbox and
   processing rules where compatible.
-- [ ] Verify signed synthetic account/RFI events through actual local HTTP and
+- [x] Verify signed synthetic account/RFI events through actual local HTTP and
   owned PostgreSQL, including duplicates, invalid signatures and restart
   recovery. Keep shortfall and servicing event ownership separate.
 - [ ] Before a separately authorized hosted switch, verify provider

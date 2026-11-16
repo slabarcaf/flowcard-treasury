@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -4146,36 +4147,69 @@ type WebhookInboxItem struct {
 	LeaseExpiresAt *time.Time         `json:"lease_expires_at,omitempty"`
 }
 
-// InsertWebhookOnce stores verified webhook bytes into onboarding.webhook_inbox.
-// Returns true if inserted, false if idempotent duplicate.
+// ErrWebhookEventConflict means a provider event ID was reused with changed content.
+var ErrWebhookEventConflict = errors.New("webhook event id payload conflict")
+
+// InsertWebhookOnce commits an original receipt, a duplicate, or conflict evidence.
 func (r *Repository) InsertWebhookOnce(ctx context.Context, item WebhookInboxItem) (bool, error) {
-	cleanEventID := strings.TrimSpace(item.EventID)
-	cleanType := strings.TrimSpace(item.EventType)
-	if cleanEventID == "" || cleanType == "" {
+	eventID, eventType := strings.TrimSpace(item.EventID), strings.TrimSpace(item.EventType)
+	if eventID == "" || eventType == "" {
 		return false, errors.New("event_id and event_type must not be empty")
 	}
-
-	rawPayload := item.RawPayload
-	if len(rawPayload) == 0 {
-		rawPayload = json.RawMessage("{}")
+	raw := item.RawPayload
+	if len(raw) == 0 {
+		raw = json.RawMessage("{}")
 	}
-
-	sql := `
-		INSERT INTO onboarding.webhook_inbox (
-			event_id, account_id, event_type, environment, raw_payload, status
-		) VALUES ($1, $2, $3, $4, $5, 'PENDING')
-		ON CONFLICT (event_id) DO NOTHING
-		RETURNING id
-	`
-	var id int64
-	err := r.pool.QueryRow(ctx, sql, cleanEventID, strings.TrimSpace(item.AccountID), cleanType, strings.TrimSpace(item.Environment), rawPayload).Scan(&id)
+	account, environment := strings.TrimSpace(item.AccountID), strings.TrimSpace(item.Environment)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil // idempotent duplicate
-		}
-		return false, fmt.Errorf("failed to insert webhook inbox item: %w", err)
+		return false, fmt.Errorf("begin webhook receipt: %w", err)
 	}
-	return true, nil
+	defer func() { _ = tx.Rollback(ctx) }()
+	var id int64
+	err = tx.QueryRow(ctx, `INSERT INTO onboarding.webhook_inbox
+ (event_id,account_id,event_type,environment,raw_payload,raw_body,status)
+ VALUES($1,$2,$3,$4,$5,$6,'PENDING') ON CONFLICT(event_id) DO NOTHING RETURNING id`, eventID, account, eventType, environment, raw, []byte(raw)).Scan(&id)
+	if err == nil {
+		if err = tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit webhook receipt: %w", err)
+		}
+		return true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return false, fmt.Errorf("insert webhook receipt: %w", err)
+	}
+	var same bool
+	// A fresh READ COMMITTED statement observes the concurrent insert winner.
+	err = tx.QueryRow(ctx, `SELECT raw_payload=$2::jsonb AND account_id=$3 AND event_type=$4
+ AND (environment=$5 OR environment='' OR $5='')
+ FROM onboarding.webhook_inbox WHERE event_id=$1 FOR UPDATE`, eventID, raw, account, eventType, environment).Scan(&same)
+	if err != nil {
+		return false, fmt.Errorf("read original webhook receipt: %w", err)
+	}
+	if same {
+		if err = tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit webhook duplicate: %w", err)
+		}
+		return false, nil
+	}
+	hash := sha256.Sum256(raw)
+	_, err = tx.Exec(ctx, `INSERT INTO onboarding.webhook_conflicts
+ (event_id,payload_sha256,account_id,event_type,environment,raw_payload,raw_body)
+ VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(event_id,payload_sha256) DO NOTHING`, eventID, hash[:], account, eventType, environment, raw, []byte(raw))
+	if err != nil {
+		return false, fmt.Errorf("record webhook conflict: %w", err)
+	}
+	_, err = tx.Exec(ctx, `UPDATE onboarding.webhook_inbox SET status='QUARANTINED',
+ last_error='EVENT_ID_PAYLOAD_CONFLICT',lease_token=NULL,lease_expires_at=NULL
+ WHERE event_id=$1 AND status NOT IN ('PROCESSED','IGNORED')`, eventID)
+	if err != nil {
+		return false, fmt.Errorf("quarantine webhook conflict: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit webhook conflict: %w", err)
+	}
+	return false, ErrWebhookEventConflict
 }
 
 // ClaimPendingWebhooks leases candidate pending or failed webhook inbox rows for processing.

@@ -629,7 +629,7 @@ func GenerateOperatorSpec() (*openapi3.T, error) {
 	return loadedDoc, nil
 }
 
-// GenerateWebhookSpec constructs the OpenAPI 3.1.0 document for the internal webhook receiver API.
+// GenerateWebhookSpec constructs the OpenAPI 3.1.0 document for provider and internal webhook receivers.
 func GenerateWebhookSpec() (*openapi3.T, error) {
 	ctx := context.Background()
 
@@ -689,7 +689,7 @@ func GenerateWebhookSpec() (*openapi3.T, error) {
 		Info: &openapi3.Info{
 			Title:       "FlowCard Onboarding Webhook Receiver API",
 			Version:     "1.0.0",
-			Description: "Internal receiver endpoint for platform webhook events forwarded by the Node gateway proxy. Requires service-to-service JWT assertion with audience flowcard-onboarding-webhooks. Events are durably persisted to inbox before acknowledgement.",
+			Description: "Direct provider intake verifies x-signature over x-timestamp and original body. Internal delivery paths separately require service JWT assertions with audience flowcard-onboarding-webhooks. Receipt is committed before acknowledgement; credentials are not interchangeable.",
 		},
 		Servers: openapi3.Servers{
 			{URL: "/", Description: "Current environment (relative gateway or direct service)"},
@@ -698,6 +698,7 @@ func GenerateWebhookSpec() (*openapi3.T, error) {
 		Components: &openapi3.Components{
 			Schemas: schemas,
 			SecuritySchemes: openapi3.SecuritySchemes{
+				"ProviderSignature": {Value: &openapi3.SecurityScheme{Type: "apiKey", In: "header", Name: "x-signature", Description: "Computed hex HMAC-SHA256(timestamp string + original body), using notification URL secret. Supply signature, never the shared secret."}},
 				"WebhookServiceJWT": &openapi3.SecuritySchemeRef{
 					Value: &openapi3.SecurityScheme{
 						Type:         "http",
@@ -712,7 +713,7 @@ func GenerateWebhookSpec() (*openapi3.T, error) {
 
 	// Populate webhook receiver routes as regular paths in this dedicated specification
 	for _, op := range AllOperations() {
-		if op.Audience == "internal-webhook" {
+		if op.Audience == "internal-webhook" || op.Audience == "provider-webhook" {
 			attachOperation(doc, op)
 		}
 	}

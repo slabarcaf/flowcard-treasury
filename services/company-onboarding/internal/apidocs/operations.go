@@ -55,7 +55,7 @@ type MultipartFieldDefinition struct {
 // OperationDefinition captures the complete operational contract for an endpoint.
 type OperationDefinition struct {
 	ID          string
-	Audience    string // "operator", "public", or "internal-webhook"
+	Audience    string // "operator", "public", "internal-webhook", or "provider-webhook"
 	Method      string
 	Path        string
 	Summary     string
@@ -78,6 +78,7 @@ func AllOperations() []OperationDefinition {
 	}
 
 	return []OperationDefinition{
+		providerWebhookOperation(),
 		// 1. Public Health Endpoints (2 routes)
 		{
 			ID:          "getHealthz",
@@ -1372,6 +1373,7 @@ func AllOperations() []OperationDefinition {
 					ContentTypes: []string{"application/json"},
 					Headers:      map[string]string{"Allow": "POST"},
 				},
+				http.StatusConflict: {Description: "Conflicting event content committed as evidence", Type: reflect.TypeOf(map[string]string{}), ContentTypes: []string{"application/json"}},
 				http.StatusRequestEntityTooLarge: {
 					Description:  "Webhook payload exceeds 1 MiB limit",
 					Type:         reflect.TypeOf(map[string]string{}),
@@ -1429,6 +1431,7 @@ func AllOperations() []OperationDefinition {
 					ContentTypes: []string{"application/json"},
 					Headers:      map[string]string{"Allow": "POST"},
 				},
+				http.StatusConflict: {Description: "Conflicting event content committed as evidence", Type: reflect.TypeOf(map[string]string{}), ContentTypes: []string{"application/json"}},
 				http.StatusRequestEntityTooLarge: {
 					Description:  "Webhook payload exceeds 1 MiB limit",
 					Type:         reflect.TypeOf(map[string]string{}),

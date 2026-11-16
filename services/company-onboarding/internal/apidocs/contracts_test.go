@@ -58,7 +58,7 @@ type RouteInventoryItem struct {
 	Notes            string
 }
 
-// FullInventory returns the exhaustive contract specification of all 25 implemented routes.
+// FullInventory returns the exhaustive contract specification of all 26 implemented routes.
 func FullInventory() []RouteInventoryItem {
 	return []RouteInventoryItem{
 		// 1. Public Operational Health Endpoints (2 routes)
@@ -330,6 +330,7 @@ func FullInventory() []RouteInventoryItem {
 			Notes:          "Reads platform account aggregate by ID (pa_...).",
 		},
 
+		{Method: "POST", Path: "/webhooks/airwallex", Audience: "provider-webhook", RequestType: reflect.TypeOf(webhooks.InboundWebhookPayload{}), ResponseType: reflect.TypeOf(webhooks.WebhookAcknowledgeResponse{}), SuccessStatus: 200, ErrorStatuses: []int{400, 401, 408, 409, 410, 413, 500, 503}, HeaderParameters: []string{"x-timestamp", "x-signature"}, ContentTypes: []string{"application/json"}, Notes: "Provider signature authentication, durable receipt and conflicts"},
 		// 6. Internal Webhook Endpoints (2 routes)
 		{
 			Method:        "POST",
@@ -761,8 +762,8 @@ func TestTask1_SchemaValidation_EmittedJSONAndNegativeFixtures(t *testing.T) {
 // including negative tests for nonexistent routes and invalid methods.
 func TestTask1_RouteInventoryAndWiringParity(t *testing.T) {
 	inventory := FullInventory()
-	if len(inventory) != 25 {
-		t.Fatalf("expected exactly 25 inventory routes, got %d", len(inventory))
+	if len(inventory) != 26 {
+		t.Fatalf("expected exactly 26 inventory routes, got %d", len(inventory))
 	}
 
 	// 1. AST PARSING: Parse internal/http/handlers.go to find all registered route patterns
@@ -1022,7 +1023,7 @@ func compareRoutesWithOperations(astRoutes map[string]bool, operations []apidocs
 		key := fmt.Sprintf("%s %s", op.Method, op.Path)
 		if op.Audience == "operator" {
 			documentedOperator[key] = true
-		} else if op.Audience == "internal-webhook" {
+		} else if op.Audience == "internal-webhook" || op.Audience == "provider-webhook" {
 			documentedWebhook[key] = true
 		}
 	}
@@ -1046,7 +1047,7 @@ func compareRoutesWithOperations(astRoutes map[string]bool, operations []apidocs
 		}
 
 		// 3. Webhook routes
-		if strings.HasPrefix(p, "/api/webhooks/") || strings.HasPrefix(p, "/api/v1/webhooks/") {
+		if strings.HasPrefix(p, "/api/webhooks/") || strings.HasPrefix(p, "/api/v1/webhooks/") || strings.HasPrefix(p, "/webhooks/") {
 			if !documentedWebhook[astRoute] {
 				discrepancies = append(discrepancies, fmt.Sprintf("AST registered webhook route %q is MISSING from OpenAPI WebhookOperations documentation", astRoute))
 			}
@@ -1061,7 +1062,7 @@ func compareRoutesWithOperations(astRoutes map[string]bool, operations []apidocs
 
 	// Verify reverse: every documented operation must exist in AST
 	for _, op := range operations {
-		if op.Audience != "operator" && op.Audience != "internal-webhook" {
+		if op.Audience != "operator" && op.Audience != "internal-webhook" && op.Audience != "provider-webhook" {
 			continue
 		}
 		key := fmt.Sprintf("%s %s", op.Method, op.Path)
@@ -1085,13 +1086,21 @@ func TestTask5_DriftPrevention_ASTVsOpenAPIOperations(t *testing.T) {
 			strings.Join(discrepancies, "\n  - "))
 	}
 
-	var operatorCount, webhookCount int
+	var operatorCount, webhookCount, providerCount int
 	for _, op := range allOps {
+		if op.Audience == "provider-webhook" {
+			providerCount++
+			continue
+		}
 		if op.Audience == "operator" {
 			operatorCount++
 		} else if op.Audience == "internal-webhook" {
 			webhookCount++
 		}
+	}
+
+	if providerCount != 1 {
+		t.Errorf("expected 1 provider operation, got %d", providerCount)
 	}
 
 	// Verify exact counts
