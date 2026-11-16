@@ -5,6 +5,10 @@ release, integrate finished work, preserve private artifacts while removing
 merged worktrees, and publish local develop to GitHub. Ramil authorized this
 sequence after Rootie 8's final merge. This task dispatches no deployment.
 
+Completed November 16, 2026 for source integration, worktree cleanup and
+GitHub publication. AWS foundation provisioning and the actual release remain
+separately operated steps.
+
 [TOC]
 
 ## Baseline and boundaries
@@ -63,10 +67,11 @@ implicit production configuration.
 - [x] Add a manual Go release workflow with sealed artifacts and scoped OIDC.
 - [x] Verify rollout ordering, failure handling and secret isolation offline.
 - [x] Build and smoke-test the common image against owned disposable data.
-- [x] Integrate completed Go deployment source into develop; preserve prior drafts.
+- [x] Integrate completed Go deployment source into develop; preserve prior
+  drafts.
 - [x] Archive private worktree artifacts and remove only completed worktrees.
-- [ ] Check unpublished history for secrets and push develop without force.
-- [ ] Inspect the actual remote SHA/checks and report operational prerequisites.
+- [x] Check unpublished history for secrets and push develop without force.
+- [x] Inspect the actual remote SHA/checks and report operational prerequisites.
 
 ## Acceptance
 
@@ -87,7 +92,7 @@ equal the locally tested integrated SHA, with no force push or deployment.
 Deployment source commit `964be07` was merged at `a119a37`. Local checks
 passed: 351 safe product/release tests, 60 servicing tests, 22 gateway race
 tests, infrastructure validation and the exact committed common-image smoke.
-Five completed worktrees were archived with byte-verified inventories and
+Seven completed worktrees were archived with byte-verified inventories and
 removed with their ancestor branches. Private archives remain under ignored
 `.dev/worktree-archives/20261116-publication/`. No database was deleted.
 The original review UI on port 18073 and onboarding API on port 8080 remain
@@ -98,3 +103,29 @@ approval review rejected including prior documentation and the unfinished
 shortfall draft; those files are preserved without staging. No AWS workflow
 was dispatched. The new foundation output variable, installation secrets,
 DBA prerequisites and explicit callback cutover remain deployment gates.
+
+## Hosted verification and completion
+
+[Go and Product CI run 43941266205](https://github.com/slabarcaf/flowcard-treasury/actions/runs/43941266205)
+passed all nine jobs on develop
+`c216ed6c925b595c02614f80b922cefd52cca9e8`. This includes all six service
+modules against isolated PostgreSQL, product/release tests, Terraform
+validation, and the Linux common-image migration/API/real-login smoke.
+The final archival commit changes this status document only.
+
+Earlier failed runs remain retained. Clean-runner corrections added the Go
+product toolchain/precompile, Node auth build prerequisite, stable NOLOGIN
+test roles and current synthetic onboarding fields. A real underwriting
+portability defect compared JSON nanoseconds with PostgreSQL microseconds;
+reads now compare at the database precision without rewriting source JSON,
+changing hashes or widening freshness windows. A forced-nanosecond real DB
+journey failed before the correction and passed afterward. The regression
+anchor then retained real-time ordering, and Linux container test networking
+and the required prebuilt image became explicit CI prerequisites.
+
+The extended publication audit checked 112 commits and 833 changed blobs
+against nine selected local secret values, with zero matches. All 20 original
+main changes remain byte-for-byte preserved outside the published commits.
+All seven removed worktrees have verified private archives; no database or
+volume was removed. Only the main worktree remains. Actual hosted deployment,
+provider callback changes and infrastructure apply were not performed.
