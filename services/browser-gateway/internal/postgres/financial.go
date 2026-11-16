@@ -38,7 +38,7 @@ func (s *Store) Binding(ctx context.Context, u User) (Binding, error) {
 
 // Bind provisions a verified immutable binding using an administrative pool.
 func Bind(ctx context.Context, pool *pgxpool.Pool, u User, origin, subject string, a servicing.Actor) error {
-	if u.Role != a.ActorType || !a.FixtureOnly || a.Mode != "DEMO" {
+	if u.Role != a.ActorType || !a.DelegationAllowed() {
 		return ErrBinding
 	}
 	_, err := pool.Exec(ctx, `INSERT INTO browser_gateway.servicing_bindings(user_id,source_origin,subject,actor_id,actor_type,customer_id,mode,facility_id,source_binding_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, u.ID, origin, subject, a.ActorID, a.ActorType, a.CustomerID, a.Mode, a.FacilityID, a.SourceBindingID)

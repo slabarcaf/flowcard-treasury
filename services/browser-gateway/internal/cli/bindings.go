@@ -36,7 +36,7 @@ func Bindings(ctx context.Context, args []string, adminURL string, cfg config.Co
 		}
 		return nil
 	}
-	if cfg.WriteMode != "DEMO" || *subject == "" || len(*subject) > 128 {
+	if (cfg.WriteMode != "DEMO" && cfg.WriteMode != "SANDBOX") || *subject == "" || len(*subject) > 128 {
 		return postgres.ErrBinding
 	}
 	var u postgres.User
@@ -48,7 +48,7 @@ func Bindings(ctx context.Context, args []string, adminURL string, cfg config.Co
 		key = cfg.CustomerSecret
 	}
 	actor, err := servicing.ReadActor(ctx, servicing.HTTPClient(), cfg.ServicingURL, key, *subject, nil)
-	if err != nil || actor.ActorType != u.Role {
+	if err != nil || (actor.ActorType != u.Role || actor.Mode != cfg.WriteMode) {
 		return postgres.ErrBinding
 	}
 	return postgres.Bind(ctx, pool, u, cfg.ServicingURL.String(), *subject, actor)

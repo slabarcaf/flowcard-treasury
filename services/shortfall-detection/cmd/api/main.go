@@ -44,11 +44,20 @@ func run(ctx context.Context) error {
 			store = repo
 		}
 	}
-	_, providerErr := provider.NewClient(provider.ClientConfig{BaseURL: cfg.ProviderBaseURL,
-		Version: cfg.ProviderVersion, ClientID: cfg.ProviderClientID, APIKey: cfg.ProviderAPIKey})
+	client, providerErr := provider.NewClient(provider.ClientConfig{BaseURL: cfg.ProviderBaseURL,
+		Version: cfg.ProviderVersion, ClientID: cfg.ProviderClientID, APIKey: cfg.ProviderAPIKey, LoginAs: cfg.ProviderLoginAs})
+	var contractExpiresAt time.Time
+	if cfg.SandboxContractFile != "" && providerErr == nil {
+		contract, err := provider.LoadSandboxContract(cfg.SandboxContractFile, cfg.Environment, cfg.WebhookSource, client)
+		if err == nil {
+			contractExpiresAt = contract.ExpiresAt
+		} else {
+			log.Print("shortfall sandbox_contract_unavailable")
+		}
+	}
 	handler := internalhttp.NewServer(store, internalhttp.ServerConfig{Environment: cfg.Environment,
 		Source: cfg.WebhookSource, WebhookSecret: cfg.WebhookSecret, ServiceSecret: cfg.ServiceSecret,
-		ProviderConfigured: providerErr == nil}).Routes()
+		ProviderConfigured: providerErr == nil, SandboxContractExpiresAt: contractExpiresAt}).Routes()
 	listenCtx, cancelListen := context.WithTimeout(ctx, 5*time.Second)
 	listener, err := (&net.ListenConfig{}).Listen(listenCtx, "tcp", cfg.HTTPAddress)
 	cancelListen()
@@ -64,7 +73,7 @@ func run(ctx context.Context) error {
 	done := make(chan error, 1)
 	// The goroutine exits when Serve returns after shutdown or listener failure.
 	go func() { done <- server.Serve(listener) }()
-	log.Print("shortfall api started live_parser=unsupported")
+	log.Printf("shortfall api started sandbox_contract_configured=%t", !contractExpiresAt.IsZero())
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

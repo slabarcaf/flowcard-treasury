@@ -66,7 +66,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return c.WithDemoWrites(os.Getenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE"), os.Getenv("BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET"), os.Getenv("BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET"))
+	return c.WithFinancialWrites(os.Getenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE"), os.Getenv("BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET"), os.Getenv("BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET"))
 }
 
 // WithDemoWrites enables only an explicitly local DEMO delegation profile.
@@ -76,6 +76,19 @@ func (c Config) WithDemoWrites(mode, operator, customer string) (Config, error) 
 	}
 	if mode != "DEMO" || c.ServicingURL == nil || !loopback(c.ServicingURL.Hostname()) || len(strings.TrimSpace(operator)) < 32 || len(strings.TrimSpace(customer)) < 32 || operator == customer || operator == c.ServicingSecret || customer == c.ServicingSecret {
 		return Config{}, errors.New("invalid demo command configuration")
+	}
+	c.WriteMode, c.OperatorSecret, c.CustomerSecret = mode, operator, customer
+	return c, nil
+}
+
+// WithFinancialWrites selects an explicit DEMO or SANDBOX delegation profile.
+// Role keys remain separate from each other and the read-only service key.
+func (c Config) WithFinancialWrites(mode, operator, customer string) (Config, error) {
+	if mode != "SANDBOX" {
+		return c.WithDemoWrites(mode, operator, customer)
+	}
+	if c.ServicingURL == nil || len(strings.TrimSpace(operator)) < 32 || len(strings.TrimSpace(customer)) < 32 || operator == customer || operator == c.ServicingSecret || customer == c.ServicingSecret {
+		return Config{}, errors.New("invalid sandbox command configuration")
 	}
 	c.WriteMode, c.OperatorSecret, c.CustomerSecret = mode, operator, customer
 	return c, nil

@@ -29,30 +29,38 @@ const (
 )
 
 type AdapterOptions struct {
-	Mode             string
-	ProviderMode     string
-	BaseURL          string
-	FundingAccountID string
-	ClientID         string
-	APIKey           string
-	LoginAs          string
-	HTTPClient       *http.Client
-	Now              func() time.Time
+	SandboxPaymentContract   *SandboxPaymentContract
+	SandboxExecutionContract *SandboxExecutionContract
+	SandboxFundingEnabled    bool
+	SandboxCollectionEnabled bool
+	Mode                     string
+	ProviderMode             string
+	BaseURL                  string
+	FundingAccountID         string
+	ClientID                 string
+	APIKey                   string
+	LoginAs                  string
+	HTTPClient               *http.Client
+	Now                      func() time.Time
 }
 
 type AirwallexAdapter struct {
-	mode             string
-	providerMode     string
-	baseURL          string
-	fundingAccountID string
-	clientID         string
-	apiKey           string
-	loginAs          string
-	http             *http.Client
-	now              func() time.Time
-	mu               sync.Mutex
-	token            string
-	tokenExpires     time.Time
+	sandboxPaymentContract   *SandboxPaymentContract
+	sandboxExecutionContract *SandboxExecutionContract
+	sandboxFundingEnabled    bool
+	sandboxCollectionEnabled bool
+	mode                     string
+	providerMode             string
+	baseURL                  string
+	fundingAccountID         string
+	clientID                 string
+	apiKey                   string
+	loginAs                  string
+	http                     *http.Client
+	now                      func() time.Time
+	mu                       sync.Mutex
+	token                    string
+	tokenExpires             time.Time
 }
 
 type transferPayload struct {
@@ -100,7 +108,7 @@ func NewAirwallexAdapter(options AdapterOptions) (*AirwallexAdapter, error) {
 	if options.Now == nil {
 		options.Now = time.Now
 	}
-	return &AirwallexAdapter{mode: options.Mode, providerMode: options.ProviderMode, baseURL: strings.TrimRight(base.String(), "/"), fundingAccountID: options.FundingAccountID, clientID: options.ClientID, apiKey: options.APIKey, loginAs: options.LoginAs, http: client, now: options.Now}, nil
+	return &AirwallexAdapter{sandboxPaymentContract: options.SandboxPaymentContract, sandboxExecutionContract: options.SandboxExecutionContract, sandboxFundingEnabled: options.SandboxFundingEnabled, sandboxCollectionEnabled: options.SandboxCollectionEnabled, mode: options.Mode, providerMode: options.ProviderMode, baseURL: strings.TrimRight(base.String(), "/"), fundingAccountID: options.FundingAccountID, clientID: options.ClientID, apiKey: options.APIKey, loginAs: options.LoginAs, http: client, now: options.Now}, nil
 }
 
 func isLoopback(host string) bool {
@@ -131,6 +139,9 @@ func PayloadHash(operation Operation) (string, error) {
 // QuoteFundingFee returns only the explicit zero-fee MOCK_HTTP contract.
 // Sandbox fee schedules remain unknown until the provider contract is reviewed.
 func (a *AirwallexAdapter) QuoteFundingFee(_ context.Context, source, destination string, amountCents int64) (FundingFeeQuote, error) {
+	if a.mode == "SANDBOX" {
+		return a.sandboxQuote(OperationFund, source, destination, amountCents)
+	}
 	if a.mode != "DEMO" || a.providerMode != "MOCK_HTTP" || source != a.fundingAccountID ||
 		destination == "" || destination == source || amountCents <= 0 {
 		return FundingFeeQuote{}, ErrProviderUnavailable
@@ -140,6 +151,12 @@ func (a *AirwallexAdapter) QuoteFundingFee(_ context.Context, source, destinatio
 
 // QuoteCollectionFee returns only the explicit zero-fee MOCK_HTTP B-to-A contract.
 func (a *AirwallexAdapter) QuoteCollectionFee(_ context.Context, source, destination string, amountCents int64) (FundingFeeQuote, error) {
+	if a.mode == "SANDBOX" {
+		if quote, err := a.sandboxQuote(OperationCollectFee, source, destination, amountCents); err == nil {
+			return quote, nil
+		}
+		return a.sandboxQuote(OperationCollectPrincipal, source, destination, amountCents)
+	}
 	if a.mode != "DEMO" || a.providerMode != "MOCK_HTTP" || source == "" || source == a.fundingAccountID ||
 		destination != a.fundingAccountID || amountCents <= 0 {
 		return FundingFeeQuote{}, ErrProviderUnavailable
@@ -156,6 +173,9 @@ func makePayload(op Operation) (transferPayload, string, error) {
 	switch op.Kind {
 	case OperationFund:
 		reason = "loan_disbursement"
+		if op.Mode == "SANDBOX" {
+			reason = "investment_capital"
+		}
 	case OperationCollectPrincipal:
 		reason = "loan_credit_repayment"
 		if op.PrincipalCents != op.AmountCents {
@@ -186,7 +206,14 @@ func (a *AirwallexAdapter) Create(ctx context.Context, op Operation) (Result, er
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if a.mode != "DEMO" || a.providerMode != "MOCK_HTTP" {
-		return Result{}, ErrFundingExecutionDisabled
+		caps := a.ExecutionCapabilities()
+		allowed := op.Kind == OperationFund && caps.FundingEnabled || op.Kind != OperationFund && caps.CollectionEnabled
+		if !allowed {
+			return Result{}, ErrFundingExecutionDisabled
+		}
+		if _, err := a.sandboxQuote(op.Kind, op.SourceAccountRef, op.DestinationAccountRef, op.AmountCents); err != nil {
+			return Result{}, ErrFundingExecutionDisabled
+		}
 	}
 	if err := a.validateOperation(op); err != nil {
 		return Result{Certainty: CertaintyDefinitive, Recovery: RecoveryHold}, err
@@ -315,6 +342,9 @@ type depositFixtureWire struct {
 func (a *AirwallexAdapter) Payment(ctx context.Context, accountID, parentID string) (PaymentObservation, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+	if a.providerMode == "AIRWALLEX_SANDBOX" {
+		return a.sandboxPayment(ctx, accountID, parentID)
+	}
 	if a.providerMode != "MOCK_HTTP" || accountID == "" || parentID == "" {
 		return PaymentObservation{}, ErrProviderUnavailable
 	}
@@ -344,6 +374,9 @@ func (a *AirwallexAdapter) Payment(ctx context.Context, accountID, parentID stri
 func (a *AirwallexAdapter) Deposit(ctx context.Context, accountID, depositID string) (DepositObservation, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+	if a.providerMode == "AIRWALLEX_SANDBOX" {
+		return a.sandboxDeposit(ctx, accountID, depositID)
+	}
 	if a.providerMode != "MOCK_HTTP" || accountID == "" || !validProviderReference(depositID) {
 		return DepositObservation{}, ErrProviderUnavailable
 	}
@@ -478,6 +511,9 @@ func (a *AirwallexAdapter) request(ctx context.Context, method, path, scope stri
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
+	if strings.HasPrefix(path, "/api/v1/issuing/") || strings.HasPrefix(path, "/api/v1/deposits/") || strings.HasPrefix(path, "/api/v1/connected_account_transfers") {
+		req.Header.Set("X-Api-Version", "2026-08-21")
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -534,7 +570,7 @@ func (a *AirwallexAdapter) accessToken(ctx context.Context) (string, error) {
 	if json.Unmarshal(raw, &login) != nil || login.Token == "" || login.ExpiresAt == "" {
 		return "", &ProviderError{Code: "PROVIDER_LOGIN_RESPONSE_HOLD", Recovery: RecoveryHold, Certainty: CertaintyDefinitive}
 	}
-	expiry, err := time.Parse(time.RFC3339, login.ExpiresAt)
+	expiry, err := parseProviderExpiry(login.ExpiresAt)
 	if err != nil || !expiry.After(now) {
 		return "", &ProviderError{Code: "PROVIDER_LOGIN_EXPIRY_HOLD", Recovery: RecoveryHold, Certainty: CertaintyDefinitive}
 	}
@@ -695,6 +731,9 @@ func operationReadError(err error) error {
 }
 
 func (a *AirwallexAdapter) parseReceipt(op Operation, source string, raw []byte) (Receipt, error) {
+	if a.mode == "SANDBOX" && a.providerMode == "AIRWALLEX_SANDBOX" {
+		return a.parseSandboxReceipt(op, source, raw)
+	}
 	var transfer transferWire
 	if json.Unmarshal(raw, &transfer) != nil || transfer.ID == "" || transfer.RequestID != op.RequestID || transfer.Destination != op.DestinationAccountRef || transfer.Currency != "USD" || transfer.Status == "" || (transfer.SourceAccountID != nil && *transfer.SourceAccountID != source) {
 		return Receipt{}, errors.New("provider_transfer_response_invalid")
@@ -727,7 +766,29 @@ func (a *AirwallexAdapter) parseReceipt(op Operation, source string, raw []byte)
 // NewFromConfig selects only the configured DEMO mock or fixed SANDBOX host.
 // The resolved funding account ID must come from a trusted mapping adapter.
 func NewFromConfig(cfg config.Config, fundingAccountID, loginAs string, client *http.Client, now func() time.Time) (*AirwallexAdapter, error) {
-	return NewAirwallexAdapter(AdapterOptions{Mode: cfg.Mode, ProviderMode: cfg.ProviderMode, BaseURL: cfg.ProviderBaseURL,
+	var contract *SandboxPaymentContract
+	if cfg.SandboxPaymentContractFile != "" {
+		var err error
+		contract, err = loadSandboxPaymentContract(cfg.SandboxPaymentContractFile)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var execution *SandboxExecutionContract
+	if cfg.SandboxExecutionContractFile != "" {
+		var err error
+		execution, err = loadSandboxExecutionContract(cfg.SandboxExecutionContractFile)
+		if err != nil {
+			return nil, err
+		}
+		if execution.FacilityID != cfg.FacilityID || execution.SourceBindingID != cfg.SourceBindingID {
+			return nil, errors.New("sandbox_execution_installation_mismatch")
+		}
+	}
+	if cfg.Mode == "SANDBOX" && loginAs == "" {
+		loginAs = cfg.AirwallexLoginAs
+	}
+	return NewAirwallexAdapter(AdapterOptions{SandboxPaymentContract: contract, SandboxExecutionContract: execution, SandboxFundingEnabled: cfg.LiveDispatchEnabled && cfg.SandboxFundingEnabled, SandboxCollectionEnabled: cfg.LiveDispatchEnabled && cfg.SandboxCollectionEnabled, Mode: cfg.Mode, ProviderMode: cfg.ProviderMode, BaseURL: cfg.ProviderBaseURL,
 		FundingAccountID: fundingAccountID, ClientID: cfg.AirwallexClientID, APIKey: cfg.AirwallexAPIKey,
 		LoginAs: loginAs, HTTPClient: client, Now: now})
 }

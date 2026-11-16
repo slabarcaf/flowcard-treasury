@@ -30,7 +30,8 @@ type Restriction struct {
 // Actor describes an authenticated registry entry and its fixture installation.
 type Actor struct {
 	Restriction
-	FixtureOnly bool `json:"fixture_only"`
+	FixtureOnly       bool `json:"fixture_only"`
+	SandboxDelegation bool `json:"sandbox_delegation"`
 }
 
 var ErrUnavailable = errors.New("servicing unavailable")
@@ -97,8 +98,21 @@ func ReadActor(ctx context.Context, client *http.Client, base *url.URL, secret, 
 		return Actor{}, ErrUnavailable
 	}
 	var actor Actor
-	if json.Unmarshal(raw, &actor) != nil || actor.ActorID == "" || actor.Mode != "DEMO" || actor.FacilityID == "" || actor.SourceBindingID == "" || !actor.FixtureOnly || (actor.ActorType != "OPERATOR" && actor.ActorType != "CUSTOMER") || (actor.ActorType == "CUSTOMER") != (actor.CustomerID != "") {
+	if json.Unmarshal(raw, &actor) != nil || actor.ActorID == "" || actor.FacilityID == "" || actor.SourceBindingID == "" || !actor.DelegationAllowed() || (actor.ActorType != "OPERATOR" && actor.ActorType != "CUSTOMER") || (actor.ActorType == "CUSTOMER") != (actor.CustomerID != "") {
 		return Actor{}, ErrBinding
 	}
 	return actor, nil
+}
+
+// DelegationAllowed checks the explicit owning-service profile. A mode label
+// alone never turns a remote or sandbox source into the old fixture profile.
+func (a Actor) DelegationAllowed() bool {
+	switch a.Mode {
+	case "DEMO":
+		return a.FixtureOnly && !a.SandboxDelegation
+	case "SANDBOX":
+		return !a.FixtureOnly && a.SandboxDelegation
+	default:
+		return false
+	}
 }

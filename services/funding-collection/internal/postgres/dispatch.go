@@ -297,7 +297,8 @@ func (r *Repository) verifyPreparedCollectionDispatchLease(ctx context.Context,
 			AND ca.customer_id=b.customer_id AND ca.account_ref=o.source_account_ref
 			AND ca.state='QUEUED' AND ca.reserved_debit_cents=o.amount_cents+ca.provider_fee_cents
 			AND ca.provider_fee_cents=COALESCE(o.reserved_provider_fee_cents,0)
-			AND ca.fee_contract_id='MOCK_HTTP_ZERO_COLLECTION_FEE_V1'
+			AND ((o.mode='DEMO' AND ca.fee_contract_id='MOCK_HTTP_ZERO_COLLECTION_FEE_V1')
+			 OR (o.mode='SANDBOX' AND ca.fee_contract_id ~ '^AIRWALLEX_SANDBOX_EXACT_[0-9a-f]{64}$' AND ca.provider_fee_cents=0))
 			AND d.customer_id=ca.customer_id AND d.account_ref=ca.account_ref
 			AND d.provider_deposit_id=$19 AND d.status='SETTLED'
 			AND d.kind='EXTERNAL_SETTLED')

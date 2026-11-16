@@ -38,6 +38,7 @@ type CollectionPlanFacts struct {
 	FundedAt          time.Time
 	DepositNet        int64
 	DepositConsumed   int64
+	FeeDebtCents      int64
 	DebtCents         int64
 	AuthorityLimit    int64
 	AuthorityUsed     int64
@@ -143,7 +144,7 @@ func (r *Repository) LoadCollectionDispatchBindings(ctx context.Context,
 		*authorityID != terms.CollectionAuthorityID || *authorityVersion != terms.CollectionAuthorityVersion ||
 		depositID == "" || providerDepositID == "" || result.Candidate.AccountRef != terms.BorrowerAccountRef ||
 		result.Operation.DestinationAccountRef == "" || result.Operation.DestinationAccountRef != terms.FundingAccountRef ||
-		reservedDebit != amount+providerFee || providerFee < 0 || feeContract != "MOCK_HTTP_ZERO_COLLECTION_FEE_V1" ||
+		reservedDebit != amount+providerFee || providerFee < 0 || !provider.ValidCollectionFeeQuote(mode, provider.FundingFeeQuote{ContractID: feeContract, Cents: providerFee}) ||
 		leaseToken == nil || *leaseToken != claim.LeaseToken || leaseExpiry == nil || !leaseExpiry.Equal(claim.LeaseExpiresAt) {
 		return CollectionDispatchBindings{}, errors.New("collection_dispatch_binding_invalid")
 	}
@@ -327,6 +328,7 @@ func (r *Repository) LoadCollectionPlanFacts(ctx context.Context,
 		return facts, errors.New("collection_debt_overflow")
 	}
 	facts.DebtCents = debtPrincipal + debtContract + debtLate
+	facts.FeeDebtCents = debtContract + debtLate
 	if err := r.pool.QueryRow(ctx, `SELECT COALESCE(sum(settled_debit_cents),0)+
 		COALESCE(sum(CASE WHEN state IN ('PLANNED','QUEUED','PENDING','UNKNOWN','HELD')
 			THEN reserved_debit_cents ELSE 0 END),0)
@@ -360,7 +362,7 @@ func (r *Repository) PlanCollection(ctx context.Context, input CollectionPlanFac
 	evidence CollectionReadEvidence, pricing domain.Pricing, policyHash string,
 	clock func() time.Time) (CollectionPlanResult, error) {
 	candidate := input.Candidate
-	if candidate.Mode != domain.ModeDemo || candidate.FacilityID == "" || candidate.CustomerID == "" ||
+	if (candidate.Mode != domain.ModeDemo && candidate.Mode != domain.ModeSandbox) || candidate.FacilityID == "" || candidate.CustomerID == "" ||
 		candidate.BridgeID == "" || candidate.DepositID == "" || candidate.AccountRef == "" ||
 		candidate.ProviderDepositID == "" || candidate.CardID == "" || clock == nil ||
 		pricing.Validate() != nil || !validHash(policyHash) {
@@ -607,7 +609,7 @@ func (r *Repository) PlanCollection(ctx context.Context, input CollectionPlanFac
 	}
 	if !collectionFreshTime(evidence.Balance.ObservedAt, now) || evidence.Balance.AccountRef != candidate.AccountRef ||
 		evidence.Balance.Currency != "USD" || evidence.Balance.AvailableCents < 0 ||
-		evidence.Fee.Cents < 0 || evidence.Fee.ContractID != "MOCK_HTTP_ZERO_COLLECTION_FEE_V1" ||
+		evidence.Fee.Cents < 0 || !provider.ValidCollectionFeeQuote(string(candidate.Mode), evidence.Fee) ||
 		input.FundingAccount == "" {
 		return CollectionPlanResult{BlockedCode: "COLLECTION_FEE_OR_BALANCE_UNKNOWN"}, nil
 	}
@@ -656,7 +658,7 @@ func (r *Repository) PlanCollection(ctx context.Context, input CollectionPlanFac
 			terms.CollectionAuthorityVersion, depositObservationID, balanceObservationID,
 			evidence, "INSUFFICIENT_VERIFIED_LIQUIDITY", now)
 	}
-	if input.QuotedAmount < amount {
+	if input.QuotedAmount < amount || candidate.Mode == domain.ModeSandbox && input.QuotedAmount != amount {
 		return r.recordCollectionNoPlan(txCtx, tx, candidate, bridgeVersion, terms.CollectionAuthorityID,
 			terms.CollectionAuthorityVersion, depositObservationID, balanceObservationID,
 			evidence, "COLLECTION_FEE_QUOTE_SCOPE_INVALID", now)
@@ -956,7 +958,7 @@ func (r *Repository) PrepareCollectionDispatch(ctx context.Context, claim Operat
 		return DispatchPreparation{Cancelled: true, BlockedCode: scope.guardCode}, nil
 	}
 	if evidence.Fee.ContractID != scope.collectionFeeContract || evidence.Fee.Cents != scope.collectionQuotedFee ||
-		evidence.Fee.ContractID != "MOCK_HTTP_ZERO_COLLECTION_FEE_V1" || evidence.Fee.Cents != 0 {
+		!provider.ValidCollectionFeeQuote(string(claim.Mode), evidence.Fee) {
 		if err := cancelCollectionIntentTx(txCtx, tx, claim, scope,
 			"COLLECTION_FEE_CONTRACT_CHANGED", "COLLECTION_REVIEW_REQUIRED",
 			map[string]any{"movement_certainty": "PROVEN_UNSENT"}); err != nil {

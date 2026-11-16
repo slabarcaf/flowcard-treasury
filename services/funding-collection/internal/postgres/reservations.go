@@ -1123,6 +1123,9 @@ func buildFundingPolicyInput(request FundingGuard, offer fundingOffer, facility 
 	if err != nil || len(facilityRefs) == 0 {
 		return policy.Input{}, errFundingFacilityEvidenceIncomplete
 	}
+	// These totals were read under the facility/customer locks in this exact
+	// transaction. The allocation import time remains in sourceRefs and the
+	// saved funding-check provenance; it is not the current ledger observation.
 	ledgerFacilityRef := policy.SourceReference{System: "funding-collection-ledger", RecordID: "facility:" + request.FacilityID,
 		Version: fmt.Sprint(facility.version), EffectiveAt: now}
 	facilityRefs = appendUniquePolicyRefs(facilityRefs, ledgerFacilityRef)
@@ -1139,7 +1142,7 @@ func buildFundingPolicyInput(request FundingGuard, offer fundingOffer, facility 
 	input := policy.Input{EvaluatedAt: now, Mode: request.Mode, FacilityID: request.FacilityID, TermDays: offer.terms.TermDays,
 		Shortfall: shortfall, Customer: policyCustomer,
 		Facility: policy.FacilitySnapshot{ID: facility.sourceID, Version: facility.configurationVersion,
-			Mode: request.Mode, CapturedAt: facility.capturedAt.UTC(), FacilityID: request.FacilityID,
+			Mode: request.Mode, CapturedAt: now, FacilityID: request.FacilityID,
 			SourceRefs: facilityRefs, Currency: "USD", FacilityTotalCents: facility.total,
 			ReserveFloorBPS: facility.reserveBPS, FundedPrincipalCents: facility.principalOwed,
 			ReservedPrincipalCents: reservedForPolicy, LedgerVersion: fmt.Sprintf("%d", facility.version), LedgerComplete: true}}
@@ -1261,7 +1264,7 @@ func hasHumanApproval(ctx context.Context, tx pgx.Tx, mode string, offer funding
 type systemFundingActor struct{ id, subject string }
 
 func readSystemFundingActor(ctx context.Context, tx pgx.Tx, mode string) (systemFundingActor, error) {
-	if mode != "DEMO" {
+	if mode != "DEMO" && mode != "SANDBOX" {
 		return systemFundingActor{}, errors.New("funding_system_actor_unavailable")
 	}
 	var rows int

@@ -25,6 +25,7 @@ type ClientConfig struct {
 	Version    string
 	ClientID   string `json:"-"`
 	APIKey     string `json:"-"`
+	LoginAs    string `json:"-"`
 	HTTPClient *http.Client
 	Now        func() time.Time
 }
@@ -36,6 +37,7 @@ type Client struct {
 	version   string
 	clientID  string
 	apiKey    string
+	loginAs   string
 	http      *http.Client
 	now       func() time.Time
 	mu        sync.Mutex
@@ -76,7 +78,7 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 		cfg.Now = time.Now
 	}
 	return &Client{baseURL: strings.TrimRight(base.String(), "/"), version: cfg.Version,
-		clientID: cfg.ClientID, apiKey: cfg.APIKey, http: &client, now: cfg.Now}, nil
+		clientID: cfg.ClientID, apiKey: cfg.APIKey, loginAs: cfg.LoginAs, http: &client, now: cfg.Now}, nil
 }
 
 // BeginAttempt gives one worker job a fresh, single-refresh budget.
@@ -89,7 +91,7 @@ func (c *Client) accessToken(ctx context.Context, refresh bool) (string, error) 
 		return c.token, nil
 	}
 	body, _, err := c.request(ctx, http.MethodPost, "/api/v1/authentication/login",
-		http.Header{"X-Client-Id": {c.clientID}, "X-Api-Key": {c.apiKey}}, false)
+		http.Header{"X-Client-Id": {c.clientID}, "X-Api-Key": {c.apiKey}, "X-Login-As": {c.loginAs}}, false)
 	if err != nil {
 		return "", err
 	}

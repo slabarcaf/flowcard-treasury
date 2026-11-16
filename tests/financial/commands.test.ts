@@ -46,3 +46,17 @@ describe('explicit browser financial commands', () => {
     }
   });
 });
+
+it('uses explicit sandbox session metadata and keeps unsupported modes unavailable', async () => {
+  const fetcher = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(response({ enabled: true, linked: true, mode: 'SANDBOX', role: 'CUSTOMER', customer_id: 'customer-a' }))
+    .mockResolvedValueOnce(response({ enabled: true, linked: true, mode: 'PRODUCTION', role: 'CUSTOMER', customer_id: 'customer-a' }))
+    .mockResolvedValueOnce(response({ status: 'ACCEPTED' }, 201));
+  const api = new FinancialCommandClient(fetcher);
+  await expect(api.session()).resolves.toMatchObject({ mode: 'SANDBOX', role: 'CUSTOMER' });
+  await expect(api.session()).rejects.toMatchObject({ status: 502 });
+  await expect(api.accept({ ...offer, source_mode: 'SANDBOX' })).resolves.toMatchObject({ status: 201 });
+  const [path, init] = fetcher.mock.calls[2];
+  expect(path).toBe(`/api/offers/${offer.id}/acceptances`);
+  expect(JSON.parse(String(init?.body))).toEqual({ terms_hash: offer.terms_hash, expected_version: offer.version });
+});

@@ -1,6 +1,6 @@
 import type { Bridge, CaseDetail, Offer, Operation } from './client.js';
 
-export interface ServicingSession { enabled: boolean; linked: boolean; mode?: 'DEMO'; role?: 'OPERATOR' | 'CUSTOMER'; customer_id?: string }
+export interface ServicingSession { enabled: boolean; linked: boolean; mode?: 'DEMO' | 'SANDBOX'; role?: 'OPERATOR' | 'CUSTOMER'; customer_id?: string }
 export interface SavedCommand { id: string; path: string; idempotency_key: string; payload: Record<string, unknown>; state: 'UNKNOWN' | 'RECEIVED' | 'REJECTED'; status: number | null; receipt: Record<string, unknown> | null; created_at: string }
 export interface CommandReceipt { status: number; commandID: string; receipt: Record<string, unknown> }
 export type ActionRecord = { kind: 'case'; value: CaseDetail } | { kind: 'offer'; value: Offer } | { kind: 'bridge'; value: Bridge } | { kind: 'operation'; value: Operation };
@@ -35,7 +35,7 @@ export class FinancialCommandClient {
   }
   async session(): Promise<ServicingSession> {
     const data = await this.read('/api/servicing/session');
-    if (typeof data.enabled !== 'boolean' || typeof data.linked !== 'boolean' || data.linked && (data.mode !== 'DEMO' || !['OPERATOR', 'CUSTOMER'].includes(String(data.role)) || typeof data.customer_id !== 'string')) throw new FinancialCommandError(502);
+    if (typeof data.enabled !== 'boolean' || typeof data.linked !== 'boolean' || data.linked && (!['DEMO', 'SANDBOX'].includes(String(data.mode)) || !['OPERATOR', 'CUSTOMER'].includes(String(data.role)) || typeof data.customer_id !== 'string')) throw new FinancialCommandError(502);
     return data as unknown as ServicingSession;
   }
   async offers(): Promise<string[]> {
@@ -61,7 +61,7 @@ export class FinancialCommandClient {
     return { status: response.status, commandID: id, receipt: body };
   }
   async create(record: CaseDetail): Promise<CommandReceipt> {
-    if (record.mode !== 'DEMO' || !record.assessment || !uuid.test(record.case_id)) throw new FinancialCommandError(400);
+    if (!['DEMO', 'SANDBOX'].includes(record.mode) || !record.assessment || !uuid.test(record.case_id)) throw new FinancialCommandError(400);
     return this.send('/api/offers', { evaluation_id: record.assessment.id, originating_case_id: record.case_id }, crypto.randomUUID());
   }
   private terms(offer: Offer): Record<string, unknown> {

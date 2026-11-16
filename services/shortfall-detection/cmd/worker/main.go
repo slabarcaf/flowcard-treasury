@@ -38,12 +38,22 @@ func run(ctx context.Context) error {
 	defer repo.Close()
 	resolver := &provider.Resolver{Mappings: repo, References: provider.UnsupportedReferences{}}
 	client, providerErr := provider.NewClient(provider.ClientConfig{BaseURL: cfg.ProviderBaseURL,
-		Version: cfg.ProviderVersion, ClientID: cfg.ProviderClientID, APIKey: cfg.ProviderAPIKey})
+		Version: cfg.ProviderVersion, ClientID: cfg.ProviderClientID, APIKey: cfg.ProviderAPIKey, LoginAs: cfg.ProviderLoginAs})
 	// Construction is side-effect free. Missing config never enables an adapter.
 	if providerErr != nil {
 		client = nil
 	}
-	log.Printf("shortfall worker live_parser=unsupported provider_configured=%t", providerErr == nil)
+	contractConfigured := false
+	if cfg.SandboxContractFile != "" {
+		contract, err := provider.LoadSandboxContract(cfg.SandboxContractFile, cfg.Environment, cfg.WebhookSource, client)
+		if err != nil {
+			return err
+		}
+		resolver.References = contract
+		resolver.Evidence = contract
+		contractConfigured = true
+	}
+	log.Printf("shortfall worker sandbox_contract_configured=%t provider_configured=%t", contractConfigured, providerErr == nil)
 	w, err := worker.New(repo, resolver, client, cfg.Environment, cfg.WebhookSource)
 	if err != nil {
 		return err

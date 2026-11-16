@@ -136,7 +136,7 @@ func secretsForSubject(cfg config.Config, subject string) []string {
 	case "underwriting-reader":
 		return []string{cfg.ReaderSecret}
 	default:
-		if cfg.Mode == config.ModeDemo {
+		if cfg.Mode == config.ModeDemo || (cfg.Mode == config.ModeSandbox && cfg.SandboxDelegationEnabled) {
 			return []string{cfg.CustomerSecret, cfg.OperatorSecret}
 		}
 		return nil

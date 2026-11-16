@@ -15,6 +15,7 @@ import (
 
 	"github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/domain"
 	"github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/postgres"
+	"github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/provider"
 )
 
 const maxServicingWebhookBody = 10_000_000
@@ -71,6 +72,16 @@ func (h *handler) servicingWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_EVENT", "Webhook envelope is invalid")
 		return
+	}
+	if h.cfg.Mode == "SANDBOX" {
+		if reader, ok := h.provider.(provider.SandboxWebhookReader); ok {
+			wake, parseErr := reader.NormalizeSandboxWebhook(raw)
+			if parseErr != nil {
+				writeError(w, 400, "INVALID_EVENT", "Webhook references are invalid")
+				return
+			}
+			event.TargetKind, event.RequestID, event.CustomerID, event.CardID, event.DepositID, event.State, event.Blocked = wake.TargetKind, wake.RequestID, wake.CustomerID, wake.CardID, wake.DepositID, wake.State, wake.BlockedCode
+		}
 	}
 	_, err = postgres.NewRepository(h.pool).ReceiveServicingWebhook(r.Context(), postgres.ServicingWebhookReceipt{
 		Mode: domain.Mode(h.cfg.Mode), Source: "AIRWALLEX_SERVICING", EventID: event.ID,

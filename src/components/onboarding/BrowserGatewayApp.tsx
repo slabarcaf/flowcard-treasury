@@ -72,7 +72,7 @@ export function BrowserGatewayApp({operatorOnly=false,onSessionChanged}:{operato
       {session === undefined ? <main className="max-w-md mx-auto p-8"><p>{busy ? 'Checking session…' : 'Session not available.'}</p><button type="button" disabled={busy} onClick={() => void restore()}>Check session</button></main>
         : <BrowserAccess session={session} customer={operatorOnly?<main className="p-8">This developer interface requires an operator session.</main>:<CustomerFinancialWorkspace key={session?.user.id} />}><section key={session?.user.id}>
           <nav className="flex gap-5 p-5"><button type="button" onClick={() => { setFinancial(false); setDraft(false); setView(initialView()); }}>Applications</button><button type="button" onClick={() => { setFinancial(false); setDraft(true); }}>New company draft</button><button type="button" onClick={() => { setDraft(false); setFinancial(true); }}>Financial records</button></nav>
-          <p className="px-5 text-sm text-slate-400">Onboarding and saved financial records. Explicit DEMO commands require verified bindings. Saving a draft does not submit it to the provider.</p>
+          <p className="px-5 text-sm text-slate-400">Onboarding and saved financial records. Financial commands require verified bindings. Saving a draft does not submit it to the provider.</p>
           {financial ? <FinancialRecordsScreen /> : draft ? <OnboardingWizard onComplete={() => { setDraft(false); setView(initialView()); }} />
             : view.screen === 'application' ? <ApplicationDetailScreen applicationId={view.applicationId} listState={view.listState} go={go} />
             : <ApplicationsScreen listState={view.screen === 'applications' ? view.listState : { previousCursors: [] }} go={go} />}

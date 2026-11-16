@@ -22,14 +22,14 @@ var reasonCode = regexp.MustCompile(`^[A-Z0-9_:-]{1,96}$`)
 var termsHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func (a *Server) bound(ctx context.Context, u postgres.User) (postgres.Binding, string, error) {
-	if a.config.WriteMode != "DEMO" {
+	if a.config.WriteMode != "DEMO" && a.config.WriteMode != "SANDBOX" {
 		return postgres.Binding{}, "", postgres.ErrBinding
 	}
 	binding, err := a.store.Binding(ctx, u)
 	if err != nil {
 		return binding, "", err
 	}
-	if binding.Mode != "DEMO" || binding.Origin != a.config.ServicingURL.String() || binding.ActorType != u.Role {
+	if binding.Mode != a.config.WriteMode || binding.Origin != a.config.ServicingURL.String() || binding.ActorType != u.Role {
 		return binding, "", postgres.ErrBinding
 	}
 	key := a.config.OperatorSecret
@@ -62,7 +62,7 @@ func (a *Server) servicingSession(w http.ResponseWriter, r *http.Request) {
 		authFailure(w, err, "unauthorized")
 		return
 	}
-	if a.config.WriteMode != "DEMO" {
+	if a.config.WriteMode != "DEMO" && a.config.WriteMode != "SANDBOX" {
 		writePublic(w, map[string]any{"enabled": false, "linked": false})
 		return
 	}
@@ -257,7 +257,7 @@ func (a *Server) offerCustomer(ctx context.Context, body []byte) (string, error)
 			Recheck    bool   `json:"requires_recheck"`
 		} `json:"assessment"`
 	}
-	if json.Unmarshal(raw, &record) != nil || record.ID != request.Case || record.Mode != "DEMO" || record.Customer == "" || record.Assessment == nil || record.Assessment.ID != request.Evaluation || record.Assessment.Mode != record.Mode || record.Assessment.Customer != record.Customer || record.Assessment.Authorized || !record.Assessment.Recheck {
+	if json.Unmarshal(raw, &record) != nil || record.ID != request.Case || record.Mode != a.config.WriteMode || record.Customer == "" || record.Assessment == nil || record.Assessment.ID != request.Evaluation || record.Assessment.Mode != record.Mode || record.Assessment.Customer != record.Customer || record.Assessment.Authorized || !record.Assessment.Recheck {
 		return "", servicing.ErrBinding
 	}
 	return record.Customer, nil

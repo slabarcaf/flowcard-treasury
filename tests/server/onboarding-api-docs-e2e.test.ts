@@ -373,7 +373,7 @@ describe("End-to-End OpenAPI Documentation Acceptance (Real Node + Go)", () => {
 
       // Confirm webhook routes rendered
       const webhookBlocks = await page.locator(".opblock").count();
-      expect(webhookBlocks).toBe(2); // /api/webhooks/airwallex and /api/v1/webhooks/airwallex
+      expect(webhookBlocks).toBe(3); // The two Go aliases and the documented legacy /webhooks/airwallex receiver.
 
       // 7. Verify query config injection is defended against
       await page.goto(
