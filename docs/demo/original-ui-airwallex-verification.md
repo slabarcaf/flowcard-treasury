@@ -27,6 +27,12 @@ No automatic card retry was attempted. The actual provider transfer objects,
 test balances, original requests, failures and immutable observations remain
 retained in the isolated sandbox installation.
 
+The follow-up issuing simulation returned HTTP 400 and was not resent. Go
+intake used an earlier authentic signed decline delivery from this same owned
+installation, with unaltered bytes/signature and fresh canonical provider
+reads. This was a replay of a real delivery, not a fabricated decline. The
+subsequent income deposit reached the live Go receiver directly.
+
 ## Timestamp-only hold and recovery
 
 After fee collection, the same deposit's canonical `settled_at` changed from
