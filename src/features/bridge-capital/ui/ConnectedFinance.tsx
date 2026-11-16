@@ -431,7 +431,12 @@ export function BridgeCard({ id, operator = false }: { id: string; operator?: bo
               label={human(op.kind)}
               value={<Badge tone={stateTone(op.state)}>{human(op.state)}</Badge>}
             />
-            {op.hold_reason && <p>{human(op.hold_reason)}</p>}
+            {op.hold_reason && (
+              <p>
+                {op.state === 'CANCELLED_UNSENT' ? 'Previous error: ' : ''}
+                {human(op.hold_reason)}
+              </p>
+            )}
             {operator && op.state === 'HELD' && (
               <Button
                 disabled={
@@ -483,7 +488,14 @@ export function BridgeCard({ id, operator = false }: { id: string; operator?: bo
                   value={cents(a.amount_cents)}
                 />
               ))}
-              <small>{item.settled_at ?? 'Settlement pending'}</small>
+              <small>
+                {item.settled_at ??
+                  (item.state === 'FAILED_CONFIRMED'
+                    ? 'Attempt finished'
+                    : item.state === 'SETTLED'
+                      ? 'Settlement time unavailable'
+                      : 'Settlement pending')}
+              </small>
             </div>
           ))}
         {history?.items.length === 0 && <p>No settled collections on this page.</p>}

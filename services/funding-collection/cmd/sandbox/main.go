@@ -35,6 +35,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	history := flags.Bool("history", false, "Serve retained results without provider workers, dispatch or public webhook ingress")
 	testAdminFile := flags.String("test-admin-url-file", "", "Existing localhost:54329 maintenance URL file for owned setup")
 	databaseName := flags.String("database-name", "", "Mandatory expected owned database name")
 	callbackOriginFile := flags.String("callback-origin-file", "", "Private file with approved HTTPS callback origin")
@@ -49,6 +50,9 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if *acceptAgreements && command != "setup-accounts" {
 		return errors.New("sandbox_agreements_only_for_setup")
 	}
+	if *history && command != "serve-local" {
+		return errors.New("sandbox_history_only_for_serve_local")
+	}
 	needsManifest := command != "preflight" && command != "reference-industries" && command != "inspect-webhook"
 	if needsManifest && (*manifest == "" || !runPattern.MatchString(*runID)) {
 		return errors.New("sandbox_manifest_arguments_invalid")
@@ -60,6 +64,9 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	duration := 60 * time.Second
 	if command == "serve-local" {
 		duration = 45 * time.Minute
+		if *history {
+			duration = 6 * time.Hour
+		}
 	}
 	if command == "prepare-local" || command == "seed-local-books" || command == "bind-local-users" {
 		duration = 3 * time.Minute
@@ -140,7 +147,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	case "export-execution-contract":
 		return exportExecutionContract(ctx, api, cfg, *manifest, *runID)
 	case "serve-local":
-		return serveLocalStack(ctx, cfg, *manifest, *runID)
+		return serveLocalStack(ctx, cfg, *manifest, *runID, *history)
 	case "bind-local-users":
 		return bindLocalUsers(ctx, *manifest, *runID, *testAdminFile, *databaseName)
 	case "relay-shortfall":

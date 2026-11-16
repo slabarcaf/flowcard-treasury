@@ -117,7 +117,7 @@ func webhookIngress() http.Handler {
 	return mux
 }
 
-func serveLocalStack(ctx context.Context, cfg credentials, manifest, runID string) error {
+func serveLocalStack(ctx context.Context, cfg credentials, manifest, runID string, history bool) error {
 	var local localRuntime
 	if err := readPrivateJSON(localRuntimePath(manifest), &local, 65536); err != nil {
 		return err
@@ -179,6 +179,9 @@ func serveLocalStack(ctx context.Context, cfg credentials, manifest, runID strin
 	shortfall["SHORTFALL_SERVICE_SECRET"] = local.Secrets["shortfall"]
 	shortfall["SHORTFALL_ISSUING_API_VERSION"] = "2026-08-21"
 	shortfall["SHORTFALL_SANDBOX_CONTRACT_FILE"] = filepath.Join(directory, "shortfall-contract.json")
+	if history {
+		delete(shortfall, "SHORTFALL_SANDBOX_CONTRACT_FILE")
+	}
 	underwriting := environmentFor("underwriting")
 	underwriting["UNDERWRITING_MODE"] = "SANDBOX"
 	underwriting["UNDERWRITING_HTTP_ADDR"] = "127.0.0.1:18083"
@@ -206,8 +209,15 @@ func serveLocalStack(ctx context.Context, cfg credentials, manifest, runID strin
 	funding["SERVICING_LIVE_DISPATCH_ENABLED"] = "true"
 	funding["SERVICING_SANDBOX_FUNDING_ENABLED"] = "true"
 	funding["SERVICING_SANDBOX_COLLECTION_ENABLED"] = "true"
-	funding["SERVICING_SANDBOX_PAYMENT_CONTRACT_FILE"] = filepath.Join(directory, "shortfall-contract.json")
-	funding["SERVICING_SANDBOX_EXECUTION_CONTRACT_FILE"] = filepath.Join(directory, "execution-contract.json")
+	if history {
+		funding["SERVICING_LIVE_DISPATCH_ENABLED"] = "false"
+		funding["SERVICING_SANDBOX_FUNDING_ENABLED"] = "false"
+		funding["SERVICING_SANDBOX_COLLECTION_ENABLED"] = "false"
+	}
+	if !history {
+		funding["SERVICING_SANDBOX_PAYMENT_CONTRACT_FILE"] = filepath.Join(directory, "shortfall-contract.json")
+		funding["SERVICING_SANDBOX_EXECUTION_CONTRACT_FILE"] = filepath.Join(directory, "execution-contract.json")
+	}
 	coordinator := environmentFor("coordinator")
 	coordinator["COORDINATOR_MODE"] = "SANDBOX"
 	coordinator["COORDINATOR_HTTP_ADDR"] = "127.0.0.1:18090"
@@ -221,8 +231,18 @@ func serveLocalStack(ctx context.Context, cfg credentials, manifest, runID strin
 	coordinator["SERVICING_BASE_URL"] = "http://127.0.0.1:18091"
 	coordinator["SERVICING_SERVICE_SECRET"] = local.Secrets["servicing-reader"]
 	gateway := gatewayRuntimeEnvironment(local)
+	onboardingURL := strings.TrimSpace(os.Getenv("BROWSER_GATEWAY_ONBOARDING_URL"))
+	onboardingSecret := os.Getenv("BROWSER_GATEWAY_ONBOARDING_SECRET")
+	if (onboardingURL == "") != (onboardingSecret == "") {
+		return errors.New("sandbox_onboarding_upstream_pair_required")
+	}
+	if onboardingURL != "" {
+		// The gateway applies its existing URL and secret validation at startup.
+		gateway["BROWSER_GATEWAY_ONBOARDING_URL"] = onboardingURL
+		gateway["BROWSER_GATEWAY_ONBOARDING_SECRET"] = onboardingSecret
+	}
 	environments := map[string]map[string]string{"shortfall-api": shortfall, "shortfall-worker": shortfall, "underwriting-api": underwriting, "funding-api": funding, "funding-worker": funding, "coordinator-api": coordinator, "gateway-api": gateway}
-	privateValues := []string{cfg.apiKey, cfg.clientID, subscriptions.Subscriptions["SHORTFALL"].Secret, subscriptions.Subscriptions["SERVICING"].Secret}
+	privateValues := []string{cfg.apiKey, cfg.clientID, subscriptions.Subscriptions["SHORTFALL"].Secret, subscriptions.Subscriptions["SERVICING"].Secret, onboardingSecret}
 	for _, value := range local.URLs {
 		privateValues = append(privateValues, value)
 		if parsed, err := url.Parse(value); err == nil && parsed.User != nil {
@@ -239,37 +259,46 @@ func serveLocalStack(ctx context.Context, cfg credentials, manifest, runID strin
 	children := []*localChild{}
 	defer func() { stopLocalChildren(children) }()
 	for _, binary := range binaries {
+		if history && strings.HasSuffix(binary.name, "-worker") {
+			continue
+		}
 		child, err := startLocalChild(ctx, root, filepath.Join(directory, "bin", binary.name), filepath.Join(directory, "logs", binary.name+".log"), nil, environments[binary.name], privateValues)
 		if err != nil {
 			return err
 		}
 		children = append(children, child)
 	}
-	frontend, err := startLocalChild(ctx, root, "node", filepath.Join(directory, "logs", "frontend.log"), []string{filepath.Join(root, "node_modules", "vite", "bin", "vite.js"), "--host", "127.0.0.1", "--port", "18073", "--strictPort"}, map[string]string{"VITE_BROWSER_GATEWAY_ENABLED": "true", "BROWSER_GATEWAY_PROXY_TARGET": "http://127.0.0.1:18094"}, privateValues)
+	frontendEnvironment := map[string]string{"VITE_BROWSER_GATEWAY_ENABLED": "true", "BROWSER_GATEWAY_PROXY_TARGET": "http://127.0.0.1:18094"}
+	if history {
+		frontendEnvironment["VITE_SANDBOX_HISTORY"] = "true"
+	}
+	frontend, err := startLocalChild(ctx, root, "node", filepath.Join(directory, "logs", "frontend.log"), []string{filepath.Join(root, "node_modules", "vite", "bin", "vite.js"), "--host", "127.0.0.1", "--port", "18073", "--strictPort"}, frontendEnvironment, privateValues)
 	if err != nil {
 		return err
 	}
 	children = append(children, frontend)
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:1234")
-	if err != nil {
-		return errors.New("sandbox_owned_ingress_port_unavailable")
+	if !history {
+		listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:1234")
+		if err != nil {
+			return errors.New("sandbox_owned_ingress_port_unavailable")
+		}
+		defer listener.Close()
+		ingress := &http.Server{Handler: webhookIngress(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 16 * 1024}
+		serverDone := make(chan error, 1)
+		go func() { serverDone <- ingress.Serve(listener) }()
+		var once sync.Once
+		closeIngress := func() {
+			once.Do(func() {
+				shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if ingress.Shutdown(shutdown) != nil {
+					_ = ingress.Close()
+				}
+				<-serverDone
+			})
+		}
+		defer closeIngress()
 	}
-	defer listener.Close()
-	ingress := &http.Server{Handler: webhookIngress(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 16 * 1024}
-	serverDone := make(chan error, 1)
-	go func() { serverDone <- ingress.Serve(listener) }()
-	var once sync.Once
-	closeIngress := func() {
-		once.Do(func() {
-			shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if ingress.Shutdown(shutdown) != nil {
-				_ = ingress.Close()
-			}
-			<-serverDone
-		})
-	}
-	defer closeIngress()
 	for _, endpoint := range []string{"http://127.0.0.1:18082/healthz", "http://127.0.0.1:18083/healthz", "http://127.0.0.1:18091/health/live", "http://127.0.0.1:18090/healthz", "http://127.0.0.1:18094/healthz", "http://127.0.0.1:18073/"} {
 		if err := waitLocalEndpoint(ctx, endpoint); err != nil {
 			return err
@@ -280,23 +309,30 @@ func serveLocalStack(ctx context.Context, cfg credentials, manifest, runID strin
 		return err
 	}
 	refreshDone := make(chan struct{})
-	go func() {
-		defer close(refreshDone)
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				refreshCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-				_ = refreshLocalSnapshots(refreshCtx, manifest, runID, false)
-				cancel()
+	if history {
+		close(refreshDone)
+	} else {
+		go func() {
+			defer close(refreshDone)
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					refreshCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+					_ = refreshLocalSnapshots(refreshCtx, manifest, runID, false)
+					cancel()
+				}
 			}
-		}
-	}()
+		}()
+	}
 	defer func() { /* the ticker exits with the bounded parent context */ }()
 	_, _ = io.WriteString(os.Stdout, "owned sandbox stack ready; browser frontend on loopback port 18073; lifetime bounded to this command\n")
+	if history {
+		_, _ = io.WriteString(os.Stdout, "history review: provider dispatch, financial workers and public webhook ingress disabled\n")
+	}
 	<-ctx.Done()
 	<-refreshDone
 	return nil
