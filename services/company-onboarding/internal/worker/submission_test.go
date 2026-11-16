@@ -2156,19 +2156,7 @@ func TestWorker_DistinctApplications_SameCompany_CreationCoordinated(t *testing.
 		t.Fatalf("NewDraftApplication failed: %v", err)
 	}
 
-	if err := app2.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{
-		PrimaryContactPersonID: "person_001",
-		IndustryCategoryCode:   "5734",
-		EstimatedRevenue:       domain.RevenueEstimate{Amount: "250000", Currency: "USD"},
-		CustomerAgreements: domain.CustomerAgreements{
-			AgreedToDataUsage:          true,
-			AgreedToTermsAndConditions: true,
-			TermsAndConditions: &domain.TermsAndConditionsAgreement{
-				AgreedAt:             time.Now().UTC(),
-				ServiceAgreementType: "FULL",
-			},
-		},
-	}); err != nil {
+	if err := app2.UpdateOnboardingDetails(app1.Platform().OnboardingDetails); err != nil {
 		t.Fatalf("UpdateOnboardingDetails failed: %v", err)
 	}
 
