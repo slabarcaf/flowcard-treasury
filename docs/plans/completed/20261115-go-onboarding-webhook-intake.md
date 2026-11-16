@@ -19,7 +19,10 @@ calls.
 
 Local implementation is complete. Exact counts, earlier failed attempts and
 limits are recorded in the [runbook](/docs/demo/onboarding-webhook-intake.md).
-Commit/integration and hosted acceptance remain separate.
+Local integration is complete: source `f5848a6`, develop merge `3a94cbf`.
+Post-merge checks passed all 54 top-level test functions and 73 subtests,
+with zero skipped scenarios, both owned cleanup checks and build/vet/spec
+verification. Hosted acceptance remains separate in the Node cutover plan.
 
-No commit, merge, deployment, root env edit or existing-service restart is
-included. Do not run shared-DB truncating tests.
+No deployment, root env edit or existing-service restart was performed.
+Do not run shared-DB truncating tests.

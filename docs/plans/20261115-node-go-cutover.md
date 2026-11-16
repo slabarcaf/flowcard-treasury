@@ -77,8 +77,8 @@ PARTIAL: direct Go receivers exist for shortfalls and servicing. Onboarding
 Node verifies the provider signature, persists delivery work and forwards a
 service-signed request to Go onboarding at `/api/webhooks/airwallex`. The
 existing internal Go endpoint verifies a service assertion. Direct provider-
-authenticated Go intake is now locally implemented/tested in
-`feat/go-onboarding-webhook-intake`, uncommitted and unmerged. See its
+authenticated Go intake is locally implemented/tested and merged into develop
+at `3a94cbf` (source `f5848a6`). See its
 [runbook](/docs/demo/onboarding-webhook-intake.md). Public callback routing and
 the Node backlog are unchanged.
 

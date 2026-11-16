@@ -1,8 +1,9 @@
 # Direct onboarding webhook intake
 
 Local implementation is ready in `feat/go-onboarding-webhook-intake`, based
-on develop `7ac6b92`. Source is uncommitted and unmerged. No callback routing,
-provider subscription, existing process, manual database or root `.env` changed.
+on develop `7ac6b92`. Source commit `f5848a6` was merged into local develop
+at `3a94cbf` under Ramil's explicit authorization. No callback routing, provider
+subscription, existing process, manual database or root `.env` changed.
 
 [TOC]
 
@@ -99,6 +100,12 @@ Logs: `/tmp/flowcard-onboarding-webhook-final-units.jsonl`,
 `/tmp/flowcard-onboarding-webhook-spec-tests.jsonl` and
 `/tmp/flowcard-onboarding-webhook-final-build-vet-spec.log`.
 
+Post-merge checks repeated the same 54 top-level functions and 73 subtests:
+all passed, with zero skipped scenarios and both owned cleanups confirmed.
+Full module build/vet and OpenAPI check mode passed on develop. Results are
+retained in the corresponding `/tmp/flowcard-onboarding-webhook-merged-*`
+logs. Pre-existing main checkout edits remained byte-for-byte unchanged.
+
 Earlier failure evidence is preserved. An overly broad baseline selector hit
 old fixed-target tests; the explicit port-1 safety guard stopped them before
 DB access. Final runs used exact unit selectors and the separate owned package.
@@ -118,5 +125,5 @@ fixture; its failed run also verified cleanup. No production guard was relaxed.
 4. Remove Node intake/forwarding only after delivery, restart and backlog
    acceptance. The internal JWT endpoint remains available during transition.
 
-No commit, merge, provider/model request, cloud operation or persistent service
-setup was performed in this implementation.
+No provider/model request, cloud operation or persistent service setup was
+performed in this implementation or local integration.
