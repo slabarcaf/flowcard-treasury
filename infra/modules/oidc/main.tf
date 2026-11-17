@@ -75,7 +75,8 @@ resource "aws_iam_policy" "github_deployer" {
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
-          "ecr:DescribeRepositories"
+          "ecr:DescribeRepositories",
+          "ecr:DescribeImages"
         ]
         Resource = var.ecr_repository_arns
       },
