@@ -1,10 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { describe, expect, it, vi } from "vitest";
-import type { DatabasePool } from "../../server/src/db/pool.js";
-import {
-  initializeFacilityProjection,
-  insertWebhookOnce,
-} from "../../server/src/db/repositories.js";
+import { describe, expect, it } from "vitest";
 
 const migrationUrl = new URL(
   "../../server/src/db/migrations/001_bridge_ledger.sql",
@@ -101,27 +96,6 @@ describe("bridge ledger schema", () => {
     expect(sql).toContain("'opening_exposure', 2500000");
     expect(sql).toContain('"synthetic":true');
     expect(sql).toContain("('USD', 5000000, 1000000, 2500000, 0, 0, 1500000)");
-  });
-
-  it("initializes projections from facility configuration and ledger events", async () => {
-    const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
-    await initializeFacilityProjection({ query } as unknown as DatabasePool);
-
-    expect(query).toHaveBeenCalledOnce();
-    expect(query.mock.calls[0][0]).toContain("FROM facility_configs AS config");
-    expect(query.mock.calls[0][0]).toContain("event.event_type = 'opening_exposure'");
-    expect(query.mock.calls[0][0]).toContain("ON CONFLICT (currency) DO NOTHING");
-  });
-
-  it("inserts webhook events once by provider event ID", async () => {
-    const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
-    const inserted = await insertWebhookOnce(
-      { query } as unknown as DatabasePool,
-      { id: "evt-1", type: "transfer.settled", rawBody: new Uint8Array([1, 2]) },
-    );
-
-    expect(inserted).toBe(false);
-    expect(query.mock.calls[0][0]).toContain("ON CONFLICT (provider_event_id) DO NOTHING");
   });
 
   it("defines unique, audited enrollment mappings and synthetic demo roster entries", async () => {

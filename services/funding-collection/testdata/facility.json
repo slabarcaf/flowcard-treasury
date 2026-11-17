@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "source_mode": "DEMO",
+  "source_id": "synthetic-demo-fixture",
+  "source_version": "2026-11-14-run-001",
+  "captured_at": "2026-11-14T12:00:00Z",
+  "source_refs": [
+    {"system": "demo-fixture", "record_id": "facility-001", "version": "1", "effective_at": "2026-11-14T12:00:00Z"}
+  ],
+  "facility_id": "demo-facility-001",
+  "funding_account_ref": "demo-account-A",
+  "currency": "USD",
+  "facility_total_cents": 100000000,
+  "reserve_floor_bps": 2000,
+  "other_commitments_cents": 0,
+  "known_empty_books": true,
+  "customers": [
+    {"customer_id": "demo-customer-001", "account_id": "demo-account-B", "card_id": "demo-card-001", "history_complete": true}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "enabledPlugins": {
+    "aws-core@claude-plugins-official": true,
+    "airwallex-agentos@claude-plugins-official": true
+  },
+
+  "enabledMcpjsonServers": ["airwallex-docs"]
+}

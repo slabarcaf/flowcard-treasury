@@ -25,14 +25,14 @@ sources and mappings.
 - The current application is a React, TypeScript, and Vite demo. Its pure
   underwriting functions are in `src/policy/`; they currently accept four
   pre-rated signals and do not consume snapshots or evidence readiness.
-- The [Airwallex bridge ledger plan](/docs/plans/20261021-airwallex-bridge-ledger-implementation-plan.md)
-  adds the TypeScript server, PostgreSQL ledger, facility projection,
-  transactional outbox, and atomic reservation path. Its current boundary
-  expects a trusted approved command.
-- The [Salesforce snapshot plan](/docs/plans/20261021-salesforce-snapshot-implementation-plan.md)
+- The TypeScript server, PostgreSQL ledger, facility projection, transactional
+  outbox, and atomic reservation path are implemented under `server/src/`.
+  Their repository boundaries are summarized in
+  [backend development guidance](/AGENTS.md#backend-development).
+- The [Salesforce snapshot plan](/docs/plans/completed/20261021-salesforce-snapshot-implementation-plan.md)
   owns explicit enrollment and complete, atomic, daily snapshots. A missing,
   invalid, or stale snapshot blocks new decisions for that customer.
-- The [AI evidence pipeline plan](/docs/plans/20261022-ai-evidence-pipeline-implementation-plan.md)
+- The [AI evidence pipeline plan](/docs/plans/completed/20261022-ai-evidence-pipeline-implementation-plan.md)
   maps only qualified signals into the existing `Signals` input. It blocks
   customers with unresolved review, unmapped evidence, failed extraction, or
   unqualified signal types.
@@ -620,7 +620,7 @@ Production decisioning remains disabled until all of these gates are satisfied:
 - The 10% mature-portfolio cap is operator-configured. No undocumented
   maturity threshold is introduced.
 - The source requirements contain older reserve-floor values. Follow the
-  current Airwallex ledger plan's 20% facility floor; keep the separately
+  current Bridge Capital policy's 20% facility floor; keep the separately
   approved operating buffer at zero.
 - One open bridge per customer, USD-only operation, trigger-deposit collection
   caps, fixed collection-trigger fees, and deferred multi-bridge allocation
@@ -628,10 +628,11 @@ Production decisioning remains disabled until all of these gates are satisfied:
 
 ## See also
 
-- [Airwallex bridge ledger implementation plan](/docs/plans/20261021-airwallex-bridge-ledger-implementation-plan.md)
-- [Salesforce customer snapshot implementation plan](/docs/plans/20261021-salesforce-snapshot-implementation-plan.md)
-- [AI evidence pipeline implementation plan](/docs/plans/20261022-ai-evidence-pipeline-implementation-plan.md)
-- [Kit 5 source of truth](/docs/requirements/Airwallex%20Hackathon_req_1.md)
-- [Airwallex underwriting data inventory](/docs/requirements/Airwallex%20Hackathon_req_6.md)
-- [Bridge Capital Underwriting Rules v001](/docs/requirements/Airwallex%20Hackathon_req_8.md)
+- [Bridge Capital policy specification](/docs/designs/bridge-capital-policy-spec.md)
+- [Backend development guidance](/AGENTS.md#backend-development)
+- [Salesforce customer snapshot implementation plan](/docs/plans/completed/20261021-salesforce-snapshot-implementation-plan.md)
+- [AI evidence pipeline implementation plan](/docs/plans/completed/20261022-ai-evidence-pipeline-implementation-plan.md)
+- [Consolidated underwriting policy](/docs/requirements/README.md#underwriting-and-capital-policy)
+- [Customer data and evidence](/docs/requirements/README.md#customer-data-and-evidence)
+- [Open requirements](/docs/requirements/README.md#open-requirements)
 - [Typesafe.ai Jev signal-definition backlog item](/docs/backlog/work-with-typesafe-jev-on-signal-definitions.md)

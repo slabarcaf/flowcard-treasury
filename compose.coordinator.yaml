@@ -1,0 +1,64 @@
+name: flowcard-go-coordinator
+
+services:
+  fixture-shortfalls:
+    build:
+      context: ./services/go-coordinator
+      dockerfile: Dockerfile
+    image: flowcard-go-coordinator:local
+    entrypoint: ["/usr/local/bin/fixture-shortfalls"]
+    command:
+      - "--manifest"
+      - "/fixture-bundle/runs/${COORDINATOR_RUN_ID:?Set COORDINATOR_RUN_ID from the retained manifest}/manifest.json"
+    env_file:
+      - ${COORDINATOR_SOURCE_ENV_FILE:?Set COORDINATOR_SOURCE_ENV_FILE to a 0600 source-reader env file}
+    volumes:
+      - ${COORDINATOR_FIXTURE_BUNDLE:?Set COORDINATOR_FIXTURE_BUNDLE to the lead-prepared bundle}:/fixture-bundle:ro
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  coordinator-api:
+    build:
+      context: ./services/go-coordinator
+      dockerfile: Dockerfile
+    image: flowcard-go-coordinator:local
+    entrypoint: ["/usr/local/bin/coordinator-api"]
+    env_file:
+      - ${COORDINATOR_API_ENV_FILE:?Set COORDINATOR_API_ENV_FILE to a 0600 runtime env file}
+    environment:
+      COORDINATOR_SOURCE_ROOT: /coordinator-sources
+    volumes:
+      - ${COORDINATOR_SOURCE_HOST_ROOT:?Set COORDINATOR_SOURCE_HOST_ROOT to the task-owned source root}:/coordinator-sources:ro
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  coordinator-migrate:
+    build:
+      context: ./services/go-coordinator
+      dockerfile: Dockerfile
+    image: flowcard-go-coordinator:local
+    entrypoint: ["/usr/local/bin/coordinator-migrate"]
+    env_file:
+      - ${COORDINATOR_MIGRATION_ENV_FILE:?Set COORDINATOR_MIGRATION_ENV_FILE to a separate 0600 migration env file}
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    profiles:
+      - migrate

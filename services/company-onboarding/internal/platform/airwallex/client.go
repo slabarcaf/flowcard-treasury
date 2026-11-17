@@ -68,7 +68,7 @@ type ClientConfig struct {
 	APIKey              string
 	APIVersion          string // e.g. "2026-08-21"
 	HTTPClient          *http.Client
-	PlatformEnvironment string // "sandbox" (default/demo) or "production"; separated from application runtime execution mode
+	PlatformEnvironment string // "sandbox" permits omitted demo agreements; empty does not.
 }
 
 // Client implements PlatformClient against the Airwallex native REST APIs.
@@ -123,16 +123,22 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 			return nil, fmt.Errorf("%w: strict HTTPS required for remote Airwallex files endpoint", ErrUnconfigured)
 		}
 		if platformEnv == "production" {
-			if !isFilesLocal && parsedFiles.Hostname() != "api.airwallex.com" {
-				return nil, fmt.Errorf("%w: production Airwallex files endpoint must target api.airwallex.com, got %q", ErrUnconfigured, parsedFiles.Hostname())
+			if !isFilesLocal && parsedFiles.Hostname() != "files.airwallex.com" {
+				return nil, fmt.Errorf("%w: production Airwallex files endpoint must target files.airwallex.com, got %q", ErrUnconfigured, parsedFiles.Hostname())
 			}
 		} else {
-			if !isFilesLocal && parsedFiles.Hostname() != "api.sandbox.airwallex.com" {
-				return nil, fmt.Errorf("%w: demo runtime Airwallex files endpoint must target sandbox (api.sandbox.airwallex.com), got %q", ErrUnconfigured, parsedFiles.Hostname())
+			if !isFilesLocal && parsedFiles.Hostname() != "files.sandbox.airwallex.com" {
+				return nil, fmt.Errorf("%w: demo runtime Airwallex files endpoint must target files.sandbox.airwallex.com, got %q", ErrUnconfigured, parsedFiles.Hostname())
 			}
 		}
 	} else {
-		filesURL = baseURL
+		if isLocal {
+			filesURL = baseURL
+		} else if platformEnv == "production" {
+			filesURL = "https://files.airwallex.com"
+		} else {
+			filesURL = "https://files.sandbox.airwallex.com"
+		}
 	}
 
 	httpClient := cfg.HTTPClient
@@ -158,11 +164,12 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 
 	return &Client{
 		cfg: ClientConfig{
-			BaseURL:    strings.TrimRight(baseURL, "/"),
-			FilesURL:   strings.TrimRight(filesURL, "/"),
-			ClientID:   clientID,
-			APIKey:     apiKey,
-			APIVersion: apiVersion,
+			BaseURL:             strings.TrimRight(baseURL, "/"),
+			FilesURL:            strings.TrimRight(filesURL, "/"),
+			ClientID:            clientID,
+			APIKey:              apiKey,
+			APIVersion:          apiVersion,
+			PlatformEnvironment: platformEnv,
 		},
 		httpClient: httpClient,
 	}, nil
@@ -262,6 +269,10 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 // CreateAccount sends POST /api/v1/accounts/create.
 // Ambiguous timeouts/network drops return ErrAmbiguousRemoteOutcome; callers must NEVER retry creation blindly.
 func (c *Client) CreateAccount(ctx context.Context, req AccountCreateRequest) (*AccountCreateResponse, error) {
+	if err := validateCreateAccountAgreements(c.cfg.PlatformEnvironment, req.CustomerAgreements); err != nil {
+		return nil, err
+	}
+
 	token, err := c.getToken(ctx)
 	if err != nil {
 		return nil, err
@@ -320,6 +331,26 @@ func (c *Client) CreateAccount(ctx context.Context, req AccountCreateRequest) (*
 	}
 }
 
+func validateCreateAccountAgreements(platformEnvironment string, agreements *CustomerAgreements) error {
+	if agreements == nil {
+		if platformEnvironment == "sandbox" {
+			return nil
+		}
+		return fmt.Errorf("%w: customer agreements are required outside explicitly configured sandbox", ErrIncompleteSubmissionMapping)
+	}
+
+	terms := agreements.TermsAndConditions
+	if !agreements.AgreedToDataUsage || !agreements.AgreedToTermsAndConditions ||
+		strings.TrimSpace(terms.AgreedAt) == "" || strings.TrimSpace(terms.ServiceAgreementType) == "" {
+		return fmt.Errorf("%w: customer agreement record is incomplete", ErrIncompleteSubmissionMapping)
+	}
+	agreedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(terms.AgreedAt))
+	if err != nil || agreedAt.IsZero() {
+		return fmt.Errorf("%w: customer agreement timestamp is invalid", ErrIncompleteSubmissionMapping)
+	}
+	return nil
+}
+
 // UploadFile sends POST /api/v1/files/upload with multipart form data.
 func (c *Client) UploadFile(ctx context.Context, r io.Reader, fileName string, fileSize int64, contentType string) (*FileUploadResponse, error) {
 	token, err := c.getToken(ctx)
@@ -344,7 +375,6 @@ func (c *Client) UploadFile(ctx context.Context, r io.Reader, fileName string, f
 		return nil, fmt.Errorf("failed to copy file bytes: %w", err)
 	}
 
-	_ = writer.WriteField("purpose", "business_registration")
 	_ = writer.Close()
 
 	uploadURL := c.cfg.FilesURL + "/api/v1/files/upload"

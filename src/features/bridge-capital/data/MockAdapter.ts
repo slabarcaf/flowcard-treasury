@@ -22,6 +22,9 @@ import type {
 } from '../types.js';
 import type { DataAdapter } from './adapter.js';
 import { generateCustomers } from './generator.js';
+import { evaluate } from '../policy/eligibility.js';
+import { isAcceptanceValid, isApprovalValid } from '../policy/binding.js';
+import { buildOffer, priceOffer } from '../policy/pricing.js';
 import {
   AS_OF,
   DEMO_BLUEPRINTS,
@@ -66,8 +69,10 @@ export class MockAdapter implements DataAdapter {
   private offers = new Map<string, BridgeOffer>();
   private acceptances = new Map<string, Acceptance>();
   private approvals = new Map<string, Approval>();
+  private disbursements = new Map<string, { intent: string; transfer: Promise<TransferResponse> }>();
   private bridges = new Map<string, Bridge>();
   private timeline: TimelineEvent[] = [];
+  private lastActionTime = Number.NEGATIVE_INFINITY;
 
   constructor(seed: MockAdapterSeed = {}) {
     const base = demoSeed();
@@ -131,6 +136,15 @@ export class MockAdapter implements DataAdapter {
   }
 
   async saveOffer(offer: BridgeOffer): Promise<BridgeOffer> {
+    const prior = this.offers.get(offer.id);
+    if (prior !== undefined && (
+      prior.customer_id !== offer.customer_id || prior.transaction_id !== offer.transaction_id ||
+      prior.principal !== offer.principal || prior.fee !== offer.fee ||
+      prior.term_days !== offer.term_days || prior.due_date !== offer.due_date
+    )) {
+      this.acceptances.delete(offer.id);
+      this.approvals.delete(offer.id);
+    }
     this.offers.set(offer.id, offer);
     return offer;
   }
@@ -172,18 +186,57 @@ export class MockAdapter implements DataAdapter {
   }
 
   async disburse(bridge: Bridge): Promise<TransferResponse> {
-    const transfer = await mockAirwallexClient.createTransfer({
-      destination: bridge.customer_id,
-      amount: bridge.principal,
-      currency: 'USD',
-      reason: 'Bridge Capital disbursement',
-      reference: bridge.id,
-      requestId: crypto.randomUUID(),
+    // These are fixture presentation guards. Real money remains server-owned.
+    const key = JSON.stringify([bridge.customer_id, bridge.transaction_id]);
+    const intent = JSON.stringify([bridge.id, bridge.principal, bridge.fee, bridge.term_days, bridge.due_date]);
+    const prior = this.disbursements.get(key);
+    if (prior !== undefined) {
+      if (prior.intent !== intent) throw new Error('This payment was already funded on different terms.');
+      return prior.transfer;
+    }
+    const request = this.requests.find((item) => item.transaction.id === bridge.transaction_id && item.customer_id === bridge.customer_id);
+    const customer = this.customers.find((item) => item.id === bridge.customer_id);
+    if (request === undefined || customer === undefined || bridge.principal !== request.principal || bridge.principal <= 0) {
+      throw new Error('A bridge must cover the complete requested shortfall.');
+    }
+    const offer = this.offers.get(buildOffer(request).id);
+    if (offer === undefined || offer.customer_id !== bridge.customer_id || offer.transaction_id !== bridge.transaction_id ||
+      offer.principal !== bridge.principal || offer.fee !== bridge.fee || offer.term_days !== bridge.term_days ||
+      offer.due_date !== bridge.due_date || priceOffer(bridge.principal, bridge.term_days).fee !== bridge.fee) {
+      throw new Error('The offered terms changed. Review and accept the current offer.');
+    }
+    const acceptance = this.acceptances.get(offer.id);
+    if (acceptance === undefined || !isAcceptanceValid(acceptance, offer)) {
+      throw new Error('Customer acceptance is required on these exact terms.');
+    }
+    const decision = evaluate({ ...request, term_days: bridge.term_days }, customer, this.capital, { today: AS_OF });
+    if (!decision.eligible) throw new Error('This payment is no longer eligible for a bridge.');
+    const approval = this.approvals.get(offer.id);
+    if (decision.needs_human_approval && (approval === undefined || !isApprovalValid(approval, offer))) {
+      throw new Error('Credit officer approval is required on these exact terms.');
+    }
+    const fundedBridge = { ...bridge };
+    const transfer = mockAirwallexClient.createTransfer({
+      destination: bridge.customer_id, amount: bridge.principal, currency: 'USD',
+      reason: 'Bridge Capital disbursement', reference: bridge.id,
+      requestId: `fixture_${bridge.id}`,
+    }).then(async (result) => {
+      if (result.status !== 'SETTLED') throw new Error('The transfer has not settled.');
+      this.capital = { ...this.capital, outstanding: this.capital.outstanding + fundedBridge.principal };
+      this.bridges.set(fundedBridge.id, fundedBridge);
+      await this.appendTimeline({
+        at: `${AS_OF}T09:22:00Z`, customer_id: fundedBridge.customer_id,
+        bridge_id: fundedBridge.id, type: 'DISBURSEMENT',
+        text: `${fundedBridge.principal.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} added to your wallet.`,
+      });
+      await this.appendTimeline({
+        at: `${AS_OF}T09:23:00Z`, customer_id: fundedBridge.customer_id,
+        bridge_id: fundedBridge.id, type: 'NOTICE',
+        text: `Card payment to ${request.transaction.merchant_name} retried and approved.`,
+      });
+      return result;
     });
-    this.capital = {
-      ...this.capital,
-      outstanding: this.capital.outstanding + bridge.principal,
-    };
+    this.disbursements.set(key, { intent, transfer });
     return transfer;
   }
 
@@ -199,7 +252,11 @@ export class MockAdapter implements DataAdapter {
   }
 
   async appendTimeline(event: Omit<TimelineEvent, 'id'>): Promise<TimelineEvent> {
-    const stored: TimelineEvent = { ...event, id: `evt_${this.timeline.length + 1}` };
+    const proposed = Date.parse(event.at);
+    if (!Number.isFinite(proposed)) throw new Error('Invalid fixture event timestamp.');
+    // Role views reuse story timestamps; preserve the order of new user actions.
+    this.lastActionTime = Math.max(proposed, this.lastActionTime + 1);
+    const stored: TimelineEvent = { ...event, at: new Date(this.lastActionTime).toISOString(), id: `evt_${this.timeline.length + 1}` };
     this.timeline.push(stored);
     return stored;
   }

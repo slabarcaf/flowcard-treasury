@@ -3,9 +3,11 @@ package webhooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/postgres"
 )
@@ -51,8 +53,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.record(w, r, bodyBytes, payload, payload.Environment, true)
+}
+
+func (h *Handler) record(w http.ResponseWriter, r *http.Request, bodyBytes []byte, payload InboundWebhookPayload, environment string, allowHeaderID bool) {
 	cleanID := strings.TrimSpace(payload.ID)
-	if cleanID == "" {
+	if cleanID == "" && allowHeaderID {
 		cleanID = strings.TrimSpace(r.Header.Get("X-Provider-Event-Id"))
 	}
 	cleanName := strings.TrimSpace(payload.Name)
@@ -63,7 +69,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	accountID := strings.TrimSpace(payload.ExtractAccountID())
-	env := strings.TrimSpace(payload.Environment)
+	env := strings.TrimSpace(environment)
 
 	item := postgres.WebhookInboxItem{
 		EventID:     cleanID,
@@ -74,7 +80,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Durable write before acknowledging. No false ack.
-	_, err = h.repo.InsertWebhookOnce(r.Context(), item)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	_, err := h.repo.InsertWebhookOnce(ctx, item)
+	if errors.Is(err, postgres.ErrWebhookEventConflict) {
+		sendJSON(w, http.StatusConflict, map[string]string{"error": "event id payload conflict"})
+		return
+	}
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to persist webhook"})
 		return

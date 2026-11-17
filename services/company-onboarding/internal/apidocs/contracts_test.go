@@ -42,22 +42,23 @@ const (
 
 // RouteInventoryItem captures the contract specification for a registered endpoint.
 type RouteInventoryItem struct {
-	Method          string
-	Path            string
-	Audience        string // "operator", "public", or "internal-webhook"
-	RequestType     reflect.Type
-	ResponseType    reflect.Type
-	SuccessStatus   int
-	ErrorStatuses   []int
-	IsMultipart     bool
-	IsBinaryStream  bool
-	QueryParameters []string
-	PathParameters  []string
-	ContentTypes    []string
-	Notes           string
+	Method           string
+	Path             string
+	Audience         string // "operator", "public", or "internal-webhook"
+	RequestType      reflect.Type
+	ResponseType     reflect.Type
+	SuccessStatus    int
+	ErrorStatuses    []int
+	IsMultipart      bool
+	IsBinaryStream   bool
+	QueryParameters  []string
+	PathParameters   []string
+	HeaderParameters []string
+	ContentTypes     []string
+	Notes            string
 }
 
-// FullInventory returns the exhaustive contract specification of all 25 implemented routes.
+// FullInventory returns the exhaustive contract specification of all 26 implemented routes.
 func FullInventory() []RouteInventoryItem {
 	return []RouteInventoryItem{
 		// 1. Public Operational Health Endpoints (2 routes)
@@ -245,16 +246,17 @@ func FullInventory() []RouteInventoryItem {
 			Notes:          "Checks readiness for platform submission. Returns 200 on pass; 422 with same ValidationResult on failure.",
 		},
 		{
-			Method:         "POST",
-			Path:           "/api/onboarding-applications/{id}/submit",
-			Audience:       "operator",
-			PathParameters: []string{"id"},
-			RequestType:    reflect.TypeOf(internalHttp.SubmitApplicationRequest{}),
-			ResponseType:   reflect.TypeOf(internalHttp.ErrorResponse{}),
-			SuccessStatus:  0, // Blocked in implementation
-			ErrorStatuses:  []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusUnprocessableEntity, http.StatusInternalServerError, http.StatusServiceUnavailable},
-			ContentTypes:   []string{"application/json"},
-			Notes:          "Blocked fail-closed! Returns 422 SUBMISSION_CONTRACT_BLOCKED pending deferred revision policy freeze.",
+			Method:           "POST",
+			Path:             "/api/onboarding-applications/{id}/submit",
+			Audience:         "operator",
+			PathParameters:   []string{"id"},
+			HeaderParameters: []string{"Idempotency-Key"},
+			RequestType:      reflect.TypeOf(internalHttp.SubmitApplicationRequest{}),
+			ResponseType:     reflect.TypeOf(internalHttp.SubmitApplicationResponse{}),
+			SuccessStatus:    http.StatusAccepted,
+			ErrorStatuses:    []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusInternalServerError, http.StatusServiceUnavailable},
+			ContentTypes:     []string{"application/json"},
+			Notes:            "Requires Idempotency-Key. Atomically queues a durable submission and returns 202 with IDs and a Location for the existing submissions collection; readiness failures return 422.",
 		},
 		{
 			Method:         "GET",
@@ -328,6 +330,7 @@ func FullInventory() []RouteInventoryItem {
 			Notes:          "Reads platform account aggregate by ID (pa_...).",
 		},
 
+		{Method: "POST", Path: "/webhooks/airwallex", Audience: "provider-webhook", RequestType: reflect.TypeOf(webhooks.InboundWebhookPayload{}), ResponseType: reflect.TypeOf(webhooks.WebhookAcknowledgeResponse{}), SuccessStatus: 200, ErrorStatuses: []int{400, 401, 408, 409, 410, 413, 500, 503}, HeaderParameters: []string{"x-timestamp", "x-signature"}, ContentTypes: []string{"application/json"}, Notes: "Provider signature authentication, durable receipt and conflicts"},
 		// 6. Internal Webhook Endpoints (2 routes)
 		{
 			Method:        "POST",
@@ -759,8 +762,8 @@ func TestTask1_SchemaValidation_EmittedJSONAndNegativeFixtures(t *testing.T) {
 // including negative tests for nonexistent routes and invalid methods.
 func TestTask1_RouteInventoryAndWiringParity(t *testing.T) {
 	inventory := FullInventory()
-	if len(inventory) != 25 {
-		t.Fatalf("expected exactly 25 inventory routes, got %d", len(inventory))
+	if len(inventory) != 26 {
+		t.Fatalf("expected exactly 26 inventory routes, got %d", len(inventory))
 	}
 
 	// 1. AST PARSING: Parse internal/http/handlers.go to find all registered route patterns
@@ -921,7 +924,7 @@ func TestTask1_RouteInventoryAndWiringParity(t *testing.T) {
 // 1. Array responses (platform accounts, submissions, documents) are raw JSON arrays, not envelopes.
 // 2. Query parameter filters: GET /api/companies (limit, status, cursor); GET /api/onboarding-applications (company_id, platform, status, limit, cursor).
 // 3. Document download serves PDF/JPEG/PNG binary content with Content-Disposition: attachment.
-// 4. Submit application endpoint is blocked fail-closed (returns 422 SUBMISSION_CONTRACT_BLOCKED).
+// 4. Submit application endpoint durably queues work and returns a 202 receipt.
 // 5. Webhook error responses use map[string]string{"error": "..."} instead of ErrorResponse.
 func TestTask1_ContractAudit_SubtletiesAndGating(t *testing.T) {
 	// 1. Array responses are raw JSON arrays
@@ -937,16 +940,17 @@ func TestTask1_ContractAudit_SubtletiesAndGating(t *testing.T) {
 		t.Errorf("expected PlatformAccountResponse to serialize as top-level JSON array, got %T", paDecoded)
 	}
 
-	// 2. Submit application blocked response format
-	blockedErr := internalHttp.ErrorResponse{
-		Code:    "SUBMISSION_CONTRACT_BLOCKED",
-		Message: "submit API action is blocked pending explicit resolution of deferred reviewed revisions policy; fail-closed on unapproved submission contract",
+	// 2. Submit application response contains a durable receipt.
+	submitResponse := internalHttp.SubmitApplicationResponse{
+		Code:          "OK",
+		ApplicationID: "app_123",
+		SubmissionID:  "sub_123",
 	}
-	blockedBytes, _ := json.Marshal(blockedErr)
-	var blockedDecoded map[string]any
-	_ = json.Unmarshal(blockedBytes, &blockedDecoded)
-	if blockedDecoded["code"] != "SUBMISSION_CONTRACT_BLOCKED" {
-		t.Errorf("expected code SUBMISSION_CONTRACT_BLOCKED, got %v", blockedDecoded["code"])
+	submitBytes, _ := json.Marshal(submitResponse)
+	var submitDecoded map[string]any
+	_ = json.Unmarshal(submitBytes, &submitDecoded)
+	if submitDecoded["code"] != "OK" || submitDecoded["application_id"] != "app_123" || submitDecoded["submission_id"] != "sub_123" {
+		t.Errorf("submit response = %v, want OK receipt IDs", submitDecoded)
 	}
 
 	// 3. Webhook error response format: map[string]string{"error": "..."}
@@ -1019,7 +1023,7 @@ func compareRoutesWithOperations(astRoutes map[string]bool, operations []apidocs
 		key := fmt.Sprintf("%s %s", op.Method, op.Path)
 		if op.Audience == "operator" {
 			documentedOperator[key] = true
-		} else if op.Audience == "internal-webhook" {
+		} else if op.Audience == "internal-webhook" || op.Audience == "provider-webhook" {
 			documentedWebhook[key] = true
 		}
 	}
@@ -1043,7 +1047,7 @@ func compareRoutesWithOperations(astRoutes map[string]bool, operations []apidocs
 		}
 
 		// 3. Webhook routes
-		if strings.HasPrefix(p, "/api/webhooks/") || strings.HasPrefix(p, "/api/v1/webhooks/") {
+		if strings.HasPrefix(p, "/api/webhooks/") || strings.HasPrefix(p, "/api/v1/webhooks/") || strings.HasPrefix(p, "/webhooks/") {
 			if !documentedWebhook[astRoute] {
 				discrepancies = append(discrepancies, fmt.Sprintf("AST registered webhook route %q is MISSING from OpenAPI WebhookOperations documentation", astRoute))
 			}
@@ -1058,7 +1062,7 @@ func compareRoutesWithOperations(astRoutes map[string]bool, operations []apidocs
 
 	// Verify reverse: every documented operation must exist in AST
 	for _, op := range operations {
-		if op.Audience != "operator" && op.Audience != "internal-webhook" {
+		if op.Audience != "operator" && op.Audience != "internal-webhook" && op.Audience != "provider-webhook" {
 			continue
 		}
 		key := fmt.Sprintf("%s %s", op.Method, op.Path)
@@ -1082,13 +1086,21 @@ func TestTask5_DriftPrevention_ASTVsOpenAPIOperations(t *testing.T) {
 			strings.Join(discrepancies, "\n  - "))
 	}
 
-	var operatorCount, webhookCount int
+	var operatorCount, webhookCount, providerCount int
 	for _, op := range allOps {
+		if op.Audience == "provider-webhook" {
+			providerCount++
+			continue
+		}
 		if op.Audience == "operator" {
 			operatorCount++
 		} else if op.Audience == "internal-webhook" {
 			webhookCount++
 		}
+	}
+
+	if providerCount != 1 {
+		t.Errorf("expected 1 provider operation, got %d", providerCount)
 	}
 
 	// Verify exact counts
@@ -1365,10 +1377,10 @@ func TestTask5_SchemaVsEmittedHandlerResponses(t *testing.T) {
 		"company_revision": 1
 	}`)
 
-	// 8. Gate 422: SUBMISSION_CONTRACT_BLOCKED error payload
+	// 8. Readiness 422 error payload
 	validateComponent("ErrorResponse", `{
-		"code": "SUBMISSION_CONTRACT_BLOCKED",
-		"message": "submit API action is blocked pending explicit resolution of deferred reviewed revisions policy; fail-closed on unapproved submission contract"
+		"code": "IDEMPOTENCY_CONFLICT",
+		"message": "Idempotency-Key was used with a different request"
 	}`)
 
 	// 9. ErrorResponse with field errors (400 validation error)

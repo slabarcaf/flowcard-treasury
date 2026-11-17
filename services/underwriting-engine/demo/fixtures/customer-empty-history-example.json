@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "source_mode": "DEMO",
+  "source_id": "underwriting-schema-example",
+  "source_version": "{{run_id}}-empty-history",
+  "captured_at": "{{run_anchor}}",
+  "source_refs": [
+    {
+      "system": "synthetic-fixture",
+      "record_id": "customer-empty-history-example",
+      "version": "{{run_id}}",
+      "effective_at": "{{run_anchor}}"
+    }
+  ],
+  "customer_id": "acct_bloom001",
+  "account_id": "acct_bloom001",
+  "card_id": "card_synthetic_bloom001",
+  "coverage": {
+    "standing": true,
+    "balance_history": false,
+    "inflow_history": false,
+    "bridge_history": true,
+    "lifetime_defaults": true,
+    "reservations": true,
+    "receivables": true,
+    "classification": true
+  },
+  "standing": {
+    "relationship_started_on": "{{run_anchor_date_minus_9_months}}",
+    "onboarding_complete": true,
+    "active": true,
+    "suspended": false,
+    "provider_account_status": "ACTIVE"
+  },
+  "history_window": {
+    "window_start": "{{run_anchor_date_minus_90_days}}",
+    "window_end": "{{run_anchor_date_minus_1_day}}"
+  },
+  "balance_history": [],
+  "inflow_history": [],
+  "bridges": [],
+  "reservations": [],
+  "receivables": [],
+  "classifications": []
+}

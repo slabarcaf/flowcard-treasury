@@ -33,3 +33,6 @@ enable_vpc_origin_sg_only = true
 
 # Existing CloudFront origin SG
 vpc_origin_security_group_id = "sg-07db7b84d272bbf7b"
+
+# Enable the prepared Go runtime foundation for the develop demo release.
+enable_go_stack_foundation = true

@@ -75,6 +75,8 @@ module "oidc" {
     aws_iam_role.migration_task.arn,
   ]
   frontend_bucket_arn         = module.s3_frontend.bucket_arn
+  go_native_rule_arns         = values(module.alb.go_native_rule_arns)
+  go_native_target_arns       = values(module.alb.go_native_target_groups)
   cloudfront_distribution_arn = var.enable_cloudfront ? module.cloudfront[0].cloudfront_distribution_arn : null
 }
 
@@ -111,6 +113,8 @@ module "vpc" {
 # Application Load Balancer: Private Internal ALB spanning 2 AZs for Node Gateway
 module "alb" {
   source = "../../modules/alb"
+
+  enable_go_native_routes = var.enable_go_stack_foundation
 
   vpc_id                       = module.vpc.vpc_id
   vpc_cidr                     = var.vpc_cidr

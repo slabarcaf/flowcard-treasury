@@ -57,6 +57,17 @@ resource "aws_security_group" "alb" {
     security_groups = [var.node_security_group_id]
   }
 
+  dynamic "egress" {
+    for_each = local.go_native_routes
+    content {
+      description     = "Native Go webhook receiver"
+      from_port       = egress.value.port
+      to_port         = egress.value.port
+      protocol        = "tcp"
+      security_groups = [var.node_security_group_id]
+    }
+  }
+
   tags = {
     Name = "flowcard-demo-alb-sg"
   }

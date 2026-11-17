@@ -1,0 +1,84 @@
+// This file is compiled only via go -overlay into the existing onboarding API
+// test package. No file is written into that service or another checkout.
+package main
+
+import (
+	"context"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/config"
+	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/postgres"
+)
+
+func TestRooty8OwnedGatewayHarness(t *testing.T) {
+	lifetime := 90 * time.Second
+	if value := os.Getenv("OWNED_ONBOARDING_HARNESS_LIFETIME"); value != "" {
+		parsed, err := time.ParseDuration(value)
+		if err != nil || parsed < time.Second || parsed > 15*time.Minute {
+			t.Fatal("invalid owned harness lifetime")
+		}
+		lifetime = parsed
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), lifetime)
+	defer cancel()
+	admin, err := pgxpool.New(ctx, os.Getenv("OWNED_ONBOARDING_ADMIN_URL"))
+	if err != nil {
+		t.Fatal("owned harness admin unavailable")
+	}
+	defer admin.Close()
+	var database, marker string
+	if err := admin.QueryRow(ctx, `SELECT current_database(),shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()`).Scan(&database, &marker); err != nil || database != os.Getenv("OWNED_ONBOARDING_DATABASE") || marker != os.Getenv("OWNED_ONBOARDING_MARKER") {
+		t.Fatal("owned harness target mismatch")
+	}
+	// Require the existing stable role. Its current LOGIN/NOLOGIN attributes
+	// belong to the existing installation and must not be changed by this test.
+	var roleBefore, roleAfter string
+	if err := admin.QueryRow(ctx, `SELECT md5(row_to_json(r)::text) FROM pg_roles r WHERE rolname='onboarding_service'`).Scan(&roleBefore); err != nil {
+		t.Fatal("existing stable onboarding role required")
+	}
+	if err := postgres.RunMigrations(ctx, admin); err != nil {
+		t.Fatal("owned onboarding migrations failed")
+	}
+	if err := admin.QueryRow(ctx, `SELECT md5(row_to_json(r)::text) FROM pg_roles r WHERE rolname='onboarding_service'`).Scan(&roleAfter); err != nil || roleBefore != roleAfter {
+		t.Fatal("stable onboarding role changed")
+	}
+	role := os.Getenv("OWNED_ONBOARDING_ROLE")
+	if !strings.HasPrefix(role, "browser_rt_") {
+		t.Fatal("owned runtime role invalid")
+	}
+	if _, err := admin.Exec(ctx, "GRANT USAGE ON SCHEMA onboarding TO "+pgx.Identifier{role}.Sanitize()+"; GRANT SELECT ON ALL TABLES IN SCHEMA onboarding TO "+pgx.Identifier{role}.Sanitize()+"; GRANT INSERT,UPDATE,DELETE ON onboarding.companies,onboarding.applications TO "+pgx.Identifier{role}.Sanitize()); err != nil {
+		t.Fatal("owned onboarding grants failed")
+	}
+	cfg := &config.Config{DatabaseURL: os.Getenv("OWNED_ONBOARDING_RUNTIME_URL"), ServiceAuthSecret: os.Getenv("OWNED_ONBOARDING_SECRET")}
+	handler, closeFn, err := buildHandler(ctx, cfg)
+	if err != nil {
+		t.Fatal("production onboarding handler unavailable")
+	}
+	if closeFn != nil {
+		defer closeFn()
+	}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	if err := os.WriteFile(os.Getenv("OWNED_ONBOARDING_ADDRESS_FILE"), []byte(server.URL), 0600); err != nil {
+		t.Fatal("owned harness readiness file failed")
+	}
+	// Exit when the parent deletes the control file, or on the hard timeout.
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("owned harness deadline exceeded")
+		case <-ticker.C:
+			if _, err := os.Stat(os.Getenv("OWNED_ONBOARDING_CONTROL_FILE")); os.IsNotExist(err) {
+				return
+			}
+		}
+	}
+}

@@ -6,7 +6,9 @@ Bridge financing underwriting demo and platform.
 
 ## Quick start
 
-Requires Node 20.19+ or 22.12+.
+Requires Node 20.19+ or 22.12+. The Go workspace requires the local Go
+backend profile and invited users described in
+[local demo setup](/docs/demo/local-go-browser.md).
 
 ```sh
 npm install
@@ -15,12 +17,23 @@ npm run dev
 
 ## Key commands
 
+- `npm run dev` starts the local Go browser workspace on port 5175.
+- `npm run dev:legacy` starts the preserved fixture UI.
+- `npm run build:go` builds the Go workspace separately from hosted legacy output.
 - `npm test` runs Vitest.
 - `npm run lint` runs oxlint.
 - `npm run build` type-checks and builds the frontend in `.dev/dist/`.
-- `npm run server:build` builds the Node server in `.dev/server/`.
-- `npm run test:acceptance` runs PostgreSQL acceptance tests.
+- `npm run server:build` cleans and builds the Node compatibility API in
+  `.dev/server/`.
+- `go -C services/funding-collection test -p 1 ./...` runs the Go financial
+  tests with an explicitly configured owned local test database.
 
-See [development setup and operations](docs/development.md), [editing guide](docs/EDITING.md), and [AWS infrastructure runbooks](docs/infra/demo-operations.md).
+Node funding, approval and repayment execution is retired. Node continues to
+serve onboarding proxies and operator sessions. Mapping and historical database
+tooling remain. See the [retirement inventory](/docs/demo/node-funding-retirement.md)
+and [Go Funding runbook](/docs/demo/funding-and-collection-local.md).
+
+See [repository instructions](AGENTS.md) and
+[AWS infrastructure runbooks](docs/infra/demo-operations.md).
 
 Originally built by [@yidi-li-ydl](https://github.com/yidi-li-ydl) in [yidi-li-ydl/flowcard-treasury](https://github.com/yidi-li-ydl/flowcard-treasury). The original commit history is preserved.

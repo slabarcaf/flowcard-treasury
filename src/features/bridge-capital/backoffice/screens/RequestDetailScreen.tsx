@@ -2,6 +2,7 @@
 import type { Customer } from '../../types.js';
 import { evaluate } from '../../policy/eligibility.js';
 import { buildOffer } from '../../policy/pricing.js';
+import { isApprovalValid } from '../../policy/binding.js';
 import { outstandingBalance } from '../../policy/tiers.js';
 import { REGIME_LABELS } from '../../policy/policy.config.js';
 import {
@@ -70,10 +71,12 @@ export function RequestDetailScreen({ office, requestId }: { office: BackOffice;
     return <Empty>Request not found</Empty>;
   }
 
-  const decision = evaluate(request, customer, data.capital, { today });
-  const offer = buildOffer(request);
+  const offer = data.offers[buildOffer(request).id] ?? buildOffer(request);
+  const decision = evaluate({ ...request, term_days: offer.term_days }, customer, data.capital, { today });
   const txn = request.transaction;
-  const outcome = outcomes[request.id];
+  const savedApproval = data.approvals[offer.id];
+  const outcome = outcomes[request.id] ??
+    (savedApproval !== undefined && isApprovalValid(savedApproval, offer) ? 'APPROVED' : undefined);
   const showActions = decision.needs_human_approval && outcome === undefined;
   const b = customer.balance_stats;
 
@@ -161,7 +164,7 @@ export function RequestDetailScreen({ office, requestId }: { office: BackOffice;
 
             {showActions ? (
               <ApprovalPanel
-                request={request}
+                request={{ ...request, term_days: offer.term_days }}
                 customer={customer}
                 capital={data.capital}
                 today={today}

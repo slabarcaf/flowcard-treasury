@@ -60,9 +60,7 @@ describe("End-to-End Fixture Acceptance: Authenticated Node -> Go HTTP", () => {
     const nodeHandler = createRequestHandler({
       port: 0,
       databaseUrl: "fixture",
-      airwallexClientId: "fixture",
-      airwallexApiKey: "fixture",
-      airwallexWebhookSecret: "fixture",
+
       kit5OperatorToken: operatorToken,
       kit5OperatorId: operatorId,
       kit5AllowedOrigins: [allowedOrigin],

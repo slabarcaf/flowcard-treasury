@@ -149,18 +149,33 @@ func TestTask2_AudienceSeparation(t *testing.T) {
 	}
 
 	// 2. Webhook spec checks:
-	// - Must contain exactly 2 webhook receiver paths
+	// - Must contain 2 internal and 1 provider receiver paths
 	// - Must NOT contain operator paths or public health paths
 	// - Must contain WebhookServiceJWT
 	// - Must NOT contain operator session cookie or operator JWT
-	if whDoc.Paths.Len() != 2 {
-		t.Errorf("expected exactly 2 paths in webhook spec, got %d", whDoc.Paths.Len())
+	if whDoc.Paths.Len() != 3 {
+		t.Errorf("expected exactly 3 paths in webhook spec, got %d", whDoc.Paths.Len())
 	}
 	if whDoc.Paths.Find("/api/webhooks/airwallex") == nil {
 		t.Errorf("webhook spec missing /api/webhooks/airwallex")
 	}
 	if whDoc.Paths.Find("/api/v1/webhooks/airwallex") == nil {
 		t.Errorf("webhook spec missing /api/v1/webhooks/airwallex")
+	}
+	provider := whDoc.Paths.Find("/webhooks/airwallex")
+	if provider == nil || provider.Post == nil || provider.Post.Security == nil {
+		t.Fatal("missing provider webhook signature contract")
+	}
+	if whDoc.Components.SecuritySchemes["ProviderSignature"] == nil {
+		t.Fatal("missing provider signature scheme")
+	}
+	for _, requirement := range *provider.Post.Security {
+		if _, ok := requirement["ProviderSignature"]; !ok {
+			t.Error("provider route does not require signature")
+		}
+		if _, ok := requirement["WebhookServiceJWT"]; ok {
+			t.Error("provider route incorrectly accepts internal JWT")
+		}
 	}
 	if whDoc.Paths.Find("/api/companies") != nil {
 		t.Errorf("webhook spec must NOT contain /api/companies")
@@ -218,17 +233,31 @@ func TestTask2_ContractAccuraciesInGeneratedSpecs(t *testing.T) {
 		t.Fatalf("failed to generate operator spec: %v", err)
 	}
 
-	// 1. Submit application endpoint is documented as fail-closed blocked (422)
+	// 1. Submit application documents idempotency, the 202 receipt, and readiness errors.
 	submitPath := opDoc.Paths.Find("/api/onboarding-applications/{id}/submit")
 	if submitPath == nil || submitPath.Post == nil {
 		t.Fatalf("missing POST /api/onboarding-applications/{id}/submit in operator spec")
+	}
+	idempotencyKeyRequired := false
+	for _, parameter := range submitPath.Post.Parameters {
+		if parameter.Value != nil && parameter.Value.Name == "Idempotency-Key" &&
+			parameter.Value.In == "header" && parameter.Value.Required {
+			idempotencyKeyRequired = true
+		}
+	}
+	if !idempotencyKeyRequired {
+		t.Errorf("submit operation must require the Idempotency-Key header")
+	}
+	resp202 := submitPath.Post.Responses.Value("202")
+	if resp202 == nil || resp202.Value == nil || resp202.Value.Headers["Location"] == nil {
+		t.Fatalf("submit operation must document a 202 response with Location")
 	}
 	resp422 := submitPath.Post.Responses.Value("422")
 	if resp422 == nil || resp422.Value == nil {
 		t.Fatalf("missing 422 response in submit operation")
 	}
-	if !strings.Contains(*resp422.Value.Description, "SUBMISSION_CONTRACT_BLOCKED") {
-		t.Errorf("expected 422 description to mention SUBMISSION_CONTRACT_BLOCKED, got %s", *resp422.Value.Description)
+	if !strings.Contains(*resp422.Value.Description, "readiness") {
+		t.Errorf("expected 422 description to mention readiness, got %s", *resp422.Value.Description)
 	}
 
 	// 2. Raw array responses: list platform accounts, submissions, documents
@@ -614,7 +643,7 @@ func TestTask2_LeadPoint6_SchemaValidationAllDocumentedTypes(t *testing.T) {
 			{"type": "EIN", "value": "12-3456789", "issuing_country": "US"}
 		],
 		"people": [
-			{"id": "per_1", "first_name": "Patrick", "last_name": "Collison", "role": "CEO", "date_of_birth": "1988-09-09"}
+			{"id": "per_1", "person_id": "per_1", "first_name": "Patrick", "last_name": "Collison", "role": "CEO", "date_of_birth": "1988-09-09"}
 		],
 		"revision": 1,
 		"created_at": "2026-11-10T10:00:00Z",
@@ -772,7 +801,7 @@ func TestTask2_LeadPoint6_SchemaValidationAllDocumentedTypes(t *testing.T) {
 		t.Errorf("ApplicationListResponse schema validation failed: %v", err)
 	}
 
-	// 12. Blocked /submit request body and response
+	// 12. /submit request, accepted receipt, and validation error shapes
 	submitReqJSON := `{"expected_revision": 1}`
 	if err := validateJSONAgainstSchema(t, schemas["SubmitApplicationRequest"].Value, submitReqJSON); err != nil {
 		t.Errorf("SubmitApplicationRequest schema validation failed: %v", err)
@@ -782,12 +811,13 @@ func TestTask2_LeadPoint6_SchemaValidationAllDocumentedTypes(t *testing.T) {
 		t.Errorf("expected expected_revision 0 to fail min=1 on SubmitApplicationRequest")
 	}
 
-	blockedRespJSON := `{
-		"code": "SUBMISSION_CONTRACT_BLOCKED",
-		"message": "platform submission is fail-closed blocked pending external compliance verification"
+	submitRespJSON := `{
+		"code": "OK",
+		"application_id": "app_123",
+		"submission_id": "sub_123"
 	}`
-	if err := validateJSONAgainstSchema(t, schemas["ErrorResponse"].Value, blockedRespJSON); err != nil {
-		t.Errorf("blocked /submit ErrorResponse schema validation failed: %v", err)
+	if err := validateJSONAgainstSchema(t, schemas["SubmitApplicationResponse"].Value, submitRespJSON); err != nil {
+		t.Errorf("SubmitApplicationResponse schema validation failed: %v", err)
 	}
 
 	// 13. CreateCompanyRequest with min/max string limits and ISO country regex
@@ -797,6 +827,18 @@ func TestTask2_LeadPoint6_SchemaValidationAllDocumentedTypes(t *testing.T) {
 	}`
 	if err := validateJSONAgainstSchema(t, schemas["CreateCompanyRequest"].Value, validCreateCompJSON); err != nil {
 		t.Errorf("CreateCompanyRequest valid schema failed: %v", err)
+	}
+	personContactJSON := `{"legal_name":"Valid Company Name","people":[{"first_name":"Ada","last_name":"Lovelace","nationality":"","email":"","role":"Director","date_of_birth":"1990-01-01"}]}`
+	if err := validateJSONAgainstSchema(t, schemas["CreateCompanyRequest"].Value, personContactJSON); err != nil {
+		t.Errorf("CreateCompanyRequest blank optional person fields schema failed: %v", err)
+	}
+	personContactJSON = `{"legal_name":"Valid Company Name","people":[{"first_name":"Ada","last_name":"Lovelace","nationality":"US","email":"ada@example.test","role":"Director","date_of_birth":"1990-01-01"}]}`
+	if err := validateJSONAgainstSchema(t, schemas["CreateCompanyRequest"].Value, personContactJSON); err != nil {
+		t.Errorf("CreateCompanyRequest valid optional person fields schema failed: %v", err)
+	}
+	personContactJSON = `{"legal_name":"Valid Company Name","people":[{"first_name":"Ada","last_name":"Lovelace","nationality":"USA","email":"invalid-email","role":"Director","date_of_birth":"1990-01-01"}]}`
+	if err := validateJSONAgainstSchema(t, schemas["CreateCompanyRequest"].Value, personContactJSON); err == nil {
+		t.Errorf("expected invalid nationality and email to fail CreateCompanyRequest schema")
 	}
 
 	// legal_name min length violation (1 char < min 2)

@@ -37,6 +37,9 @@ export interface Portal {
   acceptanceFor: (offerId: string) => Acceptance | undefined;
   accept: (request: BridgeRequest, offer: BridgeOffer) => Promise<void>;
   retryPayment: (request: BridgeRequest, offer: BridgeOffer) => Promise<void>;
+  reload: () => Promise<void>;
+  retrying: boolean;
+  actionError: string | null;
 }
 
 export function usePortal(adapter?: DataAdapter): Portal {
@@ -44,7 +47,8 @@ export function usePortal(adapter?: DataAdapter): Portal {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [screen, setScreen] = useState<PortalScreen>({ screen: 'wallet' });
   const [terms, setTerms] = useState<Record<string, number>>({});
-  const [acceptances, setAcceptances] = useState<Record<string, Acceptance>>({});
+  const [retrying, setRetrying] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const customer =
     data === null ? null : (data.customers.find((c) => c.id === customerId) ?? data.customers[0] ?? null);
@@ -55,15 +59,16 @@ export function usePortal(adapter?: DataAdapter): Portal {
   }, []);
 
   const termFor = useCallback(
-    (transactionId: string) => terms[transactionId] ?? DEFAULT_TERM_DAYS,
-    [terms],
+    (transactionId: string) => terms[transactionId] ??
+      Object.values(data?.offers ?? {}).find((offer) => offer.transaction_id === transactionId)?.term_days ?? DEFAULT_TERM_DAYS,
+    [terms, data],
   );
 
   const setTerm = useCallback((transactionId: string, termDays: number) => {
     setTerms((prev) => ({ ...prev, [transactionId]: termDays }));
   }, []);
 
-  const acceptanceFor = useCallback((offerId: string) => acceptances[offerId], [acceptances]);
+  const acceptanceFor = useCallback((offerId: string) => data?.acceptances[offerId], [data]);
 
   const accept = useCallback(
     async (request: BridgeRequest, offer: BridgeOffer) => {
@@ -88,47 +93,54 @@ export function usePortal(adapter?: DataAdapter): Portal {
         type: 'ACCEPTANCE',
         text: `Accepted ${usd(offer.principal)} / ${offer.term_days} days / ${usd(offer.fee, { cents: true })}.`,
       });
-      setAcceptances((prev) => ({ ...prev, [offer.id]: acceptance }));
-      setScreen({ screen: 'accepted', transactionId: request.transaction.id });
       await reload();
+      setScreen({ screen: 'accepted', transactionId: request.transaction.id });
     },
     [client, reload],
   );
 
   const retryPayment = useCallback(
     async (request: BridgeRequest, offer: BridgeOffer) => {
-      const bridge: Bridge = {
-        id: `bridge_${request.id}`,
-        customer_id: request.customer_id,
-        transaction_id: request.transaction.id,
-        principal: offer.principal,
-        fee: offer.fee,
-        term_days: offer.term_days,
-        status: 'DISBURSED',
-        disbursed_at: AS_OF,
-        due_date: offer.due_date,
-        principal_outstanding: offer.principal,
-        fee_outstanding: offer.fee,
-        accrued_fee: 0,
-      };
-      await client.saveBridge(bridge);
-      await client.disburse(bridge);
-      await client.appendTimeline({
-        at: `${AS_OF}T09:22:00Z`,
-        customer_id: request.customer_id,
-        bridge_id: bridge.id,
-        type: 'DISBURSEMENT',
-        text: `${usd(offer.principal)} added to your wallet.`,
-      });
-      await client.appendTimeline({
-        at: `${AS_OF}T09:23:00Z`,
-        customer_id: request.customer_id,
-        bridge_id: bridge.id,
-        type: 'NOTICE',
-        text: `Card payment to ${request.transaction.merchant_name} retried and approved.`,
-      });
-      await reload();
-      setScreen({ screen: 'bridge', bridgeId: bridge.id });
+      setRetrying(true);
+      setActionError(null);
+      try {
+        const bridge: Bridge = {
+          id: `bridge_${request.id}`,
+          customer_id: request.customer_id,
+          transaction_id: request.transaction.id,
+          principal: offer.principal,
+          fee: offer.fee,
+          term_days: offer.term_days,
+          status: 'DISBURSED',
+          disbursed_at: AS_OF,
+          due_date: offer.due_date,
+          principal_outstanding: offer.principal,
+          fee_outstanding: offer.fee,
+          accrued_fee: 0,
+        };
+        const existing = await client.getBridge(bridge.id);
+        if (existing !== null) {
+          if (existing.customer_id !== bridge.customer_id || existing.transaction_id !== bridge.transaction_id ||
+            existing.principal !== bridge.principal || existing.fee !== bridge.fee || existing.term_days !== bridge.term_days ||
+            existing.due_date !== bridge.due_date) {
+            throw new Error('This payment was already funded on different terms.');
+          }
+          await reload();
+          setScreen({ screen: 'bridge', bridgeId: existing.id });
+          return;
+        }
+        const transfer = await client.disburse(bridge);
+        if (transfer.status !== 'SETTLED') throw new Error('The transfer has not settled.');
+        if (await client.getBridge(bridge.id) === null) {
+          throw new Error('The settled bridge record is unavailable. Check its status before retrying.');
+        }
+        await reload();
+        setScreen({ screen: 'bridge', bridgeId: bridge.id });
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'The fixture payment could not be retried.');
+      } finally {
+        setRetrying(false);
+      }
     },
     [client, reload],
   );
@@ -145,6 +157,9 @@ export function usePortal(adapter?: DataAdapter): Portal {
     acceptanceFor,
     accept,
     retryPayment,
+    reload,
+    retrying,
+    actionError,
   };
 }
 

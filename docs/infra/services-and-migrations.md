@@ -292,12 +292,12 @@ standard loaders. The November 12 operator checkpoint reports their values
 provisioned and services deployed; this document does not independently verify
 AWS state. Never store secret payloads in the tracked foundation file.
 
-Platform submission gates remain active:
-
-- `POST /api/onboarding-applications/{id}/submit` remains fail-closed with
-  `422 SUBMISSION_CONTRACT_BLOCKED` until the revision policy is approved.
-- `UnverifiedPlatformContractGate` remains active.
-- Text-only RFI behavior is unresolved and requires confirmation.
+Platform submission readiness is checked offline for the mapped US contract.
+Sandbox demo submissions may omit `customer_agreements` when no acceptance was
+collected; non-sandbox submissions require complete recorded acceptance. A
+successful local readiness check does not verify Airwallex credentials,
+Connected Accounts capability, API scopes, or provider responses. Text-only RFI
+behavior remains unverified against the live sandbox.
 
 The `$150/month` budget amount and notification address remain unapproved. The
 November 12 operator checkpoint reports PostgreSQL `17.11`; verify current

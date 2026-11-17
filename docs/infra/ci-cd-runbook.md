@@ -1,5 +1,11 @@
 # FlowCard AWS CI/CD Operational Runbook
 
+The current Go-only pipeline is documented in
+[Go service deployment](go-deployment.md). It retains `aws-demo.yml` but defaults
+to sealed build artifacts, with an explicit deployment/callback approval gate.
+The older Node/three-service procedure below is retained as historical recovery
+context, not the active release path.
+
 ## Overview
 
 Run commands from the repository root. This runbook explains how to start and

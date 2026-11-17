@@ -3,6 +3,10 @@
 .env.*
 node_modules
 .dev
+.worktrees
+**/.dev
+**/.env
+**/.env.*
 dist
 tests
 src

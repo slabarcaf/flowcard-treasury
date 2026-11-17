@@ -944,12 +944,21 @@ def test_github_actions_oidc_and_ci_safety():
         "Workflow must restrict permissions and scope id-token: write strictly to deploy-demo."
     )
 
+    action_refs = re.findall(r"^\s*uses:\s*([^\s#]+)", workflow_text, re.MULTILINE)
+    remote_action_refs = [
+        action_ref for action_ref in action_refs
+        if not action_ref.startswith("./")
+    ]
     assert_test(
         "Workflow pins 3rd-party actions to 40-character commit SHAs",
-        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" in workflow_text and
-        "actions/setup-node@1e60f63919601466da006dd95c14db523d29e30e" in workflow_text and
-        "actions/setup-go@41dfa10bad2bb2aeab7376767893c37ca6b03950" in workflow_text and
-        "aws-actions/configure-aws-credentials@ece51b4e234855cc5e032f2f12c983d9ab04a570" in workflow_text,
+        bool(remote_action_refs) and
+        all(
+            re.fullmatch(
+                r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*@[0-9a-f]{40}",
+                action_ref,
+            )
+            for action_ref in remote_action_refs
+        ),
         "All GitHub Actions must be pinned to immutable 40-character commit SHAs."
     )
 

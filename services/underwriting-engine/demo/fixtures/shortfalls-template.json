@@ -1,0 +1,84 @@
+{
+  "source_mode": "DEMO",
+  "provenance": "Synthetic authenticated shortfall-read mock templates. Task E renders run-specific IDs and UTC timestamps; no live Airwallex response is represented.",
+  "records": [
+    {
+      "scenario_id": "eligible",
+      "response": {
+        "id": "{{eligible_shortfall_id}}",
+        "customer_id": "acct_bloom001",
+        "account_id": "acct_bloom001",
+        "card_id": "card_synthetic_bloom001",
+        "outcome": "SHORTFALL_DETECTED",
+        "reason": null,
+        "currency": "USD",
+        "attempted_amount_cents": 900000,
+        "available_balance_cents": 200000,
+        "shortfall_cents": 700000,
+        "canonical_event_id": "{{eligible_canonical_event_id}}",
+        "transaction_id": "{{eligible_parent_transaction_id}}",
+        "lifecycle_id": "{{eligible_lifecycle_id}}",
+        "created_at": "{{run_anchor_minus_30_seconds}}",
+        "provider_created_at": "{{run_anchor_minus_60_seconds}}",
+        "provider_transacted_at": "{{run_anchor_minus_60_seconds}}",
+        "provider_updated_at": "{{run_anchor_minus_60_seconds}}",
+        "balance_requested_at": "{{run_anchor_minus_10_seconds}}",
+        "balance_observed_at": "{{run_anchor_minus_5_seconds}}",
+        "requires_recheck": true,
+        "amount_semantics": "current_need_at_balance_observation"
+      }
+    },
+    {
+      "scenario_id": "capacity_exceeded",
+      "response": {
+        "id": "{{capacity_exceeded_shortfall_id}}",
+        "customer_id": "acct_atlas001",
+        "account_id": "acct_atlas001",
+        "card_id": "card_synthetic_atlas001",
+        "outcome": "SHORTFALL_DETECTED",
+        "reason": null,
+        "currency": "USD",
+        "attempted_amount_cents": 900000,
+        "available_balance_cents": 200000,
+        "shortfall_cents": 700000,
+        "canonical_event_id": "{{capacity_exceeded_canonical_event_id}}",
+        "transaction_id": "{{capacity_exceeded_parent_transaction_id}}",
+        "lifecycle_id": "{{capacity_exceeded_lifecycle_id}}",
+        "created_at": "{{run_anchor_minus_30_seconds}}",
+        "provider_created_at": "{{run_anchor_minus_60_seconds}}",
+        "provider_transacted_at": "{{run_anchor_minus_60_seconds}}",
+        "provider_updated_at": "{{run_anchor_minus_60_seconds}}",
+        "balance_requested_at": "{{run_anchor_minus_10_seconds}}",
+        "balance_observed_at": "{{run_anchor_minus_5_seconds}}",
+        "requires_recheck": true,
+        "amount_semantics": "current_need_at_balance_observation"
+      }
+    },
+    {
+      "scenario_id": "missing_receivable_dates",
+      "response": {
+        "id": "{{missing_receivable_dates_shortfall_id}}",
+        "customer_id": "acct_nova001",
+        "account_id": "acct_nova001",
+        "card_id": "card_synthetic_nova001",
+        "outcome": "SHORTFALL_DETECTED",
+        "reason": null,
+        "currency": "USD",
+        "attempted_amount_cents": 900000,
+        "available_balance_cents": 200000,
+        "shortfall_cents": 700000,
+        "canonical_event_id": "{{missing_receivable_dates_canonical_event_id}}",
+        "transaction_id": "{{missing_receivable_dates_parent_transaction_id}}",
+        "lifecycle_id": "{{missing_receivable_dates_lifecycle_id}}",
+        "created_at": "{{run_anchor_minus_30_seconds}}",
+        "provider_created_at": "{{run_anchor_minus_60_seconds}}",
+        "provider_transacted_at": "{{run_anchor_minus_60_seconds}}",
+        "provider_updated_at": "{{run_anchor_minus_60_seconds}}",
+        "balance_requested_at": "{{run_anchor_minus_10_seconds}}",
+        "balance_observed_at": "{{run_anchor_minus_5_seconds}}",
+        "requires_recheck": true,
+        "amount_semantics": "current_need_at_balance_observation"
+      }
+    }
+  ]
+}

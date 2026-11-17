@@ -36,14 +36,16 @@ per-type precision gate.
 - The repo is a React, TypeScript, and Vite frontend. `src/services/` contains
   mock CRM and agent clients, and `src/components/SignalExtraction.tsx`
   presents the demo extraction flow.
-- The [Airwallex bridge ledger plan](/docs/plans/20261021-airwallex-bridge-ledger-implementation-plan.md)
-  establishes the server-side TypeScript and PostgreSQL foundation.
-- The [Salesforce snapshot plan](/docs/plans/20261021-salesforce-snapshot-implementation-plan.md)
+- The TypeScript API and PostgreSQL ledger are implemented under
+  `server/src/`; repository boundaries are summarized in
+  [backend development guidance](/AGENTS.md#backend-development).
+- The [Salesforce snapshot plan](/docs/plans/completed/20261021-salesforce-snapshot-implementation-plan.md)
   owns the internal customer roster and atomic daily Salesforce snapshots. This
   plan consumes its published snapshot contract and does not add another CRM
   sync path.
-- The authoritative behavior is described in the [Kit 5 source of truth](/docs/requirements/Airwallex%20Hackathon_req_1.md)
-  and the [requirements gap analysis](/docs/requirements/Airwallex%20Hackathon_req_2.md).
+- The authoritative underwriting rules and open requirements are summarized in
+  the [consolidated requirements](/docs/requirements/README.md#underwriting-and-capital-policy)
+  and its [open requirements](/docs/requirements/README.md#open-requirements).
 - The [Typesafe.ai signal-definition backlog item](/docs/backlog/work-with-typesafe-jev-on-signal-definitions.md)
   records the future collaboration with Jev. Its result gates production
   automation for the affected signal types.

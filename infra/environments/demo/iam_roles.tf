@@ -282,9 +282,9 @@ resource "aws_iam_policy" "migration_execution" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = [
+        Resource = concat([
           module.secrets.secret_arns["flowcard/db/migrate"]
-        ]
+        ], var.enable_go_stack_foundation ? [module.secrets.secret_arns["flowcard/db/app"]] : [])
       }
     ]
   })

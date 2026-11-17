@@ -25,6 +25,11 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "code",
+                "field",
+                "message"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -117,6 +122,12 @@
       }
     },
     "securitySchemes": {
+      "ProviderSignature": {
+        "description": "Computed hex HMAC-SHA256(timestamp string + original body), using notification URL secret. Supply signature, never the shared secret.",
+        "in": "header",
+        "name": "x-signature",
+        "type": "apiKey"
+      },
       "WebhookServiceJWT": {
         "bearerFormat": "JWT",
         "description": "Internal service-to-service JWT assertion for webhook forwarding (Issuer: flowcard-node-proxy, Audience: flowcard-onboarding-webhooks, Subject: node-webhook-forwarder).",
@@ -126,7 +137,7 @@
     }
   },
   "info": {
-    "description": "Internal receiver endpoint for platform webhook events forwarded by the Node gateway proxy. Requires service-to-service JWT assertion with audience flowcard-onboarding-webhooks. Events are durably persisted to inbox before acknowledgement.",
+    "description": "Direct provider intake verifies x-signature over x-timestamp and original body. Internal delivery paths separately require service JWT assertions with audience flowcard-onboarding-webhooks. Receipt is committed before acknowledgement; credentials are not interchangeable.",
     "title": "FlowCard Onboarding Webhook Receiver API",
     "version": "1.0.0"
   },
@@ -195,6 +206,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Conflicting event content committed as evidence"
           },
           "413": {
             "content": {
@@ -302,6 +323,16 @@
               }
             }
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Conflicting event content committed as evidence"
+          },
           "413": {
             "content": {
               "application/json": {
@@ -339,6 +370,138 @@
           }
         ],
         "summary": "Ingest Airwallex platform webhook",
+        "tags": [
+          "Webhooks"
+        ]
+      }
+    },
+    "/webhooks/airwallex": {
+      "post": {
+        "description": "HMAC-SHA256 over the exact x-timestamp string followed by original request bytes. One timestamp/signature header each. Maximum body 10 MiB, future-only five-minute timestamp tolerance; old timestamps accepted. Body id/name required, duplicate JSON keys rejected. Server owns sandbox/production scope. Acknowledgement follows durable commit. No internal JWT substitutes for provider authentication.",
+        "operationId": "receiveProviderOnboardingWebhook",
+        "parameters": [
+          {
+            "description": "Unix milliseconds, as originally signed",
+            "in": "header",
+            "name": "x-timestamp",
+            "required": true,
+            "schema": {
+              "maxLength": 19,
+              "minLength": 1,
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboundWebhookPayload"
+              }
+            }
+          },
+          "description": "Original provider JSON object; account.* or rfi.* only; no event-ID header fallback",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAcknowledgeResponse"
+                }
+              }
+            },
+            "description": "Original receipt or unchanged duplicate committed durably"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid object, fields, scope or timestamp"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Missing/invalid signature or timestamp too far ahead"
+          },
+          "408": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Request body timed out"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Changed event ID payload stored as conflict evidence; unfinished work quarantined"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Event belongs to another service"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Body exceeds inclusive 10 MiB limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Receipt could not be committed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookErrorResponse"
+                }
+              }
+            },
+            "description": "Intake secret/scope or repository unconfigured"
+          }
+        },
+        "security": [
+          {
+            "ProviderSignature": []
+          }
+        ],
+        "summary": "Receive signed provider account/RFI events",
         "tags": [
           "Webhooks"
         ]

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -27,6 +28,7 @@ import (
 
 func main() {
 	portFlag := flag.Int("port", 0, "HTTP port for company-onboarding API server (overrides PORT environment variable)")
+	webhookOnlyFlag := flag.Bool("webhook-only", false, "Expose only direct onboarding webhook intake and liveness")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -34,6 +36,7 @@ func main() {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 
+	cfg.WebhookOnly = *webhookOnlyFlag
 	if *portFlag > 0 {
 		cfg.Port = *portFlag
 	}
@@ -57,13 +60,13 @@ func run(ctx context.Context, cfg *config.Config) error {
 		defer closeFn()
 	}
 
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
+	listener, err := net.Listen("tcp", net.JoinHostPort(cfg.HTTPHost, strconv.Itoa(cfg.Port)))
 	if err != nil {
 		return fmt.Errorf("failed to listen on port %d: %w", cfg.Port, err)
 	}
 	defer listener.Close()
 
-	log.Printf("company-onboarding API server listening on :%d (%s)", cfg.Port, cfg.Environment)
+	log.Printf("company-onboarding API server listening on %s (%s)", listener.Addr().String(), cfg.Environment)
 	return runWithListener(ctx, cfg, listener, handler, 5*time.Second)
 }
 
@@ -101,6 +104,23 @@ func buildHandlerWithDependencies(ctx context.Context, cfg *config.Config, opAut
 		repo = postgres.NewRepository(pool)
 	} else {
 		log.Println("DATABASE_URL not configured; repository running unconfigured (endpoints return safe 503)")
+	}
+
+	if cfg.WebhookOnly {
+		if repo == nil || cfg.WebhookSecret == "" || cfg.WebhookEnvironment == "" {
+			if closeFn != nil {
+				closeFn()
+			}
+			return nil, nil, errors.New("webhook_only_requires_database_secret_and_environment")
+		}
+		providerHandler, err := webhooks.NewProviderHandler(repo, []byte(cfg.WebhookSecret), cfg.WebhookEnvironment)
+		if err != nil {
+			if closeFn != nil {
+				closeFn()
+			}
+			return nil, nil, err
+		}
+		return webhookOnlyRoutes(providerHandler), closeFn, nil
 	}
 
 	// 1. Authenticator: configure from ServiceAuthSecret if set, or default to DenyAll (fails closed)
@@ -159,7 +179,7 @@ func buildHandlerWithDependencies(ctx context.Context, cfg *config.Config, opAut
 	}
 
 	// 3. Platform contract gate: external gates fail closed
-	gate := validation.UnverifiedPlatformContractGate{}
+	gate := validation.VerifiedUSBusinessContractGate{}
 
 	server := internalHttp.NewServer(repo, opAuth, gate, store)
 
@@ -169,6 +189,19 @@ func buildHandlerWithDependencies(ctx context.Context, cfg *config.Config, opAut
 		server.WithWebhookHandler(whHandler, whAuth)
 	}
 
+	var providerRepo webhooks.Repository
+	if repo != nil {
+		providerRepo = repo
+	}
+	providerHandler, err := webhooks.NewProviderHandler(providerRepo, []byte(cfg.WebhookSecret), cfg.WebhookEnvironment)
+	if err != nil {
+		if closeFn != nil {
+			closeFn()
+		}
+		return nil, nil, err
+	}
+	server.WithProviderWebhookHandler(providerHandler)
+
 	// 5. Documentation handler: public offline Swagger UI documentation
 	server.WithDocsHandler(apidocs.Handler())
 
@@ -176,7 +209,7 @@ func buildHandlerWithDependencies(ctx context.Context, cfg *config.Config, opAut
 }
 
 func newHandler() http.Handler {
-	server := internalHttp.NewServer(nil, internalHttp.DenyAllAuthenticator{}, validation.UnverifiedPlatformContractGate{}, storage.NewUnavailableStore("storage not configured"))
+	server := internalHttp.NewServer(nil, internalHttp.DenyAllAuthenticator{}, validation.VerifiedUSBusinessContractGate{}, storage.NewUnavailableStore("storage not configured"))
 	return server.Routes()
 }
 

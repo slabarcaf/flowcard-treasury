@@ -35,7 +35,7 @@ export function CustomersScreen({ office }: { office: BackOffice }) {
   return (
     <Card padded={false}>
       <div style={{ padding: `${space['2xl']} ${space['2xl']} 0` }}>
-        <CardHeader title="Customers" meta={`${data.customers.length} on the platform`} />
+        <CardHeader title="Demo portfolio" meta={`${data.customers.length} demo customers`} />
       </div>
       <Table>
         <thead>

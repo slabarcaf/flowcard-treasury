@@ -511,11 +511,10 @@ func TestApplicationSuccessLifecycle(t *testing.T) {
 		t.Errorf("Status() = %q, want DRAFT", app.Status())
 	}
 
-	// 1. Setup valid onboarding details and attach document
+	// 1. Setup sandbox onboarding details without collecting demo-only consent.
 	details := domain.PlatformOnboardingDetails{
 		IndustryCategoryCode: "FINANCIAL_SERVICES",
 		IntendedProducts:     []string{"PAYMENTS"},
-		CustomerAgreements:   helperValidConsent(),
 	}
 	if err := app.UpdateOnboardingDetails(details); err != nil {
 		t.Fatalf("UpdateOnboardingDetails() failed: %v", err)
@@ -1137,6 +1136,82 @@ func TestApplicationDeepCopyAndAliasingSafety(t *testing.T) {
 	gotAgain, _ := app.Platform().OnboardingDetails.FindPersonDetails("person_1")
 	if gotAgain.PlatformRoles[0] == "MUTATED_FROM_GETTER" {
 		t.Errorf("PlatformRoles was mutated via getter return slice")
+	}
+}
+
+func TestDraftOnboardingDetailsUseLiveCompanyReferences(t *testing.T) {
+	t.Parallel()
+
+	snapshot := helperValidCompany(t, "comp_live_person")
+	person := domain.Person{
+		ID:          "person_removed_from_live_company",
+		FirstName:   "Ada",
+		LastName:    "Lovelace",
+		Role:        "Director",
+		DateOfBirth: "1985-01-01",
+	}
+	if err := snapshot.AddPerson(person); err != nil {
+		t.Fatalf("Company.AddPerson() failed: %v", err)
+	}
+	liveCompany := snapshot.DeepCopy()
+	if err := liveCompany.RemovePerson(person.ID); err != nil {
+		t.Fatalf("Company.RemovePerson() failed: %v", err)
+	}
+
+	createdAt := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	app, err := domain.ReconstituteOnboardingApplication(domain.ReconstituteApplicationParams{
+		ID:          "app_live_person",
+		Company:     snapshot,
+		LiveCompany: liveCompany,
+		Platform: domain.ApplicationPlatform{
+			Name: "AIRWALLEX",
+			OnboardingDetails: domain.PlatformOnboardingDetails{
+				People: []domain.PersonPlatformDetails{{PersonID: person.ID, PlatformRoles: []string{"DIRECTOR"}}},
+			},
+		},
+		Status:    domain.ApplicationStatusDraft,
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
+		Revision:  1,
+	})
+	if err != nil {
+		t.Fatalf("ReconstituteOnboardingApplication() failed: %v", err)
+	}
+	if _, exists := app.Company().Person(person.ID); exists {
+		t.Fatalf("Company() returned a person absent from the live draft company")
+	}
+
+	staleDetails := domain.PlatformOnboardingDetails{
+		People: []domain.PersonPlatformDetails{{PersonID: person.ID, PlatformRoles: []string{"BENEFICIAL_OWNER"}}},
+	}
+	if err := app.UpdateOnboardingDetails(staleDetails); err == nil {
+		t.Fatal("UpdateOnboardingDetails() accepted a person removed from the live Company")
+	}
+	if got := app.Platform().OnboardingDetails.People[0].PlatformRoles[0]; got != "DIRECTOR" {
+		t.Fatalf("failed update changed saved role to %q, want prior DIRECTOR", got)
+	}
+
+	if err := app.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{}); err != nil {
+		t.Fatalf("UpdateOnboardingDetails() could not repair the removed-person reference: %v", err)
+	}
+
+	withoutLiveCompany, err := domain.ReconstituteOnboardingApplication(domain.ReconstituteApplicationParams{
+		ID:        "app_missing_live_company",
+		Company:   snapshot,
+		Platform:  domain.ApplicationPlatform{Name: "AIRWALLEX"},
+		Status:    domain.ApplicationStatusDraft,
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
+		Revision:  1,
+	})
+	if err != nil {
+		t.Fatalf("ReconstituteOnboardingApplication() without live context failed: %v", err)
+	}
+	err = withoutLiveCompany.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{
+		People: []domain.PersonPlatformDetails{{PersonID: person.ID, PlatformRoles: []string{"DIRECTOR"}}},
+	})
+	if !errors.Is(err, domain.ErrLiveCompanyUnavailable) {
+		t.Fatalf("UpdateOnboardingDetails() error = %v, want ErrLiveCompanyUnavailable", err)
 	}
 }
 

@@ -94,3 +94,14 @@ variable "cloudfront_distribution_arn" {
     error_message = "cloudfront_distribution_arn must be null or an exact distribution ARN."
   }
 }
+variable "go_native_rule_arns" {
+  type        = list(string)
+  default     = []
+  description = "Exact prepared Go listener-rule ARNs; no general ALB mutation permission"
+}
+
+variable "go_native_target_arns" {
+  type        = list(string)
+  default     = []
+  description = "Exact Go target groups for release health verification"
+}

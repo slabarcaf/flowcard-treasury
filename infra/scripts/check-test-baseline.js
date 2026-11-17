@@ -228,6 +228,54 @@ export function evaluateFailures(testResults) {
   };
 }
 
+const MAX_FAILURE_DETAIL_MESSAGES = 8;
+const MAX_FAILURE_DETAIL_LENGTH = 1800;
+
+function sanitizeFailureMessage(message) {
+  return String(message)
+    .replace(/((?:authorization|proxy-authorization)\s*[:=]\s*(?:bearer|basic)\s+)[^\s"'`,;]+/gi, "$1[REDACTED]")
+    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [REDACTED]")
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[REDACTED]@")
+    .replace(/\b(AKIA[0-9A-Z]{16}|(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{12,}|sk_(?:live|test)_[A-Za-z0-9]{12,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g, "[REDACTED]")
+    .replace(/\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|CREDENTIAL|API[_-]?KEY|ACCESS[_-]?KEY)[A-Z0-9_]*\s*[:=]\s*)[^\s,;"']+/gi, "$1[REDACTED]");
+}
+
+function printUnexpectedFailureDetails(reportData, unexpectedFailures) {
+  const unexpectedFailureSet = new Set(unexpectedFailures);
+  const details = [];
+
+  for (const fileResult of reportData.testResults || []) {
+    const rawPath = fileResult.name || "";
+    const normalizedPath = rawPath.includes("tests/")
+      ? "tests/" + rawPath.split("tests/")[1]
+      : rawPath;
+
+    for (const assertion of fileResult.assertionResults || []) {
+      if (assertion.status !== "failed") continue;
+      const testId = `${normalizedPath} :: ${assertion.fullName}`;
+      if (!unexpectedFailureSet.has(testId)) continue;
+
+      for (const failureMessage of assertion.failureMessages || []) {
+        details.push({ testId, failureMessage });
+      }
+    }
+  }
+
+  if (details.length === 0) return;
+
+  console.error("Failure details (assertion messages, sanitized and bounded):");
+  for (const { testId, failureMessage } of details.slice(0, MAX_FAILURE_DETAIL_MESSAGES)) {
+    const sanitizedMessage = sanitizeFailureMessage(failureMessage);
+    const boundedMessage = sanitizedMessage.length > MAX_FAILURE_DETAIL_LENGTH
+      ? `${sanitizedMessage.slice(0, MAX_FAILURE_DETAIL_LENGTH)}… [truncated]`
+      : sanitizedMessage;
+    console.error(`  [DETAIL] ${testId}\n${boundedMessage}`);
+  }
+  if (details.length > MAX_FAILURE_DETAIL_MESSAGES) {
+    console.error(`  [DETAIL] ${details.length - MAX_FAILURE_DETAIL_MESSAGES} additional assertion failure message(s) omitted.`);
+  }
+}
+
 // Run CLI when invoked directly
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isMain) {
@@ -301,6 +349,7 @@ if (isMain) {
     for (const fail of evaluation.unexpectedFailures) {
       console.error(`  [FAIL] ${fail}`);
     }
+    printUnexpectedFailureDetails(reportData, evaluation.unexpectedFailures);
     process.exit(1);
   }
 

@@ -91,9 +91,7 @@ resource "aws_ecs_task_definition" "node_gateway" {
           { name = "NODE_ENV", value = "production" },
           { name = "PORT", value = "3000" },
           { name = "KIT5_OPERATOR_ID", value = "flowcard-operator" },
-          { name = "KIT5_ALLOWED_ORIGINS", value = join(",", var.allowed_origins) },
-          { name = "REMOTE_AUTH_REPAYMENT_TERM", value = "asap" },
-          { name = "SALESFORCE_SNAPSHOT_MODE", value = "demo" }
+          { name = "KIT5_ALLOWED_ORIGINS", value = join(",", var.allowed_origins) }
         ],
         var.enable_proposed_onboarding_integration ? [
           { name = "ONBOARDING_SERVICE_URL", value = "http://onboarding-api.flowcard.internal:8080" }
@@ -156,6 +154,9 @@ resource "aws_ecs_service" "node_gateway" {
     container_name   = "node-gateway"
     container_port   = 3000
   }
+
+  # Release tooling owns active revisions/counts/target attachments after bootstrap.
+  lifecycle { ignore_changes = [task_definition, desired_count, load_balancer] }
 
   deployment_circuit_breaker {
     enable   = true
@@ -263,6 +264,9 @@ resource "aws_ecs_service" "go_api" {
     registry_arn = aws_service_discovery_service.go_api.arn
   }
 
+  # Release tooling owns active revisions/counts/target attachments after bootstrap.
+  lifecycle { ignore_changes = [task_definition, desired_count, load_balancer] }
+
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -352,6 +356,9 @@ resource "aws_ecs_service" "go_worker" {
     security_groups  = [var.go_worker_security_group_id]
     assign_public_ip = false
   }
+
+  # Release tooling owns active revisions/counts/target attachments after bootstrap.
+  lifecycle { ignore_changes = [task_definition, desired_count, load_balancer] }
 
   deployment_circuit_breaker {
     enable   = true

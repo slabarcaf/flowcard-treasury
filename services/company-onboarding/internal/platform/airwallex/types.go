@@ -28,7 +28,7 @@ type RevenueEstimate struct {
 // AccountUsage captures expected platform utilization and revenue estimates.
 type AccountUsage struct {
 	EstimatedMonthlyRevenue *RevenueEstimate `json:"estimated_monthly_revenue,omitempty"`
-	ProductReference        string           `json:"product_reference,omitempty"`
+	ProductReference        []string         `json:"product_reference,omitempty"`
 }
 
 // BusinessAttachment links an uploaded file to business verification.
@@ -61,6 +61,7 @@ type BusinessDetails struct {
 	IndustryCategoryCode         string               `json:"industry_category_code,omitempty"`
 	BusinessIdentifiers          []BusinessIdentifier `json:"business_identifiers,omitempty"`
 	RegistrationAddress          Address              `json:"registration_address"`
+	BusinessAddress              *Address             `json:"business_address,omitempty"`
 	OperatingCountry             []string             `json:"operating_country,omitempty"`
 	AccountUsage                 *AccountUsage        `json:"account_usage,omitempty"`
 	Attachments                  *BusinessAttachments `json:"attachments,omitempty"`
@@ -165,7 +166,7 @@ type AccountCreateDetails struct {
 // AccountCreateRequest represents the outbound body for POST /api/v1/accounts/create.
 type AccountCreateRequest struct {
 	AccountDetails     AccountCreateDetails `json:"account_details"`
-	CustomerAgreements CustomerAgreements   `json:"customer_agreements"`
+	CustomerAgreements *CustomerAgreements  `json:"customer_agreements,omitempty"`
 	PrimaryContact     PrimaryContact       `json:"primary_contact"`
 }
 

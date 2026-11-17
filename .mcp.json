@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "airwallex-docs": {
+      "type": "http",
+      "url": "https://mcp.sandbox.airwallex.com/docs"
+    }
+  }
+}

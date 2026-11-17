@@ -4,15 +4,11 @@ import { resolve } from "node:path";
 import {
   loadConfig,
   parseOnboardingProxyConfig,
-  validateAirwallexBaseUrl,
 } from "../../server/src/config.js";
 import { handleRequest } from "../../server/src/http/server.js";
 
 const validEnv = {
   DATABASE_URL: "postgres://localhost/flowcard",
-  AIRWALLEX_CLIENT_ID: "local-client",
-  AIRWALLEX_API_KEY: "local-secret",
-  AIRWALLEX_WEBHOOK_SECRET: "webhook-secret",
 };
 
 const approvedRuntimeFixture = JSON.parse(readFileSync(
@@ -28,24 +24,14 @@ const approvedRuntimeFixture = JSON.parse(readFileSync(
 describe("server configuration", () => {
   it("reports missing required environment variables", () => {
     expect(() => loadConfig({})).toThrow("DATABASE_URL");
-    const { AIRWALLEX_WEBHOOK_SECRET: _secret, ...missingWebhookSecret } = validEnv;
-    expect(() => loadConfig(missingWebhookSecret)).toThrow("AIRWALLEX_WEBHOOK_SECRET");
   });
 
   it("loads required values from the environment", () => {
     expect(loadConfig(validEnv)).toEqual({
       port: 3000,
       databaseUrl: validEnv.DATABASE_URL,
-      airwallexBaseUrl: "https://api.sandbox.airwallex.com",
-      airwallexClientId: validEnv.AIRWALLEX_CLIENT_ID,
-      airwallexApiKey: validEnv.AIRWALLEX_API_KEY,
-      airwallexWebhookSecret: validEnv.AIRWALLEX_WEBHOOK_SECRET,
-    });
-  });
 
-  it("loads the optional Salesforce snapshot read token", () => {
-    expect(loadConfig({ ...validEnv, SALESFORCE_SNAPSHOT_READ_TOKEN: "  read-secret  " }).salesforceSnapshotReadToken)
-      .toBe("read-secret");
+    });
   });
 
   it("loads server-only Kit 5 operator authentication configuration", () => {
@@ -56,27 +42,6 @@ describe("server configuration", () => {
     });
     expect(config.kit5OperatorToken).toBe("runtime-operator-token");
     expect(config.kit5AllowedOrigins).toEqual(["https://demo.example", "https://local.example"]);
-  });
-
-  it("loads Nova Global Account settings only when their format and USD currency are valid", () => {
-    const config = loadConfig({
-      ...validEnv,
-      KIT5_NOVA_GLOBAL_ACCOUNT_ID: " verified-global-account ",
-      KIT5_NOVA_GLOBAL_ACCOUNT_CONNECTED_ACCOUNT_ID: " verified-connected-account ",
-      KIT5_NOVA_GLOBAL_ACCOUNT_CURRENCY: "USD",
-    });
-    expect(config.kit5NovaGlobalAccountId).toBe("verified-global-account");
-    expect(config.kit5NovaGlobalAccountConnectedAccountId).toBe("verified-connected-account");
-    expect(config.kit5NovaGlobalAccountCurrency).toBe("USD");
-
-    const invalid = loadConfig({
-      ...validEnv,
-      KIT5_NOVA_GLOBAL_ACCOUNT_ID: "bad account id",
-      KIT5_NOVA_GLOBAL_ACCOUNT_CONNECTED_ACCOUNT_ID: "valid-account",
-      KIT5_NOVA_GLOBAL_ACCOUNT_CURRENCY: "EUR",
-    });
-    expect(invalid.kit5NovaGlobalAccountId).toBeUndefined();
-    expect(invalid.kit5NovaGlobalAccountCurrency).toBeUndefined();
   });
 
   it("leaves the onboarding proxy unconfigured when approved values are absent", () => {
@@ -159,64 +124,10 @@ describe("parseOnboardingProxyConfig (independent parser)", () => {
   });
 });
 
-describe("validateAirwallexBaseUrl (demo runtime boundary)", () => {
-  it("defaults to sandbox endpoint when unconfigured", () => {
-    expect(validateAirwallexBaseUrl(undefined, "sandbox")).toBe("https://api.sandbox.airwallex.com");
-  });
-
-  it("permits local loopback HTTP endpoints for testing", () => {
-    expect(validateAirwallexBaseUrl("http://127.0.0.1:8080", "sandbox")).toBe("http://127.0.0.1:8080");
-    expect(validateAirwallexBaseUrl("http://localhost:3000", "sandbox")).toBe("http://localhost:3000");
-  });
-
-  it("strictly rejects production endpoint in demo runtime", () => {
-    expect(() => validateAirwallexBaseUrl("https://api.airwallex.com", "sandbox"))
-      .toThrow('Demo runtime Airwallex endpoint must target sandbox (api.sandbox.airwallex.com), got "api.airwallex.com"');
-  });
-
-  it("permits production endpoint in explicit production environment and rejects sandbox endpoint", () => {
-    expect(validateAirwallexBaseUrl("https://api.airwallex.com", "production")).toBe("https://api.airwallex.com");
-    expect(() => validateAirwallexBaseUrl("https://api.sandbox.airwallex.com", "production"))
-      .toThrow('Production Airwallex endpoint must target api.airwallex.com, got "api.sandbox.airwallex.com"');
-  });
-
-  it("rejects non-HTTPS remote URLs", () => {
-    expect(() => validateAirwallexBaseUrl("http://remote.example.com", "sandbox"))
-      .toThrow("Strict HTTPS required for remote Airwallex base endpoint");
-  });
-
-  it("loadConfig succeeds with NODE_ENV=production and sandbox URL, fails with production URL regardless of Salesforce mode", () => {
-    // NODE_ENV=production + sandbox URL succeeds
-    const config = loadConfig({
-      ...validEnv,
-      NODE_ENV: "production",
-      AIRWALLEX_BASE_URL: "https://api.sandbox.airwallex.com",
-      SALESFORCE_SNAPSHOT_MODE: "production_mcp",
-    });
-    expect(config.airwallexBaseUrl).toBe("https://api.sandbox.airwallex.com");
-
-    // NODE_ENV=production + production URL fails with demo mode
-    expect(() => loadConfig({
-      ...validEnv,
-      NODE_ENV: "production",
-      AIRWALLEX_BASE_URL: "https://api.airwallex.com",
-      SALESFORCE_SNAPSHOT_MODE: "demo",
-    })).toThrow("Demo runtime Airwallex endpoint must target sandbox");
-
-    // NODE_ENV=production + production URL fails with production_mcp mode
-    expect(() => loadConfig({
-      ...validEnv,
-      NODE_ENV: "production",
-      AIRWALLEX_BASE_URL: "https://api.airwallex.com",
-      SALESFORCE_SNAPSHOT_MODE: "production_mcp",
-    })).toThrow("Demo runtime Airwallex endpoint must target sandbox");
-
-    // NODE_ENV=production + production URL fails without Salesforce mode
-    expect(() => loadConfig({
-      ...validEnv,
-      NODE_ENV: "production",
-      AIRWALLEX_BASE_URL: "https://api.airwallex.com",
-    })).toThrow("Demo runtime Airwallex endpoint must target sandbox");
+describe("retired provider configuration", () => {
+  it("loads compatibility routes without provider credentials", () => {
+    const config = loadConfig({ DATABASE_URL: "postgres://localhost/fixture", AIRWALLEX_BASE_URL: "https://api.airwallex.com" });
+    expect(config).toEqual({ port: 3000, databaseUrl: "postgres://localhost/fixture" });
   });
 });
 

@@ -180,6 +180,17 @@ func SchemaCustomizer(name string, t reflect.Type, tag reflect.StructTag, schema
 							schema.Max = &val
 						}
 					}
+				case part == "iso3166_alpha2_or_empty":
+					u := uint64(2)
+					schema.MaxLength = &u
+					schema.Pattern = `^(?:[A-Z]{2})?$`
+					schema.Description = "Empty string clears this optional field; otherwise use an ISO 3166-1 alpha-2 uppercase country code"
+				case part == "email_or_empty":
+					schema.AnyOf = openapi3.SchemaRefs{
+						{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: "email"}},
+						{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Enum: []any{""}}},
+						{Value: &openapi3.Schema{Type: &openapi3.Types{"null"}}},
+					}
 				case part == "iso3166_alpha2":
 					u := uint64(2)
 					schema.MinLength = 2
@@ -277,21 +288,29 @@ func populateRequiredFields(t reflect.Type, schema *openapi3.Schema) {
 			}
 		}
 
-		// Recurse into nested struct fields
+		// Recurse into nested struct fields and array items. The collection's
+		// requiredness is controlled by its own validate/json tags above; required
+		// fields inside each item belong on the item's schema.
 		ft := f.Type
 		for ft.Kind() == reflect.Pointer {
 			ft = ft.Elem()
 		}
+		var nestedSchema *openapi3.Schema
 		if ft.Kind() == reflect.Slice || ft.Kind() == reflect.Array {
 			ft = ft.Elem()
 			for ft.Kind() == reflect.Pointer {
 				ft = ft.Elem()
 			}
+			if prop := schema.Properties[fieldName]; prop != nil && prop.Value != nil &&
+				prop.Value.Items != nil && prop.Value.Items.Value != nil {
+				nestedSchema = prop.Value.Items.Value
+			}
+		} else if prop := schema.Properties[fieldName]; prop != nil && prop.Value != nil {
+			nestedSchema = prop.Value
 		}
 		if ft.Kind() == reflect.Struct && ft != reflect.TypeOf(time.Time{}) && ft != reflect.TypeOf(domain.Date("")) {
-			prop := schema.Properties[fieldName]
-			if prop != nil && prop.Value != nil {
-				populateRequiredFields(ft, prop.Value)
+			if nestedSchema != nil {
+				populateRequiredFields(ft, nestedSchema)
 			}
 		}
 	}
@@ -421,24 +440,25 @@ func GenerateOperatorSpec() (*openapi3.T, error) {
 	schemas := make(openapi3.Schemas)
 
 	dtoMap := map[string]any{
-		"CompanyResponse":          internalHttp.CompanyResponse{},
-		"CreateCompanyRequest":     internalHttp.CreateCompanyRequest{},
-		"EditCompanyRequest":       internalHttp.EditCompanyRequest{},
-		"ArchiveCompanyRequest":    internalHttp.ArchiveCompanyRequest{},
-		"CompanyListResponse":      internalHttp.CompanyListResponse{},
-		"ApplicationResponse":      internalHttp.ApplicationResponse{},
-		"CreateApplicationRequest": internalHttp.CreateApplicationRequest{},
-		"EditApplicationRequest":   internalHttp.EditApplicationRequest{},
-		"CancelApplicationRequest": internalHttp.CancelApplicationRequest{},
-		"SubmitApplicationRequest": internalHttp.SubmitApplicationRequest{},
-		"ApplicationListResponse":  internalHttp.ApplicationListResponse{},
-		"PlatformAccountResponse":  internalHttp.PlatformAccountResponse{},
-		"SubmissionResponse":       internalHttp.SubmissionResponse{},
-		"DocumentResponse":         internalHttp.DocumentResponse{},
-		"ActionResponse":           internalHttp.ActionResponse{},
-		"ErrorResponse":            internalHttp.ErrorResponse{},
-		"FieldError":               validation.FieldError{},
-		"ValidationResult":         validation.ValidationResult{},
+		"CompanyResponse":           internalHttp.CompanyResponse{},
+		"CreateCompanyRequest":      internalHttp.CreateCompanyRequest{},
+		"EditCompanyRequest":        internalHttp.EditCompanyRequest{},
+		"ArchiveCompanyRequest":     internalHttp.ArchiveCompanyRequest{},
+		"CompanyListResponse":       internalHttp.CompanyListResponse{},
+		"ApplicationResponse":       internalHttp.ApplicationResponse{},
+		"CreateApplicationRequest":  internalHttp.CreateApplicationRequest{},
+		"EditApplicationRequest":    internalHttp.EditApplicationRequest{},
+		"CancelApplicationRequest":  internalHttp.CancelApplicationRequest{},
+		"SubmitApplicationRequest":  internalHttp.SubmitApplicationRequest{},
+		"SubmitApplicationResponse": internalHttp.SubmitApplicationResponse{},
+		"ApplicationListResponse":   internalHttp.ApplicationListResponse{},
+		"PlatformAccountResponse":   internalHttp.PlatformAccountResponse{},
+		"SubmissionResponse":        internalHttp.SubmissionResponse{},
+		"DocumentResponse":          internalHttp.DocumentResponse{},
+		"ActionResponse":            internalHttp.ActionResponse{},
+		"ErrorResponse":             internalHttp.ErrorResponse{},
+		"FieldError":                validation.FieldError{},
+		"ValidationResult":          validation.ValidationResult{},
 	}
 
 	schemaNames := make([]string, 0, len(dtoMap))
@@ -609,7 +629,7 @@ func GenerateOperatorSpec() (*openapi3.T, error) {
 	return loadedDoc, nil
 }
 
-// GenerateWebhookSpec constructs the OpenAPI 3.1.0 document for the internal webhook receiver API.
+// GenerateWebhookSpec constructs the OpenAPI 3.1.0 document for provider and internal webhook receivers.
 func GenerateWebhookSpec() (*openapi3.T, error) {
 	ctx := context.Background()
 
@@ -669,7 +689,7 @@ func GenerateWebhookSpec() (*openapi3.T, error) {
 		Info: &openapi3.Info{
 			Title:       "FlowCard Onboarding Webhook Receiver API",
 			Version:     "1.0.0",
-			Description: "Internal receiver endpoint for platform webhook events forwarded by the Node gateway proxy. Requires service-to-service JWT assertion with audience flowcard-onboarding-webhooks. Events are durably persisted to inbox before acknowledgement.",
+			Description: "Direct provider intake verifies x-signature over x-timestamp and original body. Internal delivery paths separately require service JWT assertions with audience flowcard-onboarding-webhooks. Receipt is committed before acknowledgement; credentials are not interchangeable.",
 		},
 		Servers: openapi3.Servers{
 			{URL: "/", Description: "Current environment (relative gateway or direct service)"},
@@ -678,6 +698,7 @@ func GenerateWebhookSpec() (*openapi3.T, error) {
 		Components: &openapi3.Components{
 			Schemas: schemas,
 			SecuritySchemes: openapi3.SecuritySchemes{
+				"ProviderSignature": {Value: &openapi3.SecurityScheme{Type: "apiKey", In: "header", Name: "x-signature", Description: "Computed hex HMAC-SHA256(timestamp string + original body), using notification URL secret. Supply signature, never the shared secret."}},
 				"WebhookServiceJWT": &openapi3.SecuritySchemeRef{
 					Value: &openapi3.SecurityScheme{
 						Type:         "http",
@@ -692,7 +713,7 @@ func GenerateWebhookSpec() (*openapi3.T, error) {
 
 	// Populate webhook receiver routes as regular paths in this dedicated specification
 	for _, op := range AllOperations() {
-		if op.Audience == "internal-webhook" {
+		if op.Audience == "internal-webhook" || op.Audience == "provider-webhook" {
 			attachOperation(doc, op)
 		}
 	}
@@ -829,7 +850,9 @@ func attachOperation(doc *openapi3.T, op OperationDefinition) {
 		// Content Types and Schemas
 		for _, ct := range respDef.ContentTypes {
 			var sRef *openapi3.SchemaRef
-			if respDef.IsBinary {
+			if respDef.SchemaBuilder != nil {
+				sRef = respDef.SchemaBuilder()
+			} else if respDef.IsBinary {
 				sRef = &openapi3.SchemaRef{
 					Value: &openapi3.Schema{
 						Type:   &openapi3.Types{"string"},

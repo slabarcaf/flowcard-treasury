@@ -1,0 +1,251 @@
+// Overlay-only local DEMO money fixture. Uses actual Funding API, serial worker
+// and production adapter against the owning service's local provider double.
+package servicefixture
+
+import (
+	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/domain"
+	"github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/postgres"
+	"github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/provider"
+	upstreamfixture "github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/testutil/upstream"
+)
+
+func TestOwnedBrowserMoneyHarness(t *testing.T) {
+	lifetime := 220 * time.Second
+	if value := os.Getenv("OWNED_MONEY_LIFETIME"); value != "" {
+		parsed, err := time.ParseDuration(value)
+		if err != nil || parsed < time.Second || parsed > 15*time.Minute {
+			t.Fatal("invalid owned money lifetime")
+		}
+		lifetime = parsed
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), lifetime)
+	defer cancel()
+	h, err := New(t, time.Now().UTC().Truncate(time.Second), 2000)
+	if err != nil {
+		t.Fatal("owned DEMO funding fixture failed")
+	}
+	// Add a second distinct mapped customer using only this marked fixture DB.
+	raw, err := os.ReadFile(os.Getenv("FUNDING_TEST_ADMIN_URL_FILE"))
+	if err != nil {
+		t.Fatal("owned maintenance file unavailable")
+	}
+	adminURL, err := url.Parse(strings.TrimSpace(string(raw)))
+	if err != nil {
+		t.Fatal("owned maintenance config invalid")
+	}
+	runtimeURL, err := url.Parse(h.Config.DatabaseURL)
+	if err != nil {
+		t.Fatal("owned runtime config invalid")
+	}
+	name := strings.TrimPrefix(runtimeURL.Path, "/")
+	if !strings.HasPrefix(name, "funding_test_") {
+		t.Fatal("unowned funding target")
+	}
+	adminURL.Path = "/" + name
+	admin, err := pgxpool.New(ctx, adminURL.String())
+	if err != nil {
+		t.Fatal("owned setup admin unavailable")
+	}
+	defer admin.Close()
+	var marker string
+	if err := admin.QueryRow(ctx, `SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()`).Scan(&marker); err != nil || len(marker) < 20 || !strings.HasSuffix(name, marker[:20]) {
+		t.Fatal("owned funding marker mismatch")
+	}
+	if _, err := admin.Exec(ctx, `INSERT INTO public.customer_roster VALUES('synthetic-other-customer','synthetic-other-account',true); INSERT INTO public.issuing_card_bindings VALUES('synthetic-other-card','synthetic-other-customer','synthetic-other-account',true); INSERT INTO servicing.customers(mode,id) VALUES('DEMO','synthetic-other-customer')`); err != nil {
+		t.Fatal("owned second customer seed failed")
+	}
+	now := time.Now().UTC()
+	ref := domain.SourceRef{System: "owned-browser-test", RecordID: "other-actor", Version: "1", EffectiveAt: now}
+	customer := "synthetic-other-customer"
+	_, err = postgres.NewRepository(h.Pool).ImportActors(ctx, domain.ActorsImport{ImportMetadata: domain.ImportMetadata{SchemaVersion: 1, SourceMode: "DEMO", SourceID: "owned-other-actor", SourceVersion: "1", CapturedAt: now, SourceRefs: []domain.SourceRef{ref}}, Actors: []domain.ActorImport{{ActorID: "synthetic-other-actor", ActorType: "CUSTOMER", AuthenticationSubject: "synthetic-other-subject", CustomerID: &customer, Active: true, SourceRef: ref}}}, FacilityID, now)
+	if err != nil {
+		t.Fatal("owned second actor import failed")
+	}
+	// A real command is committed upstream, then its first receipt is lost.
+	// This exercises durable gateway recovery without duplicating the command.
+	var mu sync.Mutex
+	drop := true
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target := h.API.URL + r.URL.RequestURI()
+		call, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
+		if err != nil {
+			w.WriteHeader(502)
+			return
+		}
+		for _, key := range []string{"Authorization", "Content-Type", "Idempotency-Key"} {
+			call.Header[key] = r.Header.Values(key)
+		}
+		response, err := http.DefaultClient.Do(call)
+		if err != nil {
+			w.WriteHeader(502)
+			return
+		}
+		defer response.Body.Close()
+		body, err := io.ReadAll(io.LimitReader(response.Body, 2*1024*1024))
+		if err != nil {
+			w.WriteHeader(502)
+			return
+		}
+		mu.Lock()
+		lose := r.Method == "POST" && r.URL.Path == "/api/offers" && drop && response.StatusCode < 300
+		if lose {
+			drop = false
+		}
+		mu.Unlock()
+		if lose {
+			connection, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				connection.Close()
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(response.StatusCode)
+		w.Write(body)
+	}))
+	defer proxy.Close()
+	workerDone := make(chan error, 1)
+	go func() { workerDone <- h.Worker.Run(ctx) }()
+	defer func() {
+		cancel()
+		if err := <-workerDone; err != nil {
+			t.Error("owned worker stopped with error")
+		}
+	}()
+	baseline, err := upstreamfixture.New(time.Now().UTC(), "DEMO")
+	if err != nil {
+		t.Fatal("owned public case fixture failed")
+	}
+	result, err := baseline.Evaluate()
+	if err != nil {
+		t.Fatal("owned policy fixture failed")
+	}
+	evaluation, err := savedEvaluation(result, baseline, time.Now().UTC())
+	if err != nil {
+		t.Fatal("owned saved case fixture failed")
+	}
+	delete(evaluation, "account_id")
+	delete(evaluation, "transaction_id")
+	evaluation["account_ref"] = "customer:" + CustomerID
+	for _, field := range []string{"customer_snapshot_id", "customer_snapshot_version", "facility_snapshot_id", "facility_snapshot_version", "customer_limit_cents", "existing_exposure_cents", "post_funding_exposure_cents", "available_capital_cents"} {
+		evaluation[field] = nil
+	}
+	for _, rule := range evaluation["rules"].([]map[string]any) {
+		rule["actual"] = map[string]any{}
+		rule["threshold"] = map[string]any{}
+		rule["source_refs"] = []any{}
+	}
+	publicCase := map[string]any{"case_id": "11111111-1111-4111-8111-111111111111", "mode": "DEMO", "kind": "SHORTFALL", "status": "COMPLETED", "stage": "COMPLETE", "customer_id": CustomerID, "account_ref": "customer:" + CustomerID, "detection_id": ShortfallID, "bridge_id": nil, "bridge_version": nil, "refresh_needed": false, "next_actions": []string{}, "updated_at": time.Now().UTC(), "assessment": evaluation}
+	address := map[string]any{"url": proxy.URL, "operator_subject": OperatorSubject, "customer_subject": CustomerSubject, "other_subject": "synthetic-other-subject", "case": publicCase}
+	encoded, _ := json.Marshal(address)
+	if err := os.WriteFile(os.Getenv("OWNED_MONEY_ADDRESS"), encoded, 0600); err != nil {
+		t.Fatal("owned money readiness file failed")
+	}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("owned DEMO money fixture deadline exceeded")
+		case <-ticker.C:
+			raw, err := os.ReadFile(os.Getenv("OWNED_MONEY_CONTROL"))
+			if os.IsNotExist(err) {
+				var offers, decisions, operations int
+				if h.Pool.QueryRow(context.Background(), `SELECT (SELECT count(*) FROM servicing.offers),(SELECT count(*) FROM servicing.actor_decisions),(SELECT count(*) FROM servicing.operations)`).Scan(&offers, &decisions, &operations) == nil {
+					t.Logf("owned final counts offers=%d decisions=%d operations=%d provider_creates=%d", offers, decisions, operations, h.ProviderHTTP.CreateRequestCount())
+				}
+				t.Log("owned service helper will remove exact marked funding database/login")
+				return
+			}
+			if err != nil {
+				t.Fatal("owned control unavailable")
+			}
+			var action struct {
+				Kind    string `json:"kind"`
+				Amount  int64  `json:"amount_cents"`
+				Deposit string `json:"deposit_id"`
+			}
+			if bytes.Equal(raw, []byte("owned")) || json.Unmarshal(raw, &action) != nil {
+				continue
+			}
+			switch action.Kind {
+			case "observe_payment":
+				instant := time.Now().UTC()
+				h.ProviderHTTP.SetPayment(provider.PaymentObservation{
+					Mode: "DEMO", CustomerID: CustomerID, CanonicalAccountID: BorrowerAccount,
+					ParentTransactionID: TransactionID, AuthorizationEventID: "synthetic-event",
+					AttemptedAmountCents: 900000, ShortfallCents: 700000, Currency: "USD",
+					ObservedAt: instant, AvailableCents: 200000, BalanceObservedAt: instant,
+				})
+				t.Log("explicit fresh mock-provider payment observation; no policy or ledger change")
+			case "settle":
+				instant := time.Now().UTC()
+				if err := h.ProviderHTTP.SetStatus("SETTLED", &instant); err != nil {
+					t.Error("owned provider status control failed")
+				}
+			case "deposit":
+				instant := time.Now().UTC().Truncate(time.Second)
+				zero := int64(0)
+				h.ProviderHTTP.SetDeposit(provider.DepositObservation{AccountRef: BorrowerAccount, DepositID: action.Deposit, CustomerID: CustomerID, Currency: "USD", GrossCents: action.Amount, NetCents: action.Amount, ProviderFeeCents: &zero, Status: "SETTLED", Kind: "EXTERNAL_SETTLED", SettledAt: &instant, ObservedAt: instant})
+				balance := int64(910000)
+				if action.Amount == 709000 {
+					balance = 1609000
+				}
+				h.ProviderHTTP.SetBalance(BorrowerAccount, balance)
+				event, _ := json.Marshal(map[string]any{"id": "event-" + action.Deposit, "name": "DEMO_DEPOSIT_SETTLED", "data": map[string]string{"customer_id": CustomerID, "card_id": CardID, "deposit_id": action.Deposit}})
+				timestamp := strconv.FormatInt(time.Now().UTC().UnixMilli(), 10)
+				mac := hmac.New(sha256.New, []byte(WebhookKey))
+				mac.Write([]byte(timestamp))
+				mac.Write(event)
+				wake, _ := http.NewRequestWithContext(ctx, "POST", h.API.URL+"/webhooks/airwallex/servicing", bytes.NewReader(event))
+				wake.Header.Set("X-Timestamp", timestamp)
+				wake.Header.Set("X-Signature", hex.EncodeToString(mac.Sum(nil)))
+				wake.Header.Set("Content-Type", "application/json")
+				receipt, err := h.API.Client().Do(wake)
+				if err != nil {
+					t.Error("owned deposit wake failed")
+				} else {
+					if receipt.StatusCode != 200 {
+						t.Error("owned deposit wake refused")
+					}
+					receipt.Body.Close()
+				}
+
+				if err := h.ProviderHTTP.SetStatus("SETTLED", &instant); err != nil {
+					t.Error("owned deposit provider state failed")
+				}
+			case "rebind":
+				if _, err := h.Pool.Exec(ctx, `UPDATE servicing.actors SET customer_id='synthetic-other-customer' WHERE mode='DEMO' AND actor_id=$1`, CustomerActorID); err != nil {
+					t.Error("owned actor drift fixture failed")
+				}
+			case "restore":
+				if _, err := h.Pool.Exec(ctx, `UPDATE servicing.actors SET customer_id=$1 WHERE mode='DEMO' AND actor_id=$2`, CustomerID, CustomerActorID); err != nil {
+					t.Error("owned actor restore fixture failed")
+				}
+			default:
+				t.Error("unknown owned provider control")
+			}
+			if err := os.WriteFile(os.Getenv("OWNED_MONEY_CONTROL"), []byte("owned"), 0600); err != nil {
+				t.Fatal("owned control acknowledgement failed")
+			}
+		}
+	}
+}

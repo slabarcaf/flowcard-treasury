@@ -315,6 +315,15 @@ func createTestCompanyAndApp(t *testing.T, repo *postgres.Repository, store stor
 				PostalCode: "94105",
 				Country:    "US",
 			},
+			OperatingAddress: &domain.Address{
+				Line1:      "100 Market St",
+				Line2:      "Suite 400",
+				City:       "San Francisco",
+				State:      "CA",
+				PostalCode: "94105",
+				Country:    "US",
+			},
+			OperatingCountries: []string{"US"},
 		},
 		People: []domain.Person{
 			{
@@ -323,8 +332,12 @@ func createTestCompanyAndApp(t *testing.T, repo *postgres.Repository, store stor
 				LastName:    "Morgan",
 				Email:       "operator.contact@acme-innovations.example.com",
 				Phone:       "+14155550199",
+				Role:        "Director",
 				DateOfBirth: domain.Date("1985-06-15"),
 				Nationality: "US",
+				Identifications: []domain.Identification{{
+					ID: "ident_001", Type: "SSN", Number: "123456789", IssuingCountry: "US",
+				}},
 			},
 		},
 	})
@@ -344,6 +357,7 @@ func createTestCompanyAndApp(t *testing.T, repo *postgres.Repository, store stor
 	if err := app.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{
 		PrimaryContactPersonID: "person_001",
 		IndustryCategoryCode:   "5734",
+		IntendedProducts:       []string{"CREATE_CARDS"},
 		EstimatedRevenue: domain.RevenueEstimate{
 			Amount:   "100000",
 			Currency: "USD",
@@ -362,8 +376,9 @@ func createTestCompanyAndApp(t *testing.T, repo *postgres.Repository, store stor
 		},
 		People: []domain.PersonPlatformDetails{
 			{
-				PersonID:      "person_001",
-				PlatformRoles: []string{"DIRECTOR"},
+				PersonID:                "person_001",
+				PlatformRoles:           []string{"AUTHORISED_PERSON", "BENEFICIAL_OWNER", "CONTROLLING_PERSON"},
+				PrimaryIdentificationID: "ident_001",
 				ResidentialAddress: domain.Address{
 					Line1:      "100 Market St",
 					City:       "San Francisco",
@@ -2121,11 +2136,14 @@ func TestWorker_DistinctApplications_SameCompany_CreationCoordinated(t *testing.
 	store := storage.NewMemoryStore()
 	comp, app1, sub1 := createTestCompanyAndApp(t, repo, store)
 
-	// In the real system, only one open application exists per company/platform at a time.
-	// Mark app1 REJECTED in DB so app2 can be created as a subsequent application for the same company.
-	_, err := pool.Exec(context.Background(), `UPDATE onboarding.applications SET status = 'REJECTED' WHERE id = $1`, app1.ID())
-	if err != nil {
-		t.Fatalf("failed to update app1 to terminal status: %v", err)
+	// app1 is terminalized after its initial submission is queued, releasing the
+	// partial unique index so app2 can be created. This domain transition marks
+	// sub1 FAILED but leaves its outbox row for the repository lease exercise.
+	if err := app1.RecordSubmissionFailed(sub1.ID, true); err != nil {
+		t.Fatalf("failed to reject app1 through the domain transition: %v", err)
+	}
+	if err := repo.UpdateApplication(context.Background(), app1, app1.Revision()-1); err != nil {
+		t.Fatalf("failed to persist rejected app1: %v", err)
 	}
 
 	// Create a second distinct application for the exact SAME company
@@ -2138,19 +2156,7 @@ func TestWorker_DistinctApplications_SameCompany_CreationCoordinated(t *testing.
 		t.Fatalf("NewDraftApplication failed: %v", err)
 	}
 
-	if err := app2.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{
-		PrimaryContactPersonID: "person_001",
-		IndustryCategoryCode:   "5734",
-		EstimatedRevenue:       domain.RevenueEstimate{Amount: "250000", Currency: "USD"},
-		CustomerAgreements: domain.CustomerAgreements{
-			AgreedToDataUsage:          true,
-			AgreedToTermsAndConditions: true,
-			TermsAndConditions: &domain.TermsAndConditionsAgreement{
-				AgreedAt:             time.Now().UTC(),
-				ServiceAgreementType: "FULL",
-			},
-		},
-	}); err != nil {
+	if err := app2.UpdateOnboardingDetails(app1.Platform().OnboardingDetails); err != nil {
 		t.Fatalf("UpdateOnboardingDetails failed: %v", err)
 	}
 
@@ -2185,7 +2191,8 @@ func TestWorker_DistinctApplications_SameCompany_CreationCoordinated(t *testing.
 		t.Fatalf("InitiateSubmission 2 failed: %v", err)
 	}
 
-	// Worker 1 claims Job 1 for App 1 and sets coordinator to DISPATCHING
+	// Manually claim app1's outbox lease and repository coordinator. This is not
+	// a full Job1 worker dispatch with a pending submission.
 	msg1, err := repo.ClaimOutboxMessage(context.Background(), 10*time.Second)
 	if err != nil || msg1 == nil {
 		t.Fatalf("ClaimOutboxMessage 1 failed: %v", err)
@@ -2207,7 +2214,7 @@ func TestWorker_DistinctApplications_SameCompany_CreationCoordinated(t *testing.
 		t.Fatalf("expected coordinator 1 DISPATCHING, got %s", coord1.State)
 	}
 
-	// Now Job 2 for App 2 runs while Job 1 is dispatching
+	// Process app2's worker while app1's coordinator remains DISPATCHING.
 	var createCallsApp2 atomic.Int32
 	mockPlatform := &mockPlatformClient{
 		createAccountFunc: func(ctx context.Context, req airwallex.AccountCreateRequest) (*airwallex.AccountCreateResponse, error) {

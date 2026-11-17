@@ -106,6 +106,9 @@
                           "type": "string"
                         }
                       },
+                      "required": [
+                        "registered_address"
+                      ],
                       "type": "object"
                     },
                     "created_at": {
@@ -167,6 +170,9 @@
                                   "type": "string"
                                 }
                               },
+                              "required": [
+                                "identification_id"
+                              ],
                               "type": "object"
                             },
                             "type": "array"
@@ -190,6 +196,9 @@
                             "type": "string"
                           }
                         },
+                        "required": [
+                          "person_id"
+                        ],
                         "type": "object"
                       },
                       "type": "array"
@@ -232,6 +241,18 @@
                       "type": "string"
                     }
                   },
+                  "required": [
+                    "business_profile",
+                    "created_at",
+                    "has_submitted_history",
+                    "id",
+                    "legal_name",
+                    "people",
+                    "registration_identifiers",
+                    "revision",
+                    "status",
+                    "updated_at"
+                  ],
                   "type": [
                     "object",
                     "null"
@@ -283,6 +304,16 @@
                         "type": "string"
                       }
                     },
+                    "required": [
+                      "content_type",
+                      "document_id",
+                      "file_name",
+                      "size_bytes",
+                      "storage_key",
+                      "type",
+                      "uploaded_at",
+                      "uploaded_by"
+                    ],
                     "type": "object"
                   },
                   "type": "array"
@@ -315,6 +346,10 @@
                               "type": "string"
                             }
                           },
+                          "required": [
+                            "question_id",
+                            "text"
+                          ],
                           "type": "object"
                         },
                         "type": "array"
@@ -389,12 +424,20 @@
                                   "type": "string"
                                 }
                               },
+                              "required": [
+                                "agreed_at",
+                                "service_agreement_type"
+                              ],
                               "type": [
                                 "object",
                                 "null"
                               ]
                             }
                           },
+                          "required": [
+                            "agreed_to_data_usage",
+                            "agreed_to_terms_and_conditions"
+                          ],
                           "type": "object"
                         },
                         "estimated_monthly_revenue": {
@@ -429,6 +472,9 @@
                                 },
                                 "type": "array"
                               },
+                              "primary_identification_id": {
+                                "type": "string"
+                              },
                               "residential_address": {
                                 "properties": {
                                   "city": {
@@ -451,8 +497,15 @@
                                   }
                                 },
                                 "type": "object"
+                              },
+                              "secondary_identification_id": {
+                                "type": "string"
                               }
                             },
+                            "required": [
+                              "person_id",
+                              "residential_address"
+                            ],
                             "type": "object"
                           },
                           "type": "array"
@@ -461,12 +514,20 @@
                           "type": "string"
                         }
                       },
+                      "required": [
+                        "customer_agreements",
+                        "estimated_monthly_revenue"
+                      ],
                       "type": "object"
                     },
                     "platform_account_id": {
                       "type": "string"
                     }
                   },
+                  "required": [
+                    "name",
+                    "onboarding_details"
+                  ],
                   "type": "object"
                 },
                 "revision": {
@@ -481,6 +542,20 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "company",
+                "company_id",
+                "created_at",
+                "creator",
+                "documents",
+                "id",
+                "information_requests",
+                "operator_review_flagged",
+                "platform",
+                "revision",
+                "status",
+                "updated_at"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -646,6 +721,9 @@
                             "type": "string"
                           }
                         },
+                        "required": [
+                          "identification_id"
+                        ],
                         "type": "object"
                       },
                       "type": "array"
@@ -669,6 +747,9 @@
                       "type": "string"
                     }
                   },
+                  "required": [
+                    "person_id"
+                  ],
                   "type": "object"
                 },
                 "type": "array"
@@ -774,6 +855,16 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "content_type",
+                "document_id",
+                "file_name",
+                "size_bytes",
+                "storage_key",
+                "type",
+                "uploaded_at",
+                "uploaded_by"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -806,6 +897,10 @@
                         "type": "string"
                       }
                     },
+                    "required": [
+                      "question_id",
+                      "text"
+                    ],
                     "type": "object"
                   },
                   "type": "array"
@@ -928,6 +1023,9 @@
                           },
                           "type": "array"
                         },
+                        "primary_identification_id": {
+                          "type": "string"
+                        },
                         "residential_address": {
                           "properties": {
                             "city": {
@@ -950,8 +1048,15 @@
                             }
                           },
                           "type": "object"
+                        },
+                        "secondary_identification_id": {
+                          "type": "string"
                         }
                       },
+                      "required": [
+                        "person_id",
+                        "residential_address"
+                      ],
                       "type": "object"
                     },
                     "type": "array"
@@ -1125,6 +1230,9 @@
                       "type": "string"
                     }
                   },
+                  "required": [
+                    "registered_address"
+                  ],
                   "type": "object"
                 },
                 "created_at": {
@@ -1186,6 +1294,9 @@
                               "type": "string"
                             }
                           },
+                          "required": [
+                            "identification_id"
+                          ],
                           "type": "object"
                         },
                         "type": "array"
@@ -1209,6 +1320,9 @@
                         "type": "string"
                       }
                     },
+                    "required": [
+                      "person_id"
+                    ],
                     "type": "object"
                   },
                   "type": "array"
@@ -1251,6 +1365,18 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "business_profile",
+                "created_at",
+                "has_submitted_history",
+                "id",
+                "legal_name",
+                "people",
+                "registration_identifiers",
+                "revision",
+                "status",
+                "updated_at"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -1406,6 +1532,9 @@
                         "type": "string"
                       }
                     },
+                    "required": [
+                      "identification_id"
+                    ],
                     "type": "object"
                   },
                   "type": "array"
@@ -1429,6 +1558,9 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "person_id"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -1572,6 +1704,10 @@
                       },
                       "type": "array"
                     },
+                    "primary_identification_id": {
+                      "maxLength": 64,
+                      "type": "string"
+                    },
                     "residential_address": {
                       "properties": {
                         "city": {
@@ -1602,10 +1738,20 @@
                           "type": "string"
                         }
                       },
+                      "required": [
+                        "city",
+                        "country",
+                        "line_1",
+                        "postal_code"
+                      ],
                       "type": [
                         "object",
                         "null"
                       ]
+                    },
+                    "secondary_identification_id": {
+                      "maxLength": 64,
+                      "type": "string"
                     }
                   },
                   "type": "object"
@@ -1637,6 +1783,61 @@
             "properties": {
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "operating_address": {
+                "properties": {
+                  "city": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "country": {
+                    "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                    "maxLength": 2,
+                    "minLength": 2,
+                    "pattern": "^[A-Z]{2}$",
+                    "type": "string"
+                  },
+                  "line_1": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "line_2": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "postal_code": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city",
+                  "country",
+                  "line_1",
+                  "postal_code"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "operating_countries": {
+                "items": {
+                  "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                  "maxLength": 2,
+                  "minLength": 2,
+                  "pattern": "^[A-Z]{2}$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "products": {
+                "maxLength": 500,
                 "type": "string"
               },
               "registered_address": {
@@ -1686,10 +1887,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "description",
-              "website"
-            ],
             "type": [
               "object",
               "null"
@@ -1712,6 +1909,28 @@
                   "format": "date",
                   "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                   "type": "string"
+                },
+                "email": {
+                  "anyOf": [
+                    {
+                      "format": "email",
+                      "type": "string"
+                    },
+                    {
+                      "enum": [
+                        ""
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "maxLength": 254,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "first_name": {
                   "maxLength": 100,
@@ -1750,6 +1969,11 @@
                         "type": "string"
                       }
                     },
+                    "required": [
+                      "issuing_country",
+                      "number",
+                      "type"
+                    ],
                     "type": "object"
                   },
                   "type": "array"
@@ -1758,11 +1982,33 @@
                   "maxLength": 100,
                   "type": "string"
                 },
+                "nationality": {
+                  "description": "Empty string clears this optional field; otherwise use an ISO 3166-1 alpha-2 uppercase country code",
+                  "maxLength": 2,
+                  "pattern": "^(?:[A-Z]{2})?$",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "phone": {
+                  "maxLength": 50,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "role": {
                   "maxLength": 100,
                   "type": "string"
                 }
               },
+              "required": [
+                "date_of_birth",
+                "first_name",
+                "last_name",
+                "role"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -1793,6 +2039,11 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "issuing_country",
+                "type",
+                "value"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -1934,6 +2185,10 @@
                       },
                       "type": "array"
                     },
+                    "primary_identification_id": {
+                      "maxLength": 64,
+                      "type": "string"
+                    },
                     "residential_address": {
                       "properties": {
                         "city": {
@@ -1964,10 +2219,20 @@
                           "type": "string"
                         }
                       },
+                      "required": [
+                        "city",
+                        "country",
+                        "line_1",
+                        "postal_code"
+                      ],
                       "type": [
                         "object",
                         "null"
                       ]
+                    },
+                    "secondary_identification_id": {
+                      "maxLength": 64,
+                      "type": "string"
                     }
                   },
                   "type": "object"
@@ -1992,6 +2257,68 @@
           "business_profile": {
             "properties": {
               "description": {
+                "maxLength": 2000,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "operating_address": {
+                "properties": {
+                  "city": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "country": {
+                    "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                    "maxLength": 2,
+                    "minLength": 2,
+                    "pattern": "^[A-Z]{2}$",
+                    "type": "string"
+                  },
+                  "line_1": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "line_2": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "postal_code": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city",
+                  "country",
+                  "line_1",
+                  "postal_code"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "operating_countries": {
+                "items": {
+                  "description": "ISO 3166-1 alpha-2 uppercase country code (format validation via regex ^[A-Z]{2}$; domain membership validated at runtime)",
+                  "maxLength": 2,
+                  "minLength": 2,
+                  "pattern": "^[A-Z]{2}$",
+                  "type": "string"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "products": {
+                "maxLength": 500,
                 "type": [
                   "string",
                   "null"
@@ -2039,6 +2366,8 @@
                 ]
               },
               "website": {
+                "format": "uri",
+                "maxLength": 500,
                 "type": [
                   "string",
                   "null"
@@ -2074,6 +2403,28 @@
                   "format": "date",
                   "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                   "type": "string"
+                },
+                "email": {
+                  "anyOf": [
+                    {
+                      "format": "email",
+                      "type": "string"
+                    },
+                    {
+                      "enum": [
+                        ""
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "maxLength": 254,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "first_name": {
                   "maxLength": 100,
@@ -2112,6 +2463,11 @@
                         "type": "string"
                       }
                     },
+                    "required": [
+                      "issuing_country",
+                      "number",
+                      "type"
+                    ],
                     "type": "object"
                   },
                   "type": "array"
@@ -2120,11 +2476,33 @@
                   "maxLength": 100,
                   "type": "string"
                 },
+                "nationality": {
+                  "description": "Empty string clears this optional field; otherwise use an ISO 3166-1 alpha-2 uppercase country code",
+                  "maxLength": 2,
+                  "pattern": "^(?:[A-Z]{2})?$",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "phone": {
+                  "maxLength": 50,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "role": {
                   "maxLength": 100,
                   "type": "string"
                 }
               },
+              "required": [
+                "date_of_birth",
+                "first_name",
+                "last_name",
+                "role"
+              ],
               "type": "object"
             },
             "type": [
@@ -2160,6 +2538,11 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "issuing_country",
+                "type",
+                "value"
+              ],
               "type": "object"
             },
             "type": [
@@ -2209,6 +2592,11 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "code",
+                "field",
+                "message"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -2490,6 +2878,9 @@
                             "type": "string"
                           }
                         },
+                        "required": [
+                          "identification_id"
+                        ],
                         "type": "object"
                       },
                       "type": "array"
@@ -2513,6 +2904,9 @@
                       "type": "string"
                     }
                   },
+                  "required": [
+                    "person_id"
+                  ],
                   "type": "object"
                 },
                 "type": "array"
@@ -2670,6 +3064,9 @@
                       },
                       "type": "array"
                     },
+                    "primary_identification_id": {
+                      "type": "string"
+                    },
                     "residential_address": {
                       "properties": {
                         "city": {
@@ -2692,8 +3089,15 @@
                         }
                       },
                       "type": "object"
+                    },
+                    "secondary_identification_id": {
+                      "type": "string"
                     }
                   },
+                  "required": [
+                    "person_id",
+                    "residential_address"
+                  ],
                   "type": "object"
                 },
                 "type": "array"
@@ -2751,6 +3155,25 @@
         ],
         "type": "object"
       },
+      "SubmitApplicationResponse": {
+        "properties": {
+          "application_id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "submission_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "application_id",
+          "code",
+          "submission_id"
+        ],
+        "type": "object"
+      },
       "UnauthenticatedResponse": {
         "description": "Unauthenticated error response (HTTP 401). Returned as GatewayAuthError from Node gateway (kit5_operator_session missing/invalid), or ServiceAuthError from direct Go service JWT assertion failure.",
         "oneOf": [
@@ -2789,6 +3212,11 @@
                   "type": "string"
                 }
               },
+              "required": [
+                "code",
+                "field",
+                "message"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -4602,13 +5030,22 @@
     },
     "/api/onboarding-applications/{id}/submit": {
       "post": {
-        "description": "CRITICAL CONTRACT STATUS: This action is explicitly blocked fail-closed, returning HTTP 422 with code SUBMISSION_CONTRACT_BLOCKED pending resolution of deferred reviewed revisions policy. Platform submission contracts remain unexecuted.",
+        "description": "Validates saved application data and atomically records a frozen initial Submission, idempotency response, and durable worker job. Platform submission runs asynchronously.",
         "operationId": "submitApplication",
         "parameters": [
           {
             "description": "Application ID",
             "in": "path",
             "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unique key for this actor, application, and submit action. Reuse it unchanged to replay the original response.",
+            "in": "header",
+            "name": "Idempotency-Key",
             "required": true,
             "schema": {
               "type": "string"
@@ -4623,10 +5060,38 @@
               }
             }
           },
-          "description": "CAS expected_revision",
+          "description": "Application revision expected by the operator",
           "required": true
         },
         "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitApplicationResponse"
+                }
+              }
+            },
+            "description": "Submission queued for asynchronous processing; acceptance is not provider approval",
+            "headers": {
+              "Location": {
+                "description": "Existing application submissions collection",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request or missing Idempotency-Key"
+          },
           "401": {
             "content": {
               "application/json": {
@@ -4647,7 +5112,7 @@
             },
             "description": "Application not found"
           },
-          "422": {
+          "409": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4655,7 +5120,24 @@
                 }
               }
             },
-            "description": "Contract blocked: SUBMISSION_CONTRACT_BLOCKED"
+            "description": "Idempotency mismatch, in-progress submission, incompatible state, or revision conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ValidationResult"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Saved-data readiness or request validation failed"
           },
           "500": {
             "content": {
@@ -4686,7 +5168,7 @@
             "ServiceJWT": []
           }
         ],
-        "summary": "Submit application (BLOCKED)",
+        "summary": "Queue application submission",
         "tags": [
           "Onboarding Applications"
         ]

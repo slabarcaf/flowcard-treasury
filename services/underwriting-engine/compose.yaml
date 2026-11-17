@@ -1,0 +1,27 @@
+name: flowcard-underwriting-demo
+
+services:
+  underwriting-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: ${UNDERWRITING_CONTAINER_DATABASE_URL:?set the task-owned container database URL}
+      UNDERWRITING_MODE: ${UNDERWRITING_MODE:?set DEMO mode}
+      UNDERWRITING_FACILITY_ID: ${UNDERWRITING_FACILITY_ID:?set the demo facility ID}
+      UNDERWRITING_HTTP_ADDR: 0.0.0.0:8083
+      UNDERWRITING_SERVICE_SECRET: ${UNDERWRITING_SERVICE_SECRET:?set the underwriting secret}
+      SHORTFALL_BASE_URL: ${SHORTFALL_BASE_URL:?set the loopback shortfall mock URL}
+      SHORTFALL_SERVICE_SECRET: ${SHORTFALL_SERVICE_SECRET:?set the shortfall secret}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8083:8083"
+    volumes:
+      - ../../.dev/demo:/demo:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8083/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s

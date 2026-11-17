@@ -1,4 +1,4 @@
-export type ProviderHttpErrorPhase = "authentication" | "issuing_simulation" | "provider_request";
+export type ProviderHttpErrorPhase = "authentication" | "provider_request";
 
 export interface ProviderHttpErrorDetails {
   phase?: ProviderHttpErrorPhase;
@@ -28,17 +28,6 @@ export function providerHttpErrorDetails(value: unknown, phase: ProviderHttpErro
     ...(safeProviderSource(nested.source) ? { source: safeProviderSource(nested.source) } : {}),
     ...(safeProviderMessage(nested.message) ? { message: safeProviderMessage(nested.message) } : {}),
   };
-}
-
-/** Format the safe diagnostics shown for a terminal Kit 5 checkpoint rejection. */
-export function formatCheckpointProviderError(error: ProviderHttpError): string {
-  const details = error.details;
-  const parts = [`HTTP ${error.status}`];
-  if (details.phase) parts.push(`phase=${details.phase}`);
-  if (details.code) parts.push(`code=${details.code}`);
-  if (details.source) parts.push(`source=${details.source}`);
-  if (details.message) parts.push(`message=${details.message}`);
-  return `Airwallex rejected the sandbox request (${parts.join("; ")})`;
 }
 
 function safeProviderCode(value: unknown): string | undefined {

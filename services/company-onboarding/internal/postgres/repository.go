@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -527,7 +528,7 @@ func (r *Repository) CreateApplication(ctx context.Context, app *domain.Onboardi
 		companySnapshotJSON,
 		docsJSON,
 		rfisJSON,
-		"creator",
+		app.Creator(),
 		app.OperatorReviewFlagged(),
 		app.Revision(),
 		app.CreatedAt(),
@@ -746,10 +747,13 @@ func (r *Repository) GetApplication(ctx context.Context, id string) (*domain.Onb
 		paid = *platformAccountID
 	}
 
-	// Load live company from onboarding.companies to provide live reference context for documents attached post-draft
+	// Drafts need current company context for person-reference validation. Submitted
+	// applications retain their persisted snapshot if a live-company read fails.
 	var liveCompany *domain.Company
 	if liveComp, lErr := r.GetCompany(ctx, companyID); lErr == nil {
 		liveCompany = liveComp
+	} else if domain.ApplicationStatus(status) == domain.ApplicationStatusDraft {
+		return nil, fmt.Errorf("failed to load live company for draft application: %w", lErr)
 	}
 
 	reconApp, err := domain.ReconstituteOnboardingApplication(domain.ReconstituteApplicationParams{
@@ -887,6 +891,10 @@ func (r *Repository) UpdateApplication(ctx context.Context, app *domain.Onboardi
 	return nil
 }
 
+// SubmissionReadinessCheck runs against the persisted Company and Application
+// locked by this transaction.
+type SubmissionReadinessCheck func(*domain.Company, *domain.OnboardingApplication) error
+
 // InitiateSubmissionParams carries parameters for the atomic submission transaction.
 // All fields are explicit command inputs without backwards-compatibility fallback objects.
 type InitiateSubmissionParams struct {
@@ -904,6 +912,7 @@ type InitiateSubmissionParams struct {
 	RequestFingerprint   string
 	ResponseStatusCode   int
 	ResponseBody         []byte
+	ReadinessCheck       SubmissionReadinessCheck
 }
 
 // InitiateSubmissionResult contains the durable response of InitiateSubmission.
@@ -970,7 +979,8 @@ func (r *Repository) InitiateSubmission(ctx context.Context, params InitiateSubm
 		)
 		ON CONFLICT (key_scope, idempotency_key) DO NOTHING
 	`
-	if _, err := tx.Exec(ctx, idempInsertSQL, params.IdempotencyScope, params.IdempotencyKey, params.RequestFingerprint); err != nil {
+	idempInsertTag, err := tx.Exec(ctx, idempInsertSQL, params.IdempotencyScope, params.IdempotencyKey, params.RequestFingerprint)
+	if err != nil {
 		return nil, fmt.Errorf("failed to reserve idempotency key: %w", err)
 	}
 
@@ -1012,6 +1022,9 @@ func (r *Repository) InitiateSubmission(ctx context.Context, params InitiateSubm
 			ResponseStatusCode: sc,
 			ResponseBody:       existingBody,
 		}, nil
+	}
+	if idempInsertTag.RowsAffected() == 0 || existingStatus != "STARTED" {
+		return nil, ErrConcurrentOperationInProgress
 	}
 
 	// 2. Fetch company_id for the application
@@ -1377,6 +1390,29 @@ func (r *Repository) InitiateSubmission(ctx context.Context, params InitiateSubm
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconstitute application: %w", err)
+	}
+
+	if rfiID == "" {
+		for _, submission := range lockedApp.Submissions() {
+			if submission.Status == domain.SubmissionStatusPending || submission.Status == domain.SubmissionStatusUnresolved {
+				return nil, domain.ErrSubmissionInFlight
+			}
+		}
+		if lockedApp.Status() != domain.ApplicationStatusDraft {
+			return nil, domain.ErrApplicationNotDraft
+		}
+	}
+	if params.ReadinessCheck != nil {
+		if err := params.ReadinessCheck(persistedCompany, lockedApp); err != nil {
+			return nil, err
+		}
+	}
+	if rfiID == "" && params.DocumentIDs == nil {
+		lockedDocuments := lockedApp.Documents()
+		docIDs = make([]string, len(lockedDocuments))
+		for i, document := range lockedDocuments {
+			docIDs[i] = document.ID
+		}
 	}
 
 	// 5. Execute reviewed domain aggregate command inside the transaction.
@@ -3974,7 +4010,13 @@ func (r *Repository) ListApplications(ctx context.Context, filter ListApplicatio
 		}
 		var liveComp *domain.Company
 		if ar.companyID != "" {
-			liveComp, _ = r.GetCompany(ctx, ar.companyID)
+			liveComp, err = r.GetCompany(ctx, ar.companyID)
+			if err != nil && domain.ApplicationStatus(ar.status) == domain.ApplicationStatusDraft {
+				return nil, fmt.Errorf("failed to load live company for draft application %q: %w", ar.appID, err)
+			}
+			if err != nil {
+				liveComp = nil
+			}
 		}
 		app, err := reconstituteScannedApplication(ar, subs, liveComp)
 		if err != nil {
@@ -4105,36 +4147,69 @@ type WebhookInboxItem struct {
 	LeaseExpiresAt *time.Time         `json:"lease_expires_at,omitempty"`
 }
 
-// InsertWebhookOnce stores verified webhook bytes into onboarding.webhook_inbox.
-// Returns true if inserted, false if idempotent duplicate.
+// ErrWebhookEventConflict means a provider event ID was reused with changed content.
+var ErrWebhookEventConflict = errors.New("webhook event id payload conflict")
+
+// InsertWebhookOnce commits an original receipt, a duplicate, or conflict evidence.
 func (r *Repository) InsertWebhookOnce(ctx context.Context, item WebhookInboxItem) (bool, error) {
-	cleanEventID := strings.TrimSpace(item.EventID)
-	cleanType := strings.TrimSpace(item.EventType)
-	if cleanEventID == "" || cleanType == "" {
+	eventID, eventType := strings.TrimSpace(item.EventID), strings.TrimSpace(item.EventType)
+	if eventID == "" || eventType == "" {
 		return false, errors.New("event_id and event_type must not be empty")
 	}
-
-	rawPayload := item.RawPayload
-	if len(rawPayload) == 0 {
-		rawPayload = json.RawMessage("{}")
+	raw := item.RawPayload
+	if len(raw) == 0 {
+		raw = json.RawMessage("{}")
 	}
-
-	sql := `
-		INSERT INTO onboarding.webhook_inbox (
-			event_id, account_id, event_type, environment, raw_payload, status
-		) VALUES ($1, $2, $3, $4, $5, 'PENDING')
-		ON CONFLICT (event_id) DO NOTHING
-		RETURNING id
-	`
-	var id int64
-	err := r.pool.QueryRow(ctx, sql, cleanEventID, strings.TrimSpace(item.AccountID), cleanType, strings.TrimSpace(item.Environment), rawPayload).Scan(&id)
+	account, environment := strings.TrimSpace(item.AccountID), strings.TrimSpace(item.Environment)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil // idempotent duplicate
-		}
-		return false, fmt.Errorf("failed to insert webhook inbox item: %w", err)
+		return false, fmt.Errorf("begin webhook receipt: %w", err)
 	}
-	return true, nil
+	defer func() { _ = tx.Rollback(ctx) }()
+	var id int64
+	err = tx.QueryRow(ctx, `INSERT INTO onboarding.webhook_inbox
+ (event_id,account_id,event_type,environment,raw_payload,raw_body,status)
+ VALUES($1,$2,$3,$4,$5,$6,'PENDING') ON CONFLICT(event_id) DO NOTHING RETURNING id`, eventID, account, eventType, environment, raw, []byte(raw)).Scan(&id)
+	if err == nil {
+		if err = tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit webhook receipt: %w", err)
+		}
+		return true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return false, fmt.Errorf("insert webhook receipt: %w", err)
+	}
+	var same bool
+	// A fresh READ COMMITTED statement observes the concurrent insert winner.
+	err = tx.QueryRow(ctx, `SELECT raw_payload=$2::jsonb AND account_id=$3 AND event_type=$4
+ AND (environment=$5 OR environment='' OR $5='')
+ FROM onboarding.webhook_inbox WHERE event_id=$1 FOR UPDATE`, eventID, raw, account, eventType, environment).Scan(&same)
+	if err != nil {
+		return false, fmt.Errorf("read original webhook receipt: %w", err)
+	}
+	if same {
+		if err = tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit webhook duplicate: %w", err)
+		}
+		return false, nil
+	}
+	hash := sha256.Sum256(raw)
+	_, err = tx.Exec(ctx, `INSERT INTO onboarding.webhook_conflicts
+ (event_id,payload_sha256,account_id,event_type,environment,raw_payload,raw_body)
+ VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(event_id,payload_sha256) DO NOTHING`, eventID, hash[:], account, eventType, environment, raw, []byte(raw))
+	if err != nil {
+		return false, fmt.Errorf("record webhook conflict: %w", err)
+	}
+	_, err = tx.Exec(ctx, `UPDATE onboarding.webhook_inbox SET status='QUARANTINED',
+ last_error='EVENT_ID_PAYLOAD_CONFLICT',lease_token=NULL,lease_expires_at=NULL
+ WHERE event_id=$1 AND status NOT IN ('PROCESSED','IGNORED')`, eventID)
+	if err != nil {
+		return false, fmt.Errorf("quarantine webhook conflict: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit webhook conflict: %w", err)
+	}
+	return false, ErrWebhookEventConflict
 }
 
 // ClaimPendingWebhooks leases candidate pending or failed webhook inbox rows for processing.

@@ -1,0 +1,103 @@
+// Overlay-only saved-read fixtures. Uses the service's existing marked DB
+// helper and normal migrations; no worker, transfer, debit or provider runs.
+package database
+
+import (
+	"context"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/config"
+	fundinghttp "github.com/slabarcaf/flowcard-treasury/services/funding-collection/internal/http"
+)
+
+func TestOwnedBrowserFinancialReads(t *testing.T) {
+	lifetime := 100 * time.Second
+	if value := os.Getenv("OWNED_READ_LIFETIME"); value != "" {
+		parsed, err := time.ParseDuration(value)
+		if err != nil || parsed < time.Second || parsed > 15*time.Minute {
+			t.Fatal("invalid owned read lifetime")
+		}
+		lifetime = parsed
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), lifetime)
+	defer cancel()
+	raw, err := adminURL()
+	if err != nil {
+		t.Fatal("owned servicing maintenance unavailable")
+	}
+	maintenance, err := newAdminPool(ctx, raw)
+	if err != nil {
+		t.Fatal("owned servicing maintenance unavailable")
+	}
+	defer maintenance.Close()
+	var before, after string
+	if err := maintenance.QueryRow(ctx, `SELECT md5(row_to_json(r)::text) FROM pg_roles r WHERE rolname='servicing_runtime' AND NOT rolcanlogin`).Scan(&before); err != nil {
+		t.Fatal("existing servicing role required")
+	}
+	book, err := Open(t)
+	if err != nil {
+		t.Fatal("owned servicing fixture setup failed")
+	}
+	t.Cleanup(func() {
+		if err := book.Close(); err != nil {
+			t.Error("owned servicing cleanup failed")
+		} else {
+			t.Log("exact owned servicing database and login removed after marker checks")
+		}
+	})
+	if err := maintenance.QueryRow(ctx, `SELECT md5(row_to_json(r)::text) FROM pg_roles r WHERE rolname='servicing_runtime'`).Scan(&after); err != nil || after != before {
+		t.Fatal("shared servicing role changed")
+	}
+	// Only explicit synthetic saved-read inputs, not financial transition or
+	// settlement acceptance. This bridge was never funded and carries zero debt.
+	statements := []string{
+		`INSERT INTO servicing.facilities(mode,id,funding_account_ref,total_cents,reserve_bps) VALUES('DEMO','owned-facility','private-owned-funding',10000000,2000)`,
+		`INSERT INTO servicing.customers(mode,id,history_complete) VALUES('DEMO','owned-customer',true)`,
+		`INSERT INTO servicing.authorities(mode,id,version,customer_id,source_account_ref,destination_account_ref,currency,permitted_kinds,maximum_debit_cents,valid_from,expires_at,status,disclosures_version,evidence_refs,captured_at) VALUES('DEMO','not-issued',1,'owned-customer','private-owned-account','private-owned-funding','USD',ARRAY['COLLECT_PRINCIPAL'],1000000,now()-interval '1 hour',now()+interval '1 hour','REVOKED','owned-fixture-v1','[]',now())`,
+		`INSERT INTO servicing.offers(mode,id,revision,facility_id,customer_id,canonical_account_id,transaction_id,authorization_event_id,policy_id,policy_hash,terms_hash,terms_json,principal_cents,contract_fee_cents,term_days,offered_on,due_on,expires_at,state,evaluation_id,originating_case_id)
+ VALUES('DEMO','22222222-2222-4222-8222-222222222222',1,'owned-facility','owned-customer','private-owned-account','private-owned-transaction','private-owned-event','owned-read-policy',repeat('0',64),repeat('1',64),'{"disclosures_version":"owned-v1","waterfall_version":1,"late_fee_convention":"OWNED_FIXTURE","collection_authority_id":"not-issued","collection_authority_version":1}',700000,19000,30,current_date,current_date+30,now()+interval '1 hour','TERMINATED','owned-evaluation','11111111-1111-4111-8111-111111111111')`,
+		`INSERT INTO servicing.bridges(mode,id,facility_id,customer_id,offer_id,offer_revision,canonical_account_id,transaction_id,terms_hash,lifecycle,principal_original_cents,contract_fee_original_cents,due_on,originating_case_id,evaluation_id,closed_at)
+ VALUES('DEMO','33333333-3333-4333-8333-333333333333','owned-facility','owned-customer','22222222-2222-4222-8222-222222222222',1,'private-owned-account','private-owned-transaction',repeat('1',64),'VOID_UNFUNDED',700000,19000,current_date+30,'11111111-1111-4111-8111-111111111111','owned-evaluation',now())`,
+		`INSERT INTO servicing.changes(mode,sequence,resource_type,resource_id,resource_version,change_type,summary) VALUES('DEMO',1,'OFFER','22222222-2222-4222-8222-222222222222',1,'OFFER_TERMINATED','{"state":"TERMINATED"}')`,
+		`INSERT INTO servicing.changes(mode,sequence,resource_type,resource_id,resource_version,parent_bridge_id,parent_bridge_version,change_type,summary) VALUES('DEMO',2,'BRIDGE','33333333-3333-4333-8333-333333333333',1,'33333333-3333-4333-8333-333333333333',1,'VOID_UNFUNDED','{"lifecycle":"VOID_UNFUNDED"}')`,
+		`UPDATE servicing.change_counters SET last_sequence=2 WHERE mode='DEMO'`,
+	}
+	for _, sql := range statements {
+		if _, err := book.adminDB.Exec(ctx, sql); err != nil {
+			t.Fatal("owned servicing saved-read fixture seed failed")
+		}
+	}
+	pool, err := book.OpenRuntimePool(ctx)
+	if err != nil {
+		t.Fatal("owned servicing runtime unavailable")
+	}
+	cfg := config.Config{Mode: config.ModeDemo, FacilityID: "owned-facility", SourceBindingID: "owned-financial-binding", CoordinatorSecret: os.Getenv("OWNED_READ_SECRET")}
+	server := httptest.NewServer(fundinghttp.NewHandler(pool, cfg))
+	defer server.Close()
+	if err := os.WriteFile(os.Getenv("OWNED_READ_ADDRESS_FILE"), []byte(server.URL), 0600); err != nil {
+		t.Fatal("servicing address file failed")
+	}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("servicing read harness deadline exceeded")
+		case <-ticker.C:
+			if _, err := os.Stat(os.Getenv("OWNED_READ_CONTROL_FILE")); os.IsNotExist(err) {
+				var rows int
+				if err := book.adminDB.QueryRow(ctx, `SELECT count(*) FROM servicing.operations`).Scan(&rows); err != nil || rows != 0 {
+					t.Error("read journey created a financial operation")
+				}
+				if strings.TrimSpace(cfg.CoordinatorSecret) == "" {
+					t.Error("servicing fixture key missing")
+				}
+				return
+			}
+		}
+	}
+}

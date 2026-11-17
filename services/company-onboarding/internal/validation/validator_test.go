@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/domain"
+	internalhttp "github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/http"
 	"github.com/slabarcaf/flowcard-treasury/services/company-onboarding/internal/validation"
 )
 
@@ -79,6 +80,52 @@ func TestValidationFieldPathAndCodeFormatting(t *testing.T) {
 			t.Errorf("field %q code = %q, want %q", ef.field, fe.Code, ef.code)
 		}
 	}
+
+	empty := ""
+	validNationality := "US"
+	validEmail := "person@example.test"
+	invalidNationality := "USA"
+	invalidEmail := "not-an-email"
+	personCases := []struct {
+		name        string
+		nationality *string
+		email       *string
+		wantErrors  map[string]string
+	}{
+		{name: "nil means omitted"},
+		{name: "empty means clear", nationality: &empty, email: &empty},
+		{name: "valid values", nationality: &validNationality, email: &validEmail},
+		{
+			name:        "invalid values still fail",
+			nationality: &invalidNationality,
+			email:       &invalidEmail,
+			wantErrors: map[string]string{
+				"nationality": "iso3166_alpha2",
+				"email":       "email",
+			},
+		},
+	}
+	for _, tc := range personCases {
+		t.Run(tc.name, func(t *testing.T) {
+			person := internalhttp.PersonDTO{
+				FirstName:   "Ada",
+				LastName:    "Lovelace",
+				Nationality: tc.nationality,
+				Email:       tc.email,
+				Role:        "Director",
+				DateOfBirth: "1990-01-01",
+			}
+			personErrors := v.ValidateStruct(person)
+			if len(personErrors) != len(tc.wantErrors) {
+				t.Fatalf("PersonDTO validation errors = %+v, want %d errors", personErrors, len(tc.wantErrors))
+			}
+			for _, fieldErr := range personErrors {
+				if wantCode, ok := tc.wantErrors[fieldErr.Field]; !ok || fieldErr.Code != wantCode {
+					t.Errorf("PersonDTO field error = %+v, want expected field/code", fieldErr)
+				}
+			}
+		})
+	}
 }
 
 func helperValidReadyCompany(t *testing.T, id string) *domain.Company {
@@ -99,6 +146,14 @@ func helperValidReadyCompany(t *testing.T, id string) *domain.Company {
 			PostalCode: "19801",
 			Country:    "US",
 		},
+		OperatingAddress: &domain.Address{
+			Line1:      "200 Elm St",
+			City:       "Wilmington",
+			State:      "DE",
+			PostalCode: "19801",
+			Country:    "US",
+		},
+		OperatingCountries: []string{"US"},
 	})
 	_ = comp.CorrectLegalIdentifiers(domain.LegalIdentifierCorrectionParams{
 		LegalName:           "Acme Technologies Inc.",
@@ -113,6 +168,7 @@ func helperValidReadyCompany(t *testing.T, id string) *domain.Company {
 		ID:          "p_1",
 		FirstName:   "Jane",
 		LastName:    "Smith",
+		Nationality: "US",
 		Email:       "jane.smith@example.com",
 		Phone:       "+15551234567",
 		Role:        "CEO",
@@ -120,7 +176,7 @@ func helperValidReadyCompany(t *testing.T, id string) *domain.Company {
 		Identifications: []domain.Identification{
 			{
 				ID:             "ident_1",
-				Type:           "PASSPORT",
+				Type:           "SSN",
 				Number:         "P12345678",
 				IssuingCountry: "US",
 			},
@@ -139,15 +195,16 @@ func helperValidReadyApplication(t *testing.T, id string, comp *domain.Company) 
 	_ = app.UpdateOnboardingDetails(domain.PlatformOnboardingDetails{
 		PrimaryContactPersonID: "p_1",
 		IndustryCategoryCode:   "software_saas",
-		IntendedProducts:       []string{"card_issuing"},
+		IntendedProducts:       []string{"CREATE_CARDS"},
 		EstimatedRevenue: domain.RevenueEstimate{
 			Amount:   "100000",
 			Currency: "USD",
 		},
 		People: []domain.PersonPlatformDetails{
 			{
-				PersonID:      "p_1",
-				PlatformRoles: []string{"DIRECTOR"},
+				PersonID:                "p_1",
+				PlatformRoles:           []string{"AUTHORISED_PERSON", "BENEFICIAL_OWNER", "CONTROLLING_PERSON"},
+				PrimaryIdentificationID: "ident_1",
 				ResidentialAddress: domain.Address{
 					Line1:      "200 Elm St",
 					City:       "Wilmington",
@@ -169,7 +226,7 @@ func helperValidReadyApplication(t *testing.T, id string, comp *domain.Company) 
 
 	_ = app.AttachDocument(domain.Document{
 		ID:          "doc_biz_1",
-		Type:        "BUSINESS_REGISTRATION",
+		Type:        "CERTIFICATE_OF_INCORPORATION",
 		FileName:    "cert.pdf",
 		ContentType: "application/pdf",
 		SizeBytes:   1024,
@@ -177,19 +234,6 @@ func helperValidReadyApplication(t *testing.T, id string, comp *domain.Company) 
 		UploadedBy:  "creator",
 		UploadedAt:  now,
 	})
-	_ = app.AttachDocument(domain.Document{
-		ID:               "doc_id_1",
-		Type:             "IDENTITY_DOCUMENT",
-		PersonID:         "p_1",
-		IdentificationID: "ident_1",
-		FileName:         "pass.png",
-		ContentType:      "image/png",
-		SizeBytes:        2048,
-		StorageKey:       "keys/pass.png",
-		UploadedBy:       "creator",
-		UploadedAt:       now,
-	})
-
 	return app
 }
 
@@ -216,14 +260,32 @@ func TestVerifyOnboardingReadiness_SuccessWithVerifiedGate(t *testing.T) {
 	}
 }
 
-func TestVerifyOnboardingReadiness_DefaultGateFailsClosed(t *testing.T) {
+func TestVerifyOnboardingReadiness_DefaultUSContractPassesCompleteSyntheticApplication(t *testing.T) {
 	comp := helperValidReadyCompany(t, "comp_ready")
 	app := helperValidReadyApplication(t, "app_ready", comp)
+	operatingAgreement := domain.Document{
+		ID:          "doc_operating_agreement",
+		Type:        "OPERATING_AGREEMENT",
+		FileName:    "operating-agreement.pdf",
+		ContentType: "application/pdf",
+		SizeBytes:   1024,
+		StorageKey:  "keys/operating-agreement.pdf",
+		UploadedBy:  "creator",
+		UploadedAt:  time.Now().UTC(),
+	}
+	if err := app.AttachDocument(operatingAgreement); err != nil {
+		t.Fatalf("AttachDocument() optional operating agreement: %v", err)
+	}
+	details := app.Platform().OnboardingDetails
+	details.CustomerAgreements = domain.CustomerAgreements{}
+	if err := app.UpdateOnboardingDetails(details); err != nil {
+		t.Fatalf("UpdateOnboardingDetails() without sandbox consent: %v", err)
+	}
 
-	// Default gate (nil or UnverifiedPlatformContractGate) must fail closed on external unverified gates
+	// The hackathon sandbox path allows omitted agreements without inventing consent.
 	result := validation.VerifyOnboardingReadiness(comp, app, nil)
-	if result.Code != "PLATFORM_CONTRACT_INCOMPLETE" {
-		t.Fatalf("expected PLATFORM_CONTRACT_INCOMPLETE, got %q", result.Code)
+	if result.Code != "VALIDATION_PASSED" {
+		t.Fatalf("expected VALIDATION_PASSED, got %q: %+v", result.Code, result.Errors)
 	}
 	if len(result.Errors) != 0 {
 		t.Errorf("expected 0 local field errors for complete-looking app, got %d: %+v", len(result.Errors), result.Errors)
@@ -233,6 +295,65 @@ func TestVerifyOnboardingReadiness_DefaultGateFailsClosed(t *testing.T) {
 	}
 	if result.CompanyRevision != comp.Revision() {
 		t.Errorf("CompanyRevision = %d, want %d", result.CompanyRevision, comp.Revision())
+	}
+
+	platform := app.Platform()
+	platform.Environment = "production"
+	productionApp, err := domain.ReconstituteOnboardingApplication(domain.ReconstituteApplicationParams{
+		ID:        "app_production_no_consent",
+		Company:   comp,
+		Platform:  platform,
+		Status:    domain.ApplicationStatusDraft,
+		Creator:   "creator",
+		CreatedAt: time.Now().UTC(),
+		Revision:  app.Revision(),
+	})
+	if err != nil {
+		t.Fatalf("ReconstituteOnboardingApplication() production case: %v", err)
+	}
+	productionResult := validation.VerifyOnboardingReadiness(comp, productionApp, nil)
+	for _, field := range []string{
+		"platform.onboarding_details.customer_agreements.agreed_to_terms_and_conditions",
+		"platform.onboarding_details.customer_agreements.agreed_to_data_usage",
+		"platform.onboarding_details.customer_agreements.terms_and_conditions.agreed_at",
+	} {
+		found := false
+		for _, fieldErr := range productionResult.Errors {
+			if fieldErr.Field == field {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("production validation missing consent field error %q", field)
+		}
+	}
+
+	optionalOnlyApp, err := domain.ReconstituteOnboardingApplication(domain.ReconstituteApplicationParams{
+		ID:        "app_optional_doc_only",
+		Company:   comp,
+		Platform:  app.Platform(),
+		Status:    domain.ApplicationStatusDraft,
+		Documents: []domain.Document{operatingAgreement},
+		Creator:   "creator",
+		CreatedAt: app.CreatedAt(),
+		Revision:  app.Revision(),
+	})
+	if err != nil {
+		t.Fatalf("ReconstituteOnboardingApplication() optional document case: %v", err)
+	}
+	optionalOnlyResult := validation.VerifyOnboardingReadiness(comp, optionalOnlyApp, nil)
+	var requiredFormationDocument, unsupportedDocument bool
+	for _, fieldErr := range optionalOnlyResult.Errors {
+		if fieldErr.Field == "documents" && fieldErr.Code == "required_business_document" {
+			requiredFormationDocument = true
+		}
+		if fieldErr.Field == "documents" && fieldErr.Code == "unsupported_business_document" {
+			unsupportedDocument = true
+		}
+	}
+	if !requiredFormationDocument || unsupportedDocument {
+		t.Errorf("optional operating agreement errors = %+v, want required formation document only", optionalOnlyResult.Errors)
 	}
 }
 
@@ -262,12 +383,16 @@ func TestVerifyOnboardingReadiness_ExhaustiveFieldErrors(t *testing.T) {
 		"company.business_profile.website",
 		"company.business_profile.description",
 		"company.business_profile.registered_address.line_1",
+		"company.business_profile.operating_address",
+		"company.business_profile.operating_countries",
 		"company.registration_identifiers",
 		"company.people",
 		"platform.onboarding_details.primary_contact_person_id",
-		"platform.onboarding_details.customer_agreements.agreed_to_terms_and_conditions",
-		"platform.onboarding_details.customer_agreements.agreed_to_data_usage",
-		"platform.onboarding_details.customer_agreements.terms_and_conditions.agreed_at",
+		"platform.onboarding_details.industry_category_code",
+		"platform.onboarding_details.intended_products",
+		"platform.onboarding_details.estimated_monthly_revenue.amount",
+		"platform.onboarding_details.estimated_monthly_revenue.currency",
+		"platform.onboarding_details.people",
 	}
 
 	for _, f := range expectedMissing {

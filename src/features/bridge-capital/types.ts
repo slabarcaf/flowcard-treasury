@@ -1,5 +1,6 @@
 /**
- * Domain types for Bridge Capital, following docs/bridge-capital-spec.md.
+ * Domain types for Bridge Capital, following the policy spec in
+ * docs/designs/bridge-capital-policy-spec.md.
  *
  * Airwallex-shaped transfer and charge types are reused from src/services/types.ts
  * rather than redefined here.

@@ -35,9 +35,12 @@ type AddressDTO struct {
 }
 
 type BusinessProfileDTO struct {
-	Website           string      `json:"website" validate:"required,url,max=500"`
-	Description       string      `json:"description" validate:"required,max=2000"`
-	RegisteredAddress *AddressDTO `json:"registered_address,omitempty"`
+	Website            string      `json:"website,omitempty" validate:"omitempty,url,max=500"`
+	Description        string      `json:"description,omitempty" validate:"omitempty,max=2000"`
+	Products           string      `json:"products,omitempty" validate:"omitempty,max=500"`
+	RegisteredAddress  *AddressDTO `json:"registered_address,omitempty"`
+	OperatingAddress   *AddressDTO `json:"operating_address,omitempty"`
+	OperatingCountries []string    `json:"operating_countries,omitempty" validate:"omitempty,dive,iso3166_alpha2"`
 }
 
 type RegistrationIdentifierDTO struct {
@@ -59,6 +62,9 @@ type PersonDTO struct {
 	ID              string              `json:"id,omitempty" validate:"omitempty,max=64"`
 	FirstName       string              `json:"first_name" validate:"required,max=100"`
 	LastName        string              `json:"last_name" validate:"required,max=100"`
+	Nationality     *string             `json:"nationality,omitempty" validate:"omitempty,iso3166_alpha2_or_empty"`
+	Email           *string             `json:"email,omitempty" validate:"omitempty,email_or_empty,max=254"`
+	Phone           *string             `json:"phone,omitempty" validate:"omitempty,max=50"`
 	Role            string              `json:"role" validate:"required,max=100"`
 	DateOfBirth     string              `json:"date_of_birth" validate:"required,past_date"`
 	Identifications []IdentificationDTO `json:"identifications,omitempty" validate:"dive"`
@@ -76,9 +82,12 @@ type CreateCompanyRequest struct {
 }
 
 type EditBusinessProfileDTO struct {
-	Website           *string     `json:"website,omitempty"`
-	Description       *string     `json:"description,omitempty"`
-	RegisteredAddress *AddressDTO `json:"registered_address,omitempty"`
+	Website            *string     `json:"website,omitempty" validate:"omitempty,url,max=500"`
+	Description        *string     `json:"description,omitempty" validate:"omitempty,max=2000"`
+	Products           *string     `json:"products,omitempty" validate:"omitempty,max=500"`
+	RegisteredAddress  *AddressDTO `json:"registered_address,omitempty"`
+	OperatingAddress   *AddressDTO `json:"operating_address,omitempty"`
+	OperatingCountries *[]string   `json:"operating_countries,omitempty" validate:"omitempty,dive,iso3166_alpha2"`
 }
 
 type EditCompanyRequest struct {
@@ -105,9 +114,11 @@ type RevenueEstimateDTO struct {
 }
 
 type PersonPlatformDetailsDTO struct {
-	PersonID           string      `json:"person_id"`
-	PlatformRoles      []string    `json:"platform_roles,omitempty"`
-	ResidentialAddress *AddressDTO `json:"residential_address,omitempty"`
+	PersonID                  string      `json:"person_id"`
+	PlatformRoles             []string    `json:"platform_roles,omitempty"`
+	ResidentialAddress        *AddressDTO `json:"residential_address,omitempty"`
+	PrimaryIdentificationID   string      `json:"primary_identification_id,omitempty" validate:"omitempty,max=64"`
+	SecondaryIdentificationID string      `json:"secondary_identification_id,omitempty" validate:"omitempty,max=64"`
 }
 
 type DeviceDataDTO struct {
@@ -155,6 +166,12 @@ type CancelApplicationRequest struct {
 
 type SubmitApplicationRequest struct {
 	ExpectedRevision int `json:"expected_revision" validate:"required,min=1"`
+}
+
+type SubmitApplicationResponse struct {
+	Code          string `json:"code"`
+	ApplicationID string `json:"application_id"`
+	SubmissionID  string `json:"submission_id"`
 }
 
 // --- Response DTOs ---

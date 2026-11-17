@@ -287,6 +287,18 @@ resource "aws_cloudfront_distribution" "main" {
     compress                 = false
   }
 
+  # Native Go receivers own their original subpaths and raw signed bodies.
+  ordered_cache_behavior {
+    path_pattern             = "/webhooks/airwallex/*"
+    target_origin_id         = "alb-vpc-origin"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = aws_cloudfront_cache_policy.no_cache.id
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.alb_gateway.id
+    compress                 = false
+  }
+
   # Ordered Behavior 4: /assets/* -> S3 Frontend (Immutable Bundles, Long Cache)
   ordered_cache_behavior {
     path_pattern     = "/assets/*"

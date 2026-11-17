@@ -187,7 +187,9 @@ export function handleOnboardingProxy(
   }
 
   // Check operator authentication and origin
-  if (!authorizeKit5OperatorRequest(request, response, deps.operatorAuth)) {
+  if (!authorizeKit5OperatorRequest(request, response, deps.operatorAuth, {
+    allowSameOriginReadWithoutOrigin: true,
+  })) {
     return;
   }
 

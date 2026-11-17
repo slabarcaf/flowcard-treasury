@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "../shared/policy/**/*.ts"]
+  "include": ["src/**/*.ts"]
 }

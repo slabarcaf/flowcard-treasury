@@ -6,6 +6,7 @@
     "module": "esnext",
     "types": ["vite/client", "vitest/globals"],
     "allowArbitraryExtensions": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
 
     "moduleResolution": "bundler",
@@ -20,5 +21,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "shared/policy", "tests/policy", "tests/kit5"]
+  "include": ["src"]
 }
