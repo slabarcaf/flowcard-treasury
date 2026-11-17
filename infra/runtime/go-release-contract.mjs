@@ -114,7 +114,7 @@ export function renderTasks(f, contract, runtimeTemplate, migrationTemplate, dig
   const keyNames = { 'app:go_shortfall_secret': 'GO_SHORTFALL_SECRET', 'app:go_underwriting_secret': 'GO_UNDERWRITING_SECRET',
     'app:go_coordinator_reader_secret': 'GO_COORDINATOR_READER_SECRET', 'app:go_servicing_coordinator_secret': 'GO_SERVICING_COORDINATOR_SECRET',
     'app:go_servicing_reader_secret': 'GO_SERVICING_READER_SECRET', 'app:go_operator_secret': 'GO_OPERATOR_SECRET', 'app:go_customer_secret': 'GO_CUSTOMER_SECRET',
-    service_auth: 'ONBOARDING_SERVICE_SECRET', 'airwallex:client_id': 'AIRWALLEX_CLIENT_ID', 'airwallex:api_key': 'AIRWALLEX_API_KEY',
+    'app:go_onboarding_service_secret': 'ONBOARDING_SERVICE_SECRET', 'airwallex:client_id': 'AIRWALLEX_CLIENT_ID', 'airwallex:api_key': 'AIRWALLEX_API_KEY',
     'airwallex:account_id': 'AIRWALLEX_ACCOUNT_ID', 'airwallex:shortfall_webhook_secret': 'SHORTFALL_WEBHOOK_SECRET',
     'airwallex:servicing_webhook_secret': 'SERVICING_WEBHOOK_SECRET', 'airwallex:onboarding_webhook_secret': 'ONBOARDING_WEBHOOK_SECRET' };
   // Runtime preflight uses the runtime execution role. It receives no admin URL.

@@ -141,6 +141,7 @@ NOLOGIN groups grant the other services' schema permissions.
 The app secret also contains distinct keys:
 
 ```text
+go_onboarding_service_secret
 go_shortfall_secret
 go_underwriting_secret
 go_coordinator_reader_secret
@@ -150,8 +151,11 @@ go_operator_secret
 go_customer_secret
 ```
 
-The existing raw `flowcard/service-auth` secret authenticates only the gateway
-to onboarding. It must differ from these keys and from the native webhook key.
+The Go gateway, onboarding API and onboarding worker share
+`go_onboarding_service_secret` from the app JSON. This dedicated key must be
+clean and distinct from the other service keys and the native webhook key.
+The legacy raw `flowcard/service-auth` value is retained unchanged for
+recovery, including its original formatting.
 
 `flowcard/airwallex` retains its old fields and requires:
 

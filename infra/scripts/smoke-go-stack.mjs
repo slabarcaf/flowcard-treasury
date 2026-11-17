@@ -49,7 +49,8 @@ for (const b of contract.database_bindings) {
 for (const [kind, fields] of Object.entries(contract.secret_fields)) {
   for (const field of fields) if (!values[kind + ':' + field]) values[kind + ':' + field] = createHash('sha256').update(marker + ':' + kind + ':' + field).digest('hex');
 }
-values.service_auth = createHash('sha256').update(marker + ':service_auth').digest('hex');
+// Preserve legacy formatting; the Go pair uses a distinct clean app-secret field.
+values.service_auth = createHash('sha256').update(marker + ':service_auth').digest('hex') + '\n';
 const internalAdmin = new URL(adminURL);
 internalAdmin.hostname = '127.0.0.1'; internalAdmin.port = '5432'; internalAdmin.pathname = '/' + databaseName;
 internalAdmin.searchParams.delete('dbname'); internalAdmin.searchParams.set('sslmode', 'disable'); internalAdmin.searchParams.delete('sslrootcert');
