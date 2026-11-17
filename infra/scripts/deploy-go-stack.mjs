@@ -91,16 +91,25 @@ export async function deployGoStack(input, ops) {
     if (!values.every(s => s.serviceName === names[0] ? s.taskDefinition === runtimeArn && s.runningCount === 1 && s.pendingCount === 0 && s.desiredCount === 1 : s.runningCount === 0 && s.pendingCount === 0 && s.desiredCount === 0)) throw Error('Actual service rollout mismatch');
     const listed = await aws(['ecs', 'list-tasks', '--cluster', f.ecs_cluster_arn, '--service-name', names[0], '--desired-status', 'RUNNING']);
     if (listed.taskArns?.length !== 1) throw Error('Expected one runtime task');
+    // ECS services-stable can precede ALB registration/draining convergence.
+    // Keep the strict single-healthy-target requirement, but allow bounded startup.
+    let targetsReady = false;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      targetsReady = true;
+      for (const target of loadBalancers) {
+        const health = await aws(['elbv2', 'describe-target-health', '--target-group-arn', target.targetGroupArn]);
+        if (health.TargetHealthDescriptions?.length !== 1 || health.TargetHealthDescriptions[0].TargetHealth?.State !== 'healthy') targetsReady = false;
+      }
+      if (targetsReady) break;
+      await ops.sleep(5000);
+    }
+    if (!targetsReady) throw Error('Go target groups did not become healthy within the startup bound');
     const actual = await aws(['ecs', 'describe-tasks', '--cluster', f.ecs_cluster_arn, '--tasks', listed.taskArns[0]]);
     const t = actual.tasks?.[0];
     if (actual.failures?.length || t?.taskDefinitionArn !== runtimeArn || t.lastStatus !== 'RUNNING' || t.containers?.length !== tasks.runtime.containerDefinitions.length) throw Error('Runtime task unverified');
     for (const c of tasks.runtime.containerDefinitions) {
       const observed = t.containers.find(x => x.name === c.name);
       if (!observed || observed.lastStatus !== 'RUNNING' || (c.healthCheck && observed.healthStatus !== 'HEALTHY') || observed.exitCode !== undefined) throw Error('Go container unhealthy');
-    }
-    for (const target of loadBalancers) {
-      const health = await aws(['elbv2', 'describe-target-health', '--target-group-arn', target.targetGroupArn]);
-      if (health.TargetHealthDescriptions?.length !== 1 || health.TargetHealthDescriptions[0].TargetHealth?.State !== 'healthy') throw Error('Go target group unhealthy');
     }
     state.completed.push('go-runtime-healthy'); await save();
     await phase('native-route-cutover');

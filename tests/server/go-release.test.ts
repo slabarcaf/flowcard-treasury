@@ -73,14 +73,14 @@ describe('Go deployment target and artifact contracts', () => {
   });
 });
 
-async function fixture(fault?: 'migration' | 'health') {
+async function fixture(fault?: 'migration' | 'health' | 'warming') {
   const f = foundation(), output = await mkdtemp(join(tmpdir(), 'flowcard-go-release-'));
   const calls: string[][] = [], definitions = new Map<string, any>(), oneOffs = new Map<string, any>();
-  let revision = 10;
+  let revision = 10, healthReads = 0;
   const services = serviceNames.map(name => ({ serviceName: name, clusterArn: f.ecs_cluster_arn,
     taskDefinition: ecs + 'task-definition/' + name + ':1', desiredCount: 1, runningCount: 1, pendingCount: 0, loadBalancers: [] as unknown[] }));
   const value = (a: string[], key: string) => a[a.indexOf(key) + 1];
-  const ops = { sleep: async () => {}, frontend: async () => { calls.push(['frontend']); }, verifyPublic: async () => { calls.push(['verify-public']); },
+  const ops = { sleep: async (ms: number) => { calls.push(['sleep', String(ms)]); }, frontend: async () => { calls.push(['frontend']); }, verifyPublic: async () => { calls.push(['verify-public']); },
     aws: async (a: string[]) => {
       calls.push(a);
       const key = a.slice(0, 2).join(' ');
@@ -114,7 +114,11 @@ async function fixture(fault?: 'migration' | 'health') {
         return { tasks: [{ taskArn: id, taskDefinitionArn: services[0].taskDefinition, lastStatus: 'RUNNING',
           containers: d.containerDefinitions.map((c: any) => ({ name: c.name, lastStatus: 'RUNNING', healthStatus: 'HEALTHY' })) }], failures: [] };
       }
-      if (key === 'elbv2 describe-target-health') return { TargetHealthDescriptions: [{ TargetHealth: { State: fault === 'health' ? 'unhealthy' : 'healthy' } }] };
+      if (key === 'elbv2 describe-target-health') {
+        healthReads++;
+        if (fault === 'warming' && healthReads <= contract.native_routes.length + 1) return { TargetHealthDescriptions: [{ TargetHealth: { State: 'initial' } }, { TargetHealth: { State: 'draining' } }] };
+        return { TargetHealthDescriptions: [{ TargetHealth: { State: fault === 'health' ? 'unhealthy' : 'healthy' } }] };
+      }
       if (key === 'elbv2 describe-rules') return { Rules: [{ Conditions: [{ Field: 'http-header', HttpHeaderConfig: { HttpHeaderName: 'x-flowcard-go-preview', Values: ['go-stack-v1'] } }] }] };
       if (key === 'elbv2 modify-rule') return {};
       throw Error('Unexpected fixture operation: ' + key);
@@ -123,6 +127,18 @@ async function fixture(fault?: 'migration' | 'health') {
 }
 
 describe('Go rollout execution state machine', () => {
+  it('waits for initial and draining ALB targets before routing or publication', async () => {
+    const f = await fixture('warming');
+    try {
+      const state = await deployGoStack(f.input, f.ops);
+      expect(state.status).toBe('go_runtime_deployed_and_verified');
+      expect(f.calls).toContainEqual(['sleep', '5000']);
+      const kinds = f.calls.map(c => c.slice(0, 2).join(' '));
+      expect(kinds.filter(k => k === 'elbv2 describe-target-health').length).toBeGreaterThan(contract.native_routes.length + 1);
+      expect(kinds.indexOf('elbv2 modify-rule')).toBeGreaterThan(kinds.lastIndexOf('elbv2 describe-target-health'));
+      expect(kinds.indexOf('frontend')).toBeGreaterThan(kinds.lastIndexOf('elbv2 describe-target-health'));
+    } finally { await rm(f.output, { recursive: true, force: true }); }
+  });
   it('requires explicit release/callback approval before any AWS operation', async () => {
     const f = await fixture();
     try { await expect(deployGoStack({ ...f.input, confirmCallbackCutover: false }, f.ops)).rejects.toThrow('approval'); expect(f.calls).toHaveLength(0); }
