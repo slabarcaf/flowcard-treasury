@@ -36,7 +36,7 @@
       },
       "secrets": {
         "DATABASE_URL": "app:go_gateway_url",
-        "BROWSER_GATEWAY_ONBOARDING_SECRET": "service_auth",
+        "BROWSER_GATEWAY_ONBOARDING_SECRET": "app:go_onboarding_service_secret",
         "BROWSER_GATEWAY_COORDINATOR_READ_SECRET": "app:go_coordinator_reader_secret",
         "BROWSER_GATEWAY_SERVICING_READ_SECRET": "app:go_servicing_coordinator_secret"
       },
@@ -63,7 +63,7 @@
       "secrets": {
         "AIRWALLEX_CLIENT_ID": "airwallex:client_id",
         "AIRWALLEX_API_KEY": "airwallex:api_key",
-        "ONBOARDING_SERVICE_SECRET": "service_auth",
+        "ONBOARDING_SERVICE_SECRET": "app:go_onboarding_service_secret",
         "ONBOARDING_WEBHOOK_SECRET": "airwallex:onboarding_webhook_secret",
         "DATABASE_URL": "app:go_onboarding_api_url"
       },
@@ -204,7 +204,7 @@
       "secrets": {
         "AIRWALLEX_CLIENT_ID": "airwallex:client_id",
         "AIRWALLEX_API_KEY": "airwallex:api_key",
-        "ONBOARDING_SERVICE_SECRET": "service_auth",
+        "ONBOARDING_SERVICE_SECRET": "app:go_onboarding_service_secret",
         "ONBOARDING_WEBHOOK_SECRET": "airwallex:onboarding_webhook_secret",
         "DATABASE_URL": "app:go_onboarding_worker_url"
       },
@@ -319,6 +319,7 @@
   "secret_fields": {
     "app": [
       "go_gateway_url",
+      "go_onboarding_service_secret",
       "go_coordinator_reader_secret",
       "go_servicing_coordinator_secret",
       "go_onboarding_api_url",

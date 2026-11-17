@@ -59,6 +59,11 @@ describe('Go deployment target and artifact contracts', () => {
     expect(result.runtime.containerDefinitions.find((c: { name: string }) => c.name === 'node-gateway').entryPoint).toEqual(['/opt/flowcard/browser-gateway/api']);
     expect(JSON.stringify(result.runtime)).not.toContain(f.secret_arns.migrate);
     expect(JSON.stringify(result.runtime)).not.toContain('MIGRATION_DATABASE_URL');
+    const onboardingKey = f.secret_arns.app + ':go_onboarding_service_secret::';
+    expect(result.runtime.containerDefinitions.find((x: any) => x.name === 'node-gateway').secrets).toContainEqual({ name: 'BROWSER_GATEWAY_ONBOARDING_SECRET', valueFrom: onboardingKey });
+    expect(result.runtime.containerDefinitions.find((x: any) => x.name === 'onboarding-api').secrets).toContainEqual({ name: 'ONBOARDING_SERVICE_SECRET', valueFrom: onboardingKey });
+    expect(JSON.stringify(result.runtime)).not.toContain(f.secret_arns.service_auth);
+    expect(result.preflight.containerDefinitions[0].secrets).toContainEqual({ name: 'ONBOARDING_SERVICE_SECRET', valueFrom: onboardingKey });
     expect(JSON.stringify(result.preflight)).not.toContain(f.secret_arns.migrate);
     expect(JSON.stringify(result.migration)).toContain(f.secret_arns.migrate);
     expect(result.migration.containerDefinitions[0].entryPoint).toEqual(['/opt/flowcard/migrate-go-stack.sh']);
