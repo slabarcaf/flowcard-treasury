@@ -22,14 +22,17 @@ var reasonCode = regexp.MustCompile(`^[A-Z0-9_:-]{1,96}$`)
 var termsHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func (a *Server) bound(ctx context.Context, u postgres.User) (postgres.Binding, string, error) {
-	if a.config.WriteMode != "DEMO" && a.config.WriteMode != "SANDBOX" {
+	if a.config.BindingMode() != "DEMO" && a.config.BindingMode() != "SANDBOX" {
+		return postgres.Binding{}, "", postgres.ErrBinding
+	}
+	if a.config.WriteMode == "" && u.Role != "OPERATOR" {
 		return postgres.Binding{}, "", postgres.ErrBinding
 	}
 	binding, err := a.store.Binding(ctx, u)
 	if err != nil {
 		return binding, "", err
 	}
-	if binding.Mode != a.config.WriteMode || binding.Origin != a.config.ServicingURL.String() || binding.ActorType != u.Role {
+	if binding.Mode != a.config.BindingMode() || binding.Origin != a.config.ServicingURL.String() || binding.ActorType != u.Role {
 		return binding, "", postgres.ErrBinding
 	}
 	key := a.config.OperatorSecret

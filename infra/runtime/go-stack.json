@@ -32,13 +32,15 @@
         "BROWSER_GATEWAY_ONBOARDING_URL": "http://127.0.0.1:8080",
         "BROWSER_GATEWAY_COORDINATOR_URL": "http://127.0.0.1:8090",
         "BROWSER_GATEWAY_SERVICING_URL": "http://127.0.0.1:8085",
+        "BROWSER_GATEWAY_FINANCIAL_READ_MODE": "SANDBOX",
         "AWS_REGION": "${aws_region}"
       },
       "secrets": {
         "DATABASE_URL": "app:go_gateway_url",
         "BROWSER_GATEWAY_ONBOARDING_SECRET": "app:go_onboarding_service_secret",
         "BROWSER_GATEWAY_COORDINATOR_READ_SECRET": "app:go_coordinator_reader_secret",
-        "BROWSER_GATEWAY_SERVICING_READ_SECRET": "app:go_servicing_coordinator_secret"
+        "BROWSER_GATEWAY_SERVICING_READ_SECRET": "app:go_servicing_coordinator_secret",
+        "BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET": "app:go_operator_secret"
       },
       "port": 3000,
       "health": "/healthz",
@@ -135,6 +137,7 @@
         "UNDERWRITING_BASE_URL": "http://127.0.0.1:8083",
         "SHORTFALL_BASE_URL": "http://127.0.0.1:8082",
         "SERVICING_SANDBOX_DELEGATION_ENABLED": "false",
+        "SERVICING_SANDBOX_READ_DELEGATION_ENABLED": "true",
         "SERVICING_LIVE_DISPATCH_ENABLED": "false",
         "SERVICING_SANDBOX_FUNDING_ENABLED": "false",
         "SERVICING_SANDBOX_COLLECTION_ENABLED": "false",

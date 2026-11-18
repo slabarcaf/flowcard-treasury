@@ -47,6 +47,34 @@ func TestOwnedSandboxActorDelegationRequiresExplicitProfileAndCorrectRoleKey(t *
 	if response.StatusCode != 401 {
 		t.Fatal("sandbox actor enabled implicitly")
 	}
+	if _, err := h.Pool.Exec(ctx, `INSERT INTO servicing.facilities(mode,id,funding_account_ref,currency,total_cents,reserve_bps)
+		SELECT 'SANDBOX',id,funding_account_ref,currency,total_cents,reserve_bps FROM servicing.facilities WHERE mode='DEMO' AND id=$1`, cfg.FacilityID); err != nil {
+		t.Fatal("sandbox facility fixture unavailable")
+	}
+	readConfig := cfg
+	readConfig.SandboxReadDelegationEnabled = true
+	readOnly := httptest.NewServer(fundinghttp.NewHandler(h.Pool, readConfig))
+	defer readOnly.Close()
+	h.API = readOnly
+	for _, tc := range []struct {
+		method, path, subject, key string
+		status                     int
+	}{
+		{http.MethodGet, "/api/servicing/actor", servicefixture.OperatorSubject, servicefixture.OperatorSecret, 200},
+		{http.MethodGet, "/api/servicing/portfolio", servicefixture.OperatorSubject, servicefixture.OperatorSecret, 200},
+		{http.MethodGet, "/api/servicing/portfolio", "unknown-operator", servicefixture.OperatorSecret, 403},
+		{http.MethodGet, "/api/servicing/actor", servicefixture.CustomerSubject, servicefixture.CustomerSecret, 401},
+		{http.MethodPost, "/api/offers", servicefixture.OperatorSubject, servicefixture.OperatorSecret, 401},
+	} {
+		resp, err := h.Request(tc.method, tc.path, tc.subject, tc.key, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != tc.status {
+			t.Errorf("read-only %s %s: status = %d, want %d", tc.method, tc.path, resp.StatusCode, tc.status)
+		}
+	}
 	cfg.SandboxDelegationEnabled = true
 	enabled := httptest.NewServer(fundinghttp.NewHandler(h.Pool, cfg))
 	defer enabled.Close()

@@ -21,7 +21,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	cfg, err = cfg.WithFinancialWrites(os.Getenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE"), os.Getenv("BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET"), os.Getenv("BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET"))
+	cfg, err = cfg.WithFinancialAccessFromEnv()
 	if err != nil {
 		return err
 	}

@@ -120,3 +120,25 @@ func TestExplicitSandboxWriteProfile(t *testing.T) {
 		t.Fatal("unconfigured source enabled writes")
 	}
 }
+
+func TestExplicitSandboxReadOnlyProfile(t *testing.T) {
+	t.Setenv("BROWSER_GATEWAY_FINANCIAL_READ_MODE", "SANDBOX")
+	t.Setenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE", "")
+	t.Setenv("BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET", "fixture-operator-secret-00000000000000000000")
+	t.Setenv("BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET", "")
+	base, err := (Config{}).WithFinancial("", "", "http://127.0.0.1:18091", "fixture-reader-secret-0000000000000000000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := base.WithFinancialAccessFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BindingMode() != "SANDBOX" || cfg.WriteMode != "" {
+		t.Errorf("binding mode = %q, write mode = %q, want SANDBOX and empty", cfg.BindingMode(), cfg.WriteMode)
+	}
+	t.Setenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE", "DEMO")
+	if _, err := base.WithFinancialAccessFromEnv(); err == nil {
+		t.Error("accepted conflicting read and write modes")
+	}
+}

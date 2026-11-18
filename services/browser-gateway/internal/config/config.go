@@ -22,6 +22,7 @@ type Config struct {
 	ServicingURL      *url.URL
 	ServicingSecret   string
 	WriteMode         string
+	ReadMode          string
 	OperatorSecret    string
 	CustomerSecret    string
 }
@@ -66,7 +67,38 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return c.WithFinancialWrites(os.Getenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE"), os.Getenv("BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET"), os.Getenv("BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET"))
+	return c.WithFinancialAccessFromEnv()
+}
+
+// WithFinancialAccessFromEnv loads the gateway's actor delegation settings.
+func (c Config) WithFinancialAccessFromEnv() (Config, error) {
+	readMode := os.Getenv("BROWSER_GATEWAY_FINANCIAL_READ_MODE")
+	writeMode := os.Getenv("BROWSER_GATEWAY_FINANCIAL_WRITE_MODE")
+	operator := os.Getenv("BROWSER_GATEWAY_SERVICING_OPERATOR_SECRET")
+	customer := os.Getenv("BROWSER_GATEWAY_SERVICING_CUSTOMER_SECRET")
+
+	if readMode == "" {
+		return c.WithFinancialWrites(writeMode, operator, customer)
+	}
+	if readMode != "SANDBOX" || (writeMode != "" && writeMode != readMode) {
+		return Config{}, errors.New("invalid financial read mode")
+	}
+	if writeMode != "" {
+		return c.WithFinancialWrites(writeMode, operator, customer)
+	}
+	if c.ServicingURL == nil || len(strings.TrimSpace(operator)) < 32 || operator == c.ServicingSecret || customer != "" {
+		return Config{}, errors.New("invalid operator read configuration")
+	}
+	c.ReadMode, c.OperatorSecret = readMode, operator
+	return c, nil
+}
+
+// BindingMode is the mode for verified actor delegation.
+func (c Config) BindingMode() string {
+	if c.ReadMode != "" {
+		return c.ReadMode
+	}
+	return c.WriteMode
 }
 
 // WithDemoWrites enables only an explicitly local DEMO delegation profile.

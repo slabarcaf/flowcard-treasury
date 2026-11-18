@@ -48,5 +48,5 @@ func (h *handler) readActor(w http.ResponseWriter, r *http.Request) {
 		SourceBindingID   string `json:"source_binding_id"`
 		FixtureOnly       bool   `json:"fixture_only"`
 		SandboxDelegation bool   `json:"sandbox_delegation"`
-	}{id.ActorID, id.ActorType, id.CustomerID, h.cfg.Mode, h.cfg.FacilityID, h.cfg.SourceBindingID, h.cfg.Mode == "DEMO" && h.cfg.ProviderMode == "MOCK_HTTP" && local, h.cfg.Mode == "SANDBOX" && h.cfg.ProviderMode == "AIRWALLEX_SANDBOX" && h.cfg.ProviderBaseURL == "https://api.sandbox.airwallex.com" && h.cfg.SandboxDelegationEnabled})
+	}{id.ActorID, id.ActorType, id.CustomerID, h.cfg.Mode, h.cfg.FacilityID, h.cfg.SourceBindingID, h.cfg.Mode == "DEMO" && h.cfg.ProviderMode == "MOCK_HTTP" && local, h.cfg.Mode == "SANDBOX" && h.cfg.ProviderMode == "AIRWALLEX_SANDBOX" && h.cfg.ProviderBaseURL == "https://api.sandbox.airwallex.com" && (h.cfg.SandboxDelegationEnabled || h.cfg.SandboxReadDelegationEnabled)})
 }

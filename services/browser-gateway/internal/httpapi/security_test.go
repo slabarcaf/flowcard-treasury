@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -126,5 +127,21 @@ func TestFinancialCommandBodyBoundary(t *testing.T) {
 	body, err := commandBody(httptest.NewRecorder(), request)
 	if err != nil || string(body) != `{"terms_hash":"`+hash+`","expected_version":7}` {
 		t.Fatal("valid command not canonicalized exactly")
+	}
+}
+
+func TestReadOnlyModeDoesNotExposeFinancialCommands(t *testing.T) {
+	handler := New(config.Config{
+		ReadMode: "SANDBOX",
+		Origins:  map[string]bool{"https://demo.example": true},
+	}, nil)
+	for _, path := range []string{"/api/offers", "/api/offers/test/fund", "/api/bridges/test/collection-reviews"} {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.Header.Set("Origin", "https://demo.example")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("POST %s: status = %d, want unavailable route", path, rec.Code)
+		}
 	}
 }

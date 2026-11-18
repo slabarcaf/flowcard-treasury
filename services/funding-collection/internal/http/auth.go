@@ -78,7 +78,7 @@ func VerifyAssertion(r *http.Request, cfg config.Config, now time.Time) (Identit
 	if json.Unmarshal(payload, &c) != nil || c.Issuer != "flowcard-go" || c.Audience != "flowcard-funding-collection" || c.Subject == "" || c.TokenID == "" || c.IssuedAt <= 0 || c.ExpiresAt <= c.IssuedAt || c.ExpiresAt-c.IssuedAt > 30 || c.IssuedAt > now.Unix()+5 || c.ExpiresAt < now.Unix()-5 {
 		return Identity{}, errors.New("unauthorized")
 	}
-	secrets := secretsForSubject(cfg, c.Subject)
+	secrets := secretsForSubject(cfg, c.Subject, r.Method)
 	sig, err := enc.DecodeString(parts[2])
 	if err != nil {
 		return Identity{}, errors.New("unauthorized")
@@ -129,7 +129,7 @@ func VerifyAssertion(r *http.Request, cfg config.Config, now time.Time) (Identit
 	return Identity{Mode: cfg.Mode, Subject: c.Subject, Role: role, CredentialClass: credentialClass, Binding: c.Binding}, nil
 }
 
-func secretsForSubject(cfg config.Config, subject string) []string {
+func secretsForSubject(cfg config.Config, subject, method string) []string {
 	switch subject {
 	case "coordinator-reader", "funding-coordinator":
 		return []string{cfg.CoordinatorSecret}
@@ -138,6 +138,10 @@ func secretsForSubject(cfg config.Config, subject string) []string {
 	default:
 		if cfg.Mode == config.ModeDemo || (cfg.Mode == config.ModeSandbox && cfg.SandboxDelegationEnabled) {
 			return []string{cfg.CustomerSecret, cfg.OperatorSecret}
+		}
+		if cfg.Mode == config.ModeSandbox && cfg.SandboxReadDelegationEnabled && (method == http.MethodGet || method == http.MethodHead) {
+			// Preserve the operator key index and omit the customer key.
+			return []string{"", cfg.OperatorSecret}
 		}
 		return nil
 	}

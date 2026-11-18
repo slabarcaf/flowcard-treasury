@@ -67,8 +67,9 @@ export interface Collections { bridge_version: number; items: Collection[]; next
 
 export class FinancialReadError extends Error {
   readonly status: number;
-  constructor(status: number) {
+  constructor(status: number, bindingUnavailable = false) {
     super(status === 401 ? 'Your session has expired. Sign in again to read these records.'
+      : status === 403 && bindingUnavailable ? 'Financial access has not been configured for this account.'
       : status === 403 ? 'This account cannot read operator financial records.'
       : status === 404 ? 'This record is missing from the connected service.'
       : status === 409 ? 'The bridge version changed. Refresh the bridge and restart collection history.'
@@ -119,7 +120,11 @@ export class FinancialReadClient {
     try {
       response = await this.fetchImpl(path, { method: 'GET', credentials: 'include', cache: 'no-store', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000), headers: { accept: 'application/json' } });
     } catch { throw new FinancialReadError(503); }
-    if (!response.ok) throw new FinancialReadError(response.status);
+    if (!response.ok) {
+      const bindingUnavailable = response.status === 403 &&
+        await response.json().then(body => body?.error === 'servicing binding unavailable', () => false);
+      throw new FinancialReadError(response.status, bindingUnavailable);
+    }
     try {
       const raw = await response.text();
       requireRecord(raw.length <= 2 * 1024 * 1024);

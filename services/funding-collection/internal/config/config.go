@@ -42,6 +42,7 @@ type Config struct {
 	ProviderBaseURL              string
 	AirwallexWebhookSecret       string `json:"-"`
 	SandboxDelegationEnabled     bool
+	SandboxReadDelegationEnabled bool
 	LiveDispatchEnabled          bool
 	AirwallexClientID            string `json:"-"`
 	AirwallexAPIKey              string `json:"-"`
@@ -99,7 +100,14 @@ func Load() (Config, error) {
 		return cfg, errors.New("sandbox_delegation_configuration_invalid")
 	}
 	cfg.SandboxDelegationEnabled = rawDelegation == "true"
-	if cfg.SandboxDelegationEnabled && cfg.Mode != ModeSandbox {
+	switch os.Getenv("SERVICING_SANDBOX_READ_DELEGATION_ENABLED") {
+	case "true":
+		cfg.SandboxReadDelegationEnabled = true
+	case "", "false":
+	default:
+		return cfg, errors.New("sandbox_read_delegation_configuration_invalid")
+	}
+	if (cfg.SandboxDelegationEnabled || cfg.SandboxReadDelegationEnabled) && cfg.Mode != ModeSandbox {
 		return cfg, errors.New("sandbox_delegation_requires_sandbox")
 	}
 	for name, destination := range map[string]*bool{"SERVICING_SANDBOX_FUNDING_ENABLED": &cfg.SandboxFundingEnabled, "SERVICING_SANDBOX_COLLECTION_ENABLED": &cfg.SandboxCollectionEnabled} {

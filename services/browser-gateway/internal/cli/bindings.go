@@ -10,7 +10,7 @@ import (
 	"github.com/slabarcaf/flowcard-treasury/services/browser-gateway/internal/servicing"
 )
 
-// Bindings provisions/disables only verified local DEMO bindings. Expected
+// Bindings provisions/disables verified actor bindings. Expected
 // database is checked before any write and no browser can call this operation.
 func Bindings(ctx context.Context, args []string, adminURL string, cfg config.Config) error {
 	if len(args) == 0 || (args[0] != "create" && args[0] != "disable") {
@@ -36,11 +36,14 @@ func Bindings(ctx context.Context, args []string, adminURL string, cfg config.Co
 		}
 		return nil
 	}
-	if (cfg.WriteMode != "DEMO" && cfg.WriteMode != "SANDBOX") || *subject == "" || len(*subject) > 128 {
+	if (cfg.BindingMode() != "DEMO" && cfg.BindingMode() != "SANDBOX") || *subject == "" || len(*subject) > 128 {
 		return postgres.ErrBinding
 	}
 	var u postgres.User
 	if err := pool.QueryRow(ctx, `SELECT id::text,username,role FROM browser_gateway.users WHERE username=$1 AND active`, *username).Scan(&u.ID, &u.Username, &u.Role); err != nil {
+		return postgres.ErrBinding
+	}
+	if cfg.WriteMode == "" && u.Role != "OPERATOR" {
 		return postgres.ErrBinding
 	}
 	key := cfg.OperatorSecret
@@ -48,7 +51,7 @@ func Bindings(ctx context.Context, args []string, adminURL string, cfg config.Co
 		key = cfg.CustomerSecret
 	}
 	actor, err := servicing.ReadActor(ctx, servicing.HTTPClient(), cfg.ServicingURL, key, *subject, nil)
-	if err != nil || (actor.ActorType != u.Role || actor.Mode != cfg.WriteMode) {
+	if err != nil || (actor.ActorType != u.Role || actor.Mode != cfg.BindingMode()) {
 		return postgres.ErrBinding
 	}
 	return postgres.Bind(ctx, pool, u, cfg.ServicingURL.String(), *subject, actor)
